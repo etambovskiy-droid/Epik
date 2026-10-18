@@ -11,6 +11,7 @@ export interface EpicentrColumn {
   cleanName: string;
   type: EpicentrColumnType;
   isRequired: boolean; // Contains '*' in column header
+  isMandatory?: boolean; // Convenience alias
   lang?: 'ua' | 'ru';
   unit?: string;
   rawComment?: string; // Epicentr JSON metadata in cell comment

@@ -8,13 +8,17 @@ import {
   SlidersHorizontal,
   CheckCircle2,
   AlertTriangle,
-  X,
   Sparkles,
-  ArrowRight,
   Copy,
-  Check
+  Check,
+  X,
+  HelpCircle,
+  KeyRound
 } from 'lucide-react';
 import { formatEpicentrTitle } from '../../services/epicentrEngine';
+import { getStoredApiKey } from '../../services/aiApiKeyService';
+import { notifyMissingApiKey } from '../../services/geminiFillingService';
+import { GoogleGenAI } from '@google/genai';
 
 interface TitleFormulaValidatorModalProps {
   isOpen: boolean;
@@ -26,9 +30,10 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
   onClose
 }) => {
   const [testTitle, setTestTitle] = useState(
-    'Навушники ігрові бездротові АКЦІЯ MChose V9 Pro 2.4G/Bluetooth Чорно-червоний (657)'
+    'Навушники ігрові бездротові MChose V9 Pro 2.4G/Bluetooth Чорно-червоний (657)'
   );
   const [copied, setCopied] = useState(false);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
 
   if (!isOpen) return null;
 
@@ -41,13 +46,51 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
   const isCapslock = testTitle === testTitle.toUpperCase() && testTitle.length > 10;
   const hasSkuInBrackets = /\(([^)]+)\)$/.test(testTitle.trim());
 
-  // Quick fix with engine
+  // Quick fix with heuristic engine
   const handleAutoFix = () => {
     const fixed = formatEpicentrTitle({
       rawTitle: testTitle,
       lang: 'ua'
     });
     setTestTitle(fixed);
+  };
+
+  // AI Generation with Gemini
+  const handleAiGenerateTitle = async () => {
+    const key = getStoredApiKey();
+    if (!key) {
+      notifyMissingApiKey('AI-генерація назви за регламентом Епіцентру');
+      return;
+    }
+    setIsAiGenerating(true);
+    try {
+      const ai = new GoogleGenAI({
+        apiKey: key,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+      });
+      const res = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: `Ти — головний редактор контенту маркетплейсу Епіцентр.
+Перетвори та нормалізуй наступну назву товару за офіційною формулою Епіцентру:
+<Тип товару> <Особливість> <Бренд> <Модель> <Ключова характеристика/Розмір> <Колір> (<Артикул>)
+Правила:
+- Без маркетингових слів (акція, супер, оригінал, новинка).
+- Тип товару українською мовою. Бренд і модель мовою оригіналу.
+- Колір з великої літери (Чорний, Чорно-червоний).
+- Довжина до 150 символів. Артикул у дужках наприкінці.
+- Відповідай ТІЛЬКИ фінальною назвою без коментарів.
+
+Поточна назва: ${testTitle}`
+      });
+      const generated = res?.text?.trim().replace(/^["']|["']$/g, '');
+      if (generated) {
+        setTestTitle(generated);
+      }
+    } catch (e: any) {
+      console.error('AI title gen error:', e);
+    } finally {
+      setIsAiGenerating(false);
+    }
   };
 
   const handleCopy = () => {
@@ -57,18 +100,18 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-[#0b1b36] border border-blue-500/30 rounded-2xl max-w-2xl w-full p-6 shadow-2xl shadow-blue-950/60 relative">
-        <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs animate-fadeIn">
+      <div className="bg-white border border-slate-200 rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative text-slate-800">
+        <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-200">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-[#FF7A00]">
               <SlidersHorizontal className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">
-                Валідатор назв за офіційною формулою Епіцентру
+              <h3 className="text-lg font-bold text-slate-900">
+                Валідатор назв за регламентом Епіцентру
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-500">
                 Тип товару + Особливість + Бренд + Модель + Інші характеристики + Колір + (Артикул)
               </p>
             </div>
@@ -76,7 +119,7 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -84,14 +127,14 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
 
         <div className="py-4 space-y-4">
           <div>
-            <label className="text-xs font-semibold text-slate-300 block mb-1.5">
-              Введіть або вставте назву товару:
+            <label className="text-xs font-semibold text-slate-700 block mb-1.5">
+              Введіть або вставте назву товару для перевірки:
             </label>
             <textarea
               rows={3}
               value={testTitle}
               onChange={(e) => setTestTitle(e.target.value)}
-              className="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#004BB7]"
               placeholder="Наприклад: Навушники ігрові бездротові MChose V9 Pro 2.4G/Bluetooth Чорно-червоний (657)"
             />
           </div>
@@ -100,72 +143,85 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
           <div className="grid grid-cols-2 gap-2 text-xs">
             {/* Length */}
             <div className={`p-2.5 rounded-lg border flex items-center gap-2 ${
-              isLengthValid ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-300' : 'bg-rose-950/20 border-rose-800/40 text-rose-300'
+              isLengthValid ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-700'
             }`}>
-              {isLengthValid ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-rose-400" />}
+              {isLengthValid ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-rose-600" />}
               <span>Довжина: {length} / 150 символів</span>
             </div>
 
             {/* Prohibited words */}
             <div className={`p-2.5 rounded-lg border flex items-center gap-2 ${
-              !hasProhibited ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-300' : 'bg-rose-950/20 border-rose-800/40 text-rose-300'
+              !hasProhibited ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-700'
             }`}>
-              {!hasProhibited ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-rose-400" />}
-              <span>{hasProhibited ? `Заборонені слова: ${foundProhibited.join(', ')}` : 'Без слів Акція, Знижка тощо'}</span>
+              {!hasProhibited ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-rose-600" />}
+              <span>{hasProhibited ? `Заборонено: ${foundProhibited.join(', ')}` : 'Без слів Акція, Знижка'}</span>
             </div>
 
             {/* Capslock */}
             <div className={`p-2.5 rounded-lg border flex items-center gap-2 ${
-              !isCapslock ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-300' : 'bg-rose-950/20 border-rose-800/40 text-rose-300'
+              !isCapslock ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-700'
             }`}>
-              {!isCapslock ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-rose-400" />}
-              <span>{isCapslock ? 'Заборонено CAPSLOCK для назви' : 'Регістр коректний'}</span>
+              {!isCapslock ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-rose-600" />}
+              <span>{isCapslock ? 'Заборонено CAPSLOCK' : 'Регістр назви коректний'}</span>
             </div>
 
             {/* SKU */}
             <div className={`p-2.5 rounded-lg border flex items-center gap-2 ${
-              hasSkuInBrackets ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-300' : 'bg-amber-950/20 border-amber-800/40 text-amber-300'
+              hasSkuInBrackets ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-900'
             }`}>
-              {hasSkuInBrackets ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-amber-400" />}
-              <span>{hasSkuInBrackets ? 'Артикул вказано у дужках (123)' : 'Бажано артикул у дужках в кінці'}</span>
+              {hasSkuInBrackets ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-[#FF7A00]" />}
+              <span>{hasSkuInBrackets ? 'Артикул у дужках (123)' : 'Бажано артикул у дужках в кінці'}</span>
             </div>
           </div>
 
           {/* Example Formula Box */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-xs space-y-1.5 text-slate-300">
-            <span className="font-semibold text-slate-200">Офіційні правила оформлення:</span>
-            <ul className="list-disc list-inside space-y-1 text-slate-400 text-[11px]">
-              <li><strong>Колір:</strong> визначається за 1-м фото, з великої літери (Чорний, Чорно-червоний, Black/Red).</li>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1.5 text-slate-700">
+            <span className="font-bold text-slate-900">Офіційні правила контенту маркетплейсу:</span>
+            <ul className="list-disc list-inside space-y-1 text-slate-600 text-[11px]">
+              <li><strong>Колір:</strong> визначається за 1-м фото, з великої літери (Чорний, Чорно-червоний).</li>
               <li><strong>Розміри:</strong> мала українська `х` з пробілом перед одиницею (`60х60х5 см`).</li>
-              <li><strong>Бренд:</strong> мовою оригіналу з великої літери (без CapsLock, крім зареєстрованих ZARA).</li>
+              <li><strong>Бренд:</strong> мовою оригіналу з великої літери (без CapsLock, крім брендів на зразок ZARA).</li>
             </ul>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={handleAutoFix}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold transition-colors"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Авто-виправлення за формулою</span>
-          </button>
+        <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAiGenerateTitle}
+              disabled={isAiGenerating}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-[#FF7A00] hover:from-amber-600 hover:to-[#ea6c00] text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              title="Нормалізувати назву за допомогою Gemini 3.8 Flash згідно з регламентом"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${isAiGenerating ? 'animate-spin' : ''}`} />
+              <span>{isAiGenerating ? 'Gemini генерує...' : 'AI Gemini назва'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleAutoFix}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-[#d96500] border border-amber-200 text-xs font-semibold transition-colors cursor-pointer"
+              title="Швидке базове форматування за шаблоном"
+            >
+              <span>Базове виправлення</span>
+            </button>
+          </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors border border-slate-300 cursor-pointer"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
               <span>{copied ? 'Скопійовано!' : 'Копіювати'}</span>
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
+              className="px-4 py-2 rounded-xl bg-[#004BB7] hover:bg-[#003d99] text-white text-xs font-bold transition-colors cursor-pointer"
             >
               Закрити
             </button>

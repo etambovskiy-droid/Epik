@@ -9,8 +9,11 @@ export type StoryStatus =
   | 'evaluated'
   | 'clarifying'
   | 'ready_to_compile'
+  | 'pending_approval'
   | 'compiling'
-  | 'released';
+  | 'released'
+  | 'approved_and_deployed'
+  | 'rejected';
 
 export interface ClarifyingQuestion {
   id: string;
@@ -42,6 +45,15 @@ export interface UserStoryProposal {
   releasedVersion?: string;
   releasedAt?: string;
   isActiveFeature?: boolean;
+
+  // Moderation & BYOK cycle
+  approvalToken?: string;
+  approvalEmailSentAt?: string;
+  approvalEmailRecipient?: string;
+  moderatedAt?: string;
+  moderatorDecision?: 'approved' | 'rejected';
+  moderatorNotes?: string;
+  authorByokMasked?: string;
 }
 
 export interface ReleaseLogItem {

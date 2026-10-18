@@ -1,0 +1,6 @@
+{
+  "summary": "Звіт про скасування змін за запитом щодо темної Mono-панелі та візуалізації з еталонного скріна:\n- Скасовано фіксовану скляну нижню панель навігації (EpicentrBottomNav).\n- Скасовано головну віджет-картку «СТАТУС PIM-ФІДУ», сітку швидких дій та блок останніх операцій (EpicentrDashboardOverview).\n- Відновлено прямий робочий простір обробки файлів PIM Workbench (FileUploadSection, InteractiveDiffTable, SummaryReportView, EpicentrXmlConverterView).\n- Оновлено хедер (EpicentrNavbar): збережено кабінет селера, вибір воркспейсів, статус автозбереження, перемикач тем (Світла/Темна/Системна) та мов (UA/EN), а також профіль селера та модуль авторизації.\n- Видалено допоміжні файли EpicentrDashboardOverview.tsx, EpicentrBottomNav.tsx та design-backup-info.json.",
+  "updatedAt": "2026-10-16T13:44:28.901573231Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

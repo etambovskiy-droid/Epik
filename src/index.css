@@ -7,10 +7,54 @@
 
 body {
   font-family: var(--font-sans);
-  background-color: #061226;
-  color: #f1f5f9;
+  background-color: #f4f5f7;
+  color: #1e293b;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Dark Theme Global Overrides */
+html.dark body {
+  background-color: #0b1120;
+  color: #f1f5f9;
+}
+
+html.dark header {
+  background-color: rgba(15, 23, 42, 0.95) !important;
+  border-color: #334155 !important;
+}
+
+html.dark .bg-white {
+  background-color: #0f172a !important;
+  color: #f1f5f9;
+}
+
+html.dark .bg-slate-50 {
+  background-color: #1e293b !important;
+}
+
+html.dark .border-slate-200,
+html.dark .border-slate-100 {
+  border-color: #334155 !important;
+}
+
+html.dark .text-slate-900 {
+  color: #f8fafc !important;
+}
+
+html.dark .text-slate-700,
+html.dark .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+html.dark footer {
+  background-color: #0f172a !important;
+  border-color: #334155 !important;
 }
 
 /* Custom scrollbar for high-density monitoring tables and feeds */
@@ -19,12 +63,22 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.4);
+  background: #f1f5f9;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.4);
+  background: #cbd5e1;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.6);
+  background: #94a3b8;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }

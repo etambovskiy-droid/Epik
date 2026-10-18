@@ -3,6 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  ProcessingReportSummary,
+  EpicentrProductRow,
+  EpicentrColumn,
+  ProcessSettings,
+  EngineErrorEvent
+} from '../types/epicentr';
+
 export interface ShopWorkspace {
   id: string;
   name: string;
@@ -22,6 +30,14 @@ export interface SavedBatchHistoryItem {
   fillRatePercentage: number;
   unfilledMandatoryCount: number;
   timestamp: string;
+  report?: ProcessingReportSummary;
+  processedRows?: EpicentrProductRow[];
+  columns?: EpicentrColumn[];
+  rawRows?: Record<string, any>[];
+  engineErrors?: EngineErrorEvent[];
+  dictionaryFileName?: string | null;
+  xmlFileName?: string | null;
+  settings?: ProcessSettings;
 }
 
 const SHOPS_STORAGE_KEY = 'epicentr_saas_workspaces';

@@ -3,6 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Ensure window.fetch has both getter and setter for iframe extensions & tools
+      (function() {
+        try {
+          var realFetch = window.fetch ? window.fetch.bind(window) : undefined;
+          Object.defineProperty(window, 'fetch', {
+            get: function() {
+              return realFetch;
+            },
+            set: function(val) {
+              realFetch = val;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (err) {
+          // If property is not configurable, ignore
+        }
+      })();
+    </script>
     <title>Епіцентр Агент: SaaS заповнення шаблонів товарів</title>
     <meta name="description" content="SaaS-сервіс для мерчантів маркетплейсу Епіцентр: автозаповнення обов'язкових характеристик за довідником, аналіз першого фото товару, нормалізація назв за формулою та валідний експорт." />
     <meta property="og:title" content="Епіцентр Агент: SaaS заповнення шаблонів товарів" />

@@ -17,6 +17,17 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      proxy: {
+        '/api/epicentr-proxy': {
+          target: 'https://merchant-api.epicentrm.com.ua',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/api\/epicentr-proxy/, ''),
+          headers: {
+            Accept: 'application/json'
+          }
+        }
+      }
     },
   };
 });

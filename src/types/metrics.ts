@@ -139,4 +139,4 @@ export interface MetricThresholds {
 }
 
 export type TimeRange = '5m' | '15m' | '1h' | '6h' | '24h';
-export type ActiveTab = 'overview' | 'server-performance' | 'user-engagement' | 'cluster-nodes' | 'endpoints-api' | 'incidents-alerts';
+export type ActiveTab = 'overview' | 'server-performance' | 'user-engagement' | 'cluster-nodes' | 'endpoints-api' | 'incidents-alerts' | 'xml-feed-converter';

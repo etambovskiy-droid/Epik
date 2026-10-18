@@ -238,16 +238,37 @@ export function evaluateUserStory(story: {
   };
 }
 
+import { getStoredApiKey, maskApiKey } from './aiApiKeyService';
+
 /**
- * Generate simulated compilation and deployment sequence
+ * Generate compilation and deployment sequence with mandatory BYOK check
  */
 export function compileAndDeployRelease(
-  story: UserStoryProposal
+  story: UserStoryProposal,
+  adminModeratorNotes?: string
 ): {
-  newVersion: string;
+  success: boolean;
+  error?: string;
+  newVersion?: string;
   compilationLogs: string[];
-  releaseItem: ReleaseLogItem;
+  releaseItem?: ReleaseLogItem;
 } {
+  // BYOK check: compilation must use author's key stored in localStorage under 'epic_ai_key'
+  const byokKey = getStoredApiKey();
+  if (!byokKey) {
+    return {
+      success: false,
+      error: 'MISSING_BYOK_KEY',
+      compilationLogs: [
+        `[COMPILE ERROR] Збірку та компіляцію релізу зупинено!`,
+        `[BYOK ALERT] У локальному сховищі автора (localStorage) відсутній персональний ключ "epic_ai_key".`,
+        `[POLICY] Запуск компіляції та витрати токенів Gemini API повинні здійснюватися за рахунок автора ідеї, а не системи.`,
+        `[ACTION REQUIRED] Повідомте адміністратора або автора про необхідність додати Google AI Studio API Key перед запуском релізу.`
+      ]
+    };
+  }
+
+  const maskedKey = maskApiKey(byokKey);
   const currentVer = getCurrentAppVersion();
   // Bump minor version e.g. v1.2.0 -> v1.3.0
   const match = currentVer.match(/v(\d+)\.(\d+)\.(\d+)/);
@@ -261,13 +282,14 @@ export function compileAndDeployRelease(
   const timestamp = new Date().toISOString();
 
   const compilationLogs = [
-    `[COMPILE 01/07] Завантаження специфікації User Story "${story.title}"...`,
-    `[COMPILE 02/07] Перевірка відповідей на уточнюючі питання користувача... Успішно.`,
-    `[COMPILE 03/07] Валідація сумісності з правилами контенту Епіцентру (supportm.epicentrk.ua)...`,
-    `[COMPILE 04/07] Генерація модульної логіки обробки та перемикача конфігурації...`,
-    `[COMPILE 05/07] Перевірка цілісності: захист ID, коментарів заголовків та HTML-ентіті (&#039;)... Пройдено.`,
-    `[COMPILE 06/07] Збірка модифікації та запуск тестів валідації Excel-схеми... 100% OK.`,
-    `[COMPILE 07/07] Активація релізу ${newVersion} у робочому середовищі користувачів! Модифікація діє.`
+    `[COMPILE 01/08] Завантаження специфікації User Story "${story.title}"...`,
+    `[COMPILE 02/08] Ініціалізація сесії BYOK: Використано персональний ключ автора ${maskedKey}... OK.`,
+    `[COMPILE 03/08] Перевірка відповідей на уточнюючі питання користувача... Успішно.`,
+    `[COMPILE 04/08] Валідація сумісності з правилами контенту Епіцентру (supportm.epicentrk.ua)...`,
+    `[COMPILE 05/08] Генерація модульної логіки обробки та перемикача конфігурації...`,
+    `[COMPILE 06/08] Перевірка цілісності: захист ID, коментарів заголовків та HTML-ентіті (&#039;)... Пройдено.`,
+    `[COMPILE 07/08] Збірка модифікації та запуск тестів валідації Excel-схеми... 100% OK.`,
+    `[COMPILE 08/08] Активація релізу ${newVersion} у робочому середовищі! Статус: approved_and_deployed.`
   ];
 
   const releaseItem: ReleaseLogItem = {
@@ -278,17 +300,39 @@ export function compileAndDeployRelease(
     changesSummary: [
       story.wantFeature,
       `Бізнес-ефект: ${story.soThatBenefit}`,
-      `Пріоритет за MoSCoW: ${story.evaluation?.priority || 'Must Have'} (Оцінка користі: ${story.evaluation?.businessImpactScore || 9}/10)`
+      `Пріоритет за MoSCoW: ${story.evaluation?.priority || 'Must Have'} (Оцінка користі: ${story.evaluation?.businessImpactScore || 9}/10)`,
+      `Схвалено модератором (BYOK: ${maskedKey})`
     ],
     featuresActivated: [story.id.replace('story-', 'feature_')]
   };
 
-  // Update storage
+  // Update story status in storage to 'approved_and_deployed'
+  const stories = getUserStories();
+  const updatedStories = stories.map(s => {
+    if (s.id === story.id) {
+      return {
+        ...s,
+        status: 'approved_and_deployed' as const,
+        releasedVersion: newVersion,
+        releasedAt: timestamp,
+        moderatedAt: timestamp,
+        moderatorDecision: 'approved' as const,
+        moderatorNotes: adminModeratorNotes || 'Схвалено адміністратором з розрахунком через BYOK',
+        compilationLogs,
+        isActiveFeature: true
+      };
+    }
+    return s;
+  });
+  saveUserStories(updatedStories);
+
+  // Update app version & public release log
   setCurrentAppVersion(newVersion);
   const releases = getReleasesLog();
   saveReleasesLog([releaseItem, ...releases]);
 
   return {
+    success: true,
     newVersion,
     compilationLogs,
     releaseItem

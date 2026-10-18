@@ -11,7 +11,8 @@ import {
   Route,
   AlertTriangle,
   Clock,
-  Filter
+  Filter,
+  FileCode
 } from 'lucide-react';
 
 interface NavigationTabsProps {
@@ -66,6 +67,11 @@ export function NavigationTabs({
       label: 'Incidents & Alerts',
       icon: <AlertTriangle className="w-4 h-4" />,
       badge: alertCount > 0 ? alertCount : undefined
+    },
+    {
+      id: 'xml-feed-converter',
+      label: 'XML Feed Converter',
+      icon: <FileCode className="w-4 h-4 text-amber-400" />
     }
   ];
 

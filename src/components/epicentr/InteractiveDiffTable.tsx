@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import {
   EpicentrColumn,
   EpicentrProductRow
@@ -22,44 +23,84 @@ import {
   ChevronDown,
   ChevronUp,
   Tag,
-  Maximize2
+  Maximize2,
+  Download,
+  FileSpreadsheet,
+  Copy,
+  Check,
+  Sparkles,
+  Columns,
+  Share2,
+  KeyRound,
+  RefreshCw
 } from 'lucide-react';
+import { generateEpicentrExportWorkbook } from '../../services/epicentrEngine';
+import { EpicentrDictionaryAttribute } from '../../types/epicentr';
+import { notifyMissingApiKey, enrichProductMandatoryWithAI } from '../../services/geminiFillingService';
+import { getStoredApiKey } from '../../services/aiApiKeyService';
 
 interface InteractiveDiffTableProps {
   columns: EpicentrColumn[];
   rows: EpicentrProductRow[];
+  rawWorkbook?: XLSX.WorkBook | null;
+  originalFileName?: string | null;
+  dictionaryIndex?: Record<string, EpicentrDictionaryAttribute>;
+  onOpenApiKeySettings?: () => void;
   onUpdateCellValue?: (rowIdx: number, columnName: string, newValue: string) => void;
 }
 
 export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   columns,
   rows,
+  rawWorkbook = null,
+  originalFileName = null,
+  dictionaryIndex,
+  onOpenApiKeySettings,
   onUpdateCellValue
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterMode, setFilterMode] = useState<'all' | 'unfilled' | 'lang_fixes' | 'brand_other'>('all');
+  const [filterMode, setFilterMode] = useState<
+    'all' | 'mandatory' | 'unfilled' | 'agent_filled' | 'photo_filled' | 'lang_fixes' | 'brand_other'
+  >('all');
+  const [showOnlyMandatoryCols, setShowOnlyMandatoryCols] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [expandedRowIdx, setExpandedRowIdx] = useState<number | null>(null);
+  const [copiedSuccess, setCopiedSuccess] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [aiProgressMessage, setAiProgressMessage] = useState<string | null>(null);
+  const [googleSheetExportOpen, setGoogleSheetExportOpen] = useState(false);
 
   // Mandatory columns only for high-density display
   const mandatoryCols = columns.filter(c => c.isRequired);
+  const displayCols = showOnlyMandatoryCols ? mandatoryCols : columns;
 
-  // Filter rows
+  // Filter rows based on search and selected pill
   const filteredRows = rows.filter(r => {
     // Search query
     const matchSearch =
       r.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.titleOriginal.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (r.vendorCode && r.vendorCode.toLowerCase().includes(searchQuery.toLowerCase()));
+      (r.vendorCode && r.vendorCode.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (r.brand && r.brand.toLowerCase().includes(searchQuery.toLowerCase()));
 
     if (!matchSearch) return false;
 
     // Filter mode
+    if (filterMode === 'mandatory') {
+      return true;
+    }
     if (filterMode === 'unfilled') {
-      return r.unfilledRequiredFields.length > 0;
+      return r.unfilledRequiredFields && r.unfilledRequiredFields.length > 0;
+    }
+    if (filterMode === 'agent_filled') {
+      return Object.values(r.diffs).some(d => d.source !== 'already_filled' && d.newValue);
+    }
+    if (filterMode === 'photo_filled') {
+      return Object.values(r.diffs).some(d => d.source === 'photo');
     }
     if (filterMode === 'lang_fixes') {
-      return r.languageCorrections.length > 0;
+      return r.languageCorrections && r.languageCorrections.length > 0;
     }
     if (filterMode === 'brand_other') {
       return r.isBrandOther;
@@ -67,138 +108,410 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
     return true;
   });
 
+  // Quick Export to Excel .xlsx
+  const handleExportExcel = () => {
+    try {
+      const exportWb = generateEpicentrExportWorkbook(rawWorkbook, rows, columns);
+      const outName = originalFileName
+        ? `Заповнено_${originalFileName.replace(/\.(xlsx|xls|csv)$/i, '')}.xlsx`
+        : 'Епіцентр_Шаблон_Заповнено.xlsx';
+
+      XLSX.writeFile(exportWb, outName);
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 2500);
+    } catch (err) {
+      console.error('Failed to export Excel file:', err);
+    }
+  };
+
+  // Quick Export to CSV
+  const handleExportCsv = () => {
+    try {
+      const dataToExport = filteredRows.map(r => r.updatedRow);
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const csvStr = XLSX.utils.sheet_to_csv(ws);
+      const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Епіцентр_Експорт_${Date.now()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export CSV:', err);
+    }
+  };
+
+  // Quick Copy to Clipboard (TSV format compatible with Excel copy-paste)
+  const handleCopyToClipboard = () => {
+    try {
+      if (filteredRows.length === 0) return;
+      const headers = ['ID', 'Назва товару [ua]*', 'Артикул*', ...displayCols.filter(c => !c.cleanName.toLowerCase().includes('назва') && !c.cleanName.toLowerCase().includes('артикул') && !c.cleanName.toLowerCase().includes('id')).map(c => c.cleanName)];
+      
+      const rowsData = filteredRows.map(r => {
+        const rowVals = [r.id, r.updatedRow['Назва товару [ua]*'] || r.titleFormattedUa || r.titleOriginal, r.vendorCode || ''];
+        displayCols.filter(c => !c.cleanName.toLowerCase().includes('назва') && !c.cleanName.toLowerCase().includes('артикул') && !c.cleanName.toLowerCase().includes('id')).forEach(col => {
+          rowVals.push(String(r.updatedRow[col.originalName] || ''));
+        });
+        return rowVals.join('\t');
+      });
+
+      const tsvContent = [headers.join('\t'), ...rowsData].join('\n');
+      navigator.clipboard.writeText(tsvContent).then(() => {
+        setCopiedSuccess(true);
+        setTimeout(() => setCopiedSuccess(false), 2500);
+      });
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+    }
+  };
+
+  // AI-powered mandatory attributes filling using Gemini
+  const handleTriggerAiFilling = async () => {
+    const key = getStoredApiKey();
+    if (!key) {
+      notifyMissingApiKey('AI-дозаповнення обовʼязкових характеристик через Gemini');
+      onOpenApiKeySettings?.();
+      return;
+    }
+
+    // Identify rows with empty mandatory columns
+    const mandatoryCols = columns.filter(c => c.isMandatory || c.isRequired);
+    const unfilledRows = rows.map((r, idx) => ({ r, idx })).filter(({ r }) => {
+      return mandatoryCols.some(c => {
+        const val = r.updatedRow[c.originalName];
+        return val === undefined || val === null || String(val).trim() === '';
+      });
+    });
+
+    if (unfilledRows.length === 0) {
+      alert('Усі обовʼязкові характеристики для показаних товарів вже заповнено!');
+      return;
+    }
+
+    setIsAiProcessing(true);
+    setAiProgressMessage(`Gemini: запуск обробки (${unfilledRows.length} товарів)...`);
+    try {
+      let count = 0;
+      for (const item of unfilledRows) {
+        setAiProgressMessage(`Gemini: обробка товару ${count + 1} з ${unfilledRows.length}...`);
+        const result = await enrichProductMandatoryWithAI(
+          item.r.updatedRow,
+          columns,
+          dictionaryIndex || {}
+        );
+        if (result.suggestedValues && Object.keys(result.suggestedValues).length > 0) {
+          for (const [colName, val] of Object.entries(result.suggestedValues)) {
+            if (val && onUpdateCellValue) {
+              onUpdateCellValue(item.idx, colName, String(val));
+            }
+          }
+        }
+        count++;
+      }
+      setAiProgressMessage('Успішно дозаповнено через Gemini!');
+      setTimeout(() => setAiProgressMessage(null), 3000);
+    } catch (e: any) {
+      console.error('AI filling failed:', e);
+      setAiProgressMessage('Помилка під час виклику Gemini');
+      setTimeout(() => setAiProgressMessage(null), 3000);
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
   return (
-    <div className="bg-[#0b1b36] border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-      {/* Top Filter & Search Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 sm:w-80">
+    <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+      {/* Top Bar: Search, Filters, and Quick Export Buttons */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        
+        {/* Left: Search input */}
+        <div className="flex items-center gap-2.5">
+          <div className="relative w-full sm:w-72">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Пошук за назвою, ID або артикулом..."
+              placeholder="Пошук: назва, ID, артикул, бренд..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-900/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#004BB7] focus:bg-white transition-all"
             />
           </div>
 
-          <span className="text-xs text-slate-400 whitespace-nowrap">
-            Показано {filteredRows.length} з {rows.length}
+          <span className="text-xs text-slate-500 whitespace-nowrap font-medium">
+            Показано <strong className="text-slate-800">{filteredRows.length}</strong> з {rows.length} товарів
           </span>
         </div>
 
-        {/* Filter Pills */}
+        {/* Right: Quick Export Buttons & AI Fill */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* AI Fill with Gemini */}
+          <button
+            type="button"
+            onClick={handleTriggerAiFilling}
+            disabled={isAiProcessing}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-[#FF7A00] to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+            title="Заповнити пропущені обов'язкові поля за допомогою Google AI Studio (Gemini)"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${isAiProcessing ? 'animate-spin' : ''}`} />
+            <span>{isAiProcessing ? (aiProgressMessage || 'AI обробка...') : 'AI-дозаповнення (Gemini)'}</span>
+          </button>
+
+          {/* Export to Excel */}
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#004BB7] hover:bg-[#003d99] text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+            title="Завантажити готовий Excel із збереженням усіх оригінальних коментарів JSON"
+          >
+            {downloadSuccess ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-300" />
+                <span>Завантажено!</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-3.5 h-3.5" />
+                <span>Експорт в Excel (.xlsx)</span>
+              </>
+            )}
+          </button>
+
+          {/* Export to Google Sheets */}
+          <button
+            type="button"
+            onClick={() => setGoogleSheetExportOpen(!googleSheetExportOpen)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-semibold transition-colors cursor-pointer"
+            title="Експортувати або відкрити в Google Таблицях"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+            <span>Google Таблиці</span>
+          </button>
+
+          {/* Copy Table to Clipboard */}
+          <button
+            type="button"
+            onClick={handleCopyToClipboard}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+            title="Скопіювати таблицю для вставки в Excel"
+          >
+            {copiedSuccess ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-emerald-700">Скопійовано!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 text-slate-500" />
+                <span>Скопіювати</span>
+              </>
+            )}
+          </button>
+
+          {/* CSV Export */}
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-300 text-slate-600 hover:text-slate-900 transition-colors"
+            title="Завантажити у форматі CSV"
+          >
+            <span className="text-[11px] font-mono font-bold">CSV</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Google Sheets Modal/Popover Banner */}
+      {googleSheetExportOpen && (
+        <div className="bg-emerald-50/80 border border-emerald-300 rounded-xl p-3.5 text-xs text-emerald-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 border border-emerald-300 flex items-center justify-center text-emerald-700 shrink-0">
+              <FileSpreadsheet className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold">Інтеграція з Google Таблицями (Google Sheets):</span>
+              <p className="text-emerald-800 text-[11px] mt-0.5">
+                Ви можете завантажити CSV або скопіювати дані в буфер і вставити в Google Таблицю без втрати структури колонок Епіцентру.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleCopyToClipboard}
+              className="px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 font-semibold hover:bg-emerald-100 transition-colors"
+            >
+              Скопіювати для Google Таблиць
+            </button>
+            <button
+              type="button"
+              onClick={() => setGoogleSheetExportOpen(false)}
+              className="px-2 py-1 text-slate-400 hover:text-slate-600"
+            >
+              Закрити
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Filter Pills Bar: Filtered fields for filling */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pt-1">
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           <button
             type="button"
             onClick={() => setFilterMode('all')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
               filterMode === 'all'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'bg-slate-900 text-slate-400 hover:text-white'
+                ? 'bg-[#004BB7] text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
             Всі товари ({rows.length})
           </button>
+
           <button
             type="button"
             onClick={() => setFilterMode('unfilled')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
               filterMode === 'unfilled'
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'bg-slate-900 text-slate-400 hover:text-white'
+                ? 'bg-[#FF7A00] text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            Порожні обов'язкові ({rows.filter(r => r.unfilledRequiredFields.length > 0).length})
+            Порожні обов'язкові ({rows.filter(r => r.unfilledRequiredFields && r.unfilledRequiredFields.length > 0).length})
           </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterMode('agent_filled')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+              filterMode === 'agent_filled'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Заповнені агентом ({rows.filter(r => Object.values(r.diffs).some(d => d.source !== 'already_filled' && d.newValue)).length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterMode('photo_filled')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+              filterMode === 'photo_filled'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Визначені за фото ({rows.filter(r => Object.values(r.diffs).some(d => d.source === 'photo')).length})
+          </button>
+
           <button
             type="button"
             onClick={() => setFilterMode('lang_fixes')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
               filterMode === 'lang_fixes'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-900 text-slate-400 hover:text-white'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            Мовні виправлення ({rows.filter(r => r.languageCorrections.length > 0).length})
+            Мовні виправлення ({rows.filter(r => r.languageCorrections && r.languageCorrections.length > 0).length})
           </button>
+
           <button
             type="button"
             onClick={() => setFilterMode('brand_other')}
-            className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
               filterMode === 'brand_other'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'bg-slate-900 text-slate-400 hover:text-white'
+                ? 'bg-slate-800 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
             Бренд "Інше" ({rows.filter(r => r.isBrandOther).length})
           </button>
         </div>
+
+        {/* Toggle Column View */}
+        <div className="flex items-center gap-2 text-xs">
+          <button
+            type="button"
+            onClick={() => setShowOnlyMandatoryCols(!showOnlyMandatoryCols)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-semibold transition-colors cursor-pointer ${
+              showOnlyMandatoryCols
+                ? 'bg-amber-50 border-amber-300 text-amber-900'
+                : 'bg-slate-100 border-slate-300 text-slate-700'
+            }`}
+          >
+            <Columns className="w-3.5 h-3.5 text-[#FF7A00]" />
+            <span>
+              {showOnlyMandatoryCols
+                ? `Тільки обов'язкові поля (${mandatoryCols.length})`
+                : `Всі колонки файлу (${columns.length})`}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 bg-slate-900/40 p-2.5 rounded-xl border border-slate-800/80">
-        <span className="font-semibold text-slate-300">Легенда значень:</span>
+      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+        <span className="font-bold text-slate-800">Позначення:</span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-          Заповнено агентом (з довідника)
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+          Заповнено агентом з довідника
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-          Вже заповнено у шаблоні (не змінювалось)
+          <span className="w-2.5 h-2.5 rounded-full bg-[#FF7A00]" />
+          Визначено за 1-м фото
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-          Визначено за 1-м фото товару
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+          Оригінальне значення
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
-          Мовне виправлення [ua]/[ru]
+          <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+          Мовна нормалізація [ua]
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-          Порожнє (недостатньо даних)
+          <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+          Порожнє обов'язкове поле
         </span>
       </div>
 
       {/* Table Container */}
-      <div className="overflow-x-auto border border-slate-800 rounded-xl max-h-[600px] relative">
+      <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[620px] relative shadow-2xs">
         <table className="w-full text-left text-xs border-collapse">
-          <thead className="bg-[#0e2142] sticky top-0 z-20 text-slate-300 font-semibold border-b border-slate-700">
+          <thead className="bg-slate-100 sticky top-0 z-20 text-slate-700 font-bold border-b border-slate-300 shadow-2xs">
             <tr>
-              <th className="py-3 px-3 w-12 text-center">#</th>
+              <th className="py-3 px-3 w-12 text-center text-slate-500 font-mono">#</th>
               <th className="py-3 px-3 w-16 text-center">1-е Фото</th>
               <th className="py-3 px-3 min-w-[120px]">
-                <div className="flex items-center gap-1 text-emerald-400">
-                  <ShieldCheck className="w-3.5 h-3.5" />
+                <div className="flex items-center gap-1 text-[#004BB7]">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#004BB7]" />
                   <span>ID (Захищено)</span>
                 </div>
               </th>
-              <th className="py-3 px-3 min-w-[240px]">Назва товару [ua]*</th>
-              <th className="py-3 px-3 min-w-[110px]">Артикул*</th>
+              <th className="py-3 px-3 min-w-[260px]">Назва товару [ua]*</th>
+              <th className="py-3 px-3 min-w-[120px]">Артикул*</th>
               
-              {/* Dynamic Mandatory Columns */}
-              {mandatoryCols
+              {/* Dynamic Columns */}
+              {displayCols
                 .filter(c => !c.cleanName.toLowerCase().includes('назва') && !c.cleanName.toLowerCase().includes('артикул') && !c.cleanName.toLowerCase().includes('id') && !c.cleanName.toLowerCase().includes('фото') && !c.cleanName.toLowerCase().includes('опис'))
                 .map(col => (
-                  <th key={col.originalName} className="py-3 px-3 min-w-[150px] whitespace-nowrap">
+                  <th key={col.originalName} className="py-3 px-3 min-w-[160px] whitespace-nowrap">
                     <div className="flex items-center gap-1">
-                      <span className="text-white">{col.cleanName}</span>
-                      <span className="text-amber-400 font-bold">*</span>
-                      <span className="text-[10px] text-slate-400 font-mono">({col.type})</span>
+                      <span className="text-slate-800">{col.cleanName}</span>
+                      {col.isRequired && <span className="text-[#FF7A00] font-black">*</span>}
+                      <span className="text-[10px] text-slate-500 font-mono">({col.type})</span>
                     </div>
                   </th>
                 ))}
-              <th className="py-3 px-3 w-20 text-center">Деталі</th>
+              <th className="py-3 px-3 w-20 text-center">Дії</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/80 bg-slate-950/40">
+          <tbody className="divide-y divide-slate-200 bg-white">
             {filteredRows.map((pRow, idx) => {
               const isExpanded = expandedRowIdx === pRow.rowIdx;
               return (
                 <React.Fragment key={pRow.id}>
-                  <tr className="hover:bg-slate-900/60 transition-colors">
+                  <tr className="hover:bg-blue-50/40 transition-colors">
                     <td className="py-2.5 px-3 text-center text-slate-400 font-mono">
                       {idx + 1}
                     </td>
@@ -207,151 +520,134 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                     <td className="py-2.5 px-3 text-center">
                       {pRow.firstPhotoUrl ? (
                         <div
-                          className="relative group cursor-pointer w-10 h-10 rounded-lg overflow-hidden bg-slate-800 border border-slate-700 mx-auto"
+                          className="relative group cursor-pointer w-10 h-10 rounded-lg overflow-hidden bg-slate-100 border border-slate-300 mx-auto shadow-2xs"
                           onClick={() => setSelectedPhoto(pRow.firstPhotoUrl || null)}
-                          title="Клікніть для збільшення першого фото"
+                          title="Клікніть для збільшення 1-го фото"
                         >
                           <img
                             src={pRow.firstPhotoUrl}
                             alt={pRow.id}
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform"
                           />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                             <Maximize2 className="w-3.5 h-3.5 text-white" />
                           </div>
                         </div>
                       ) : (
-                        <div className="w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 mx-auto">
+                        <div className="w-10 h-10 rounded-lg bg-slate-100 border border-dashed border-slate-300 flex items-center justify-center mx-auto text-slate-400">
                           <Camera className="w-4 h-4" />
                         </div>
                       )}
                     </td>
 
-                    {/* ID */}
-                    <td className="py-2.5 px-3 font-mono font-medium text-emerald-300 whitespace-nowrap">
-                      <div className="flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                        <span>{pRow.id}</span>
-                      </div>
+                    {/* Protected ID */}
+                    <td className="py-2.5 px-3 font-mono font-bold text-[#004BB7] whitespace-nowrap">
+                      {pRow.id}
                     </td>
 
-                    {/* Title */}
+                    {/* Title UA */}
                     <td className="py-2.5 px-3">
-                      <div className="max-w-[280px]">
-                        <div className="font-medium text-slate-200 line-clamp-2">
-                          {pRow.updatedRow['Назва товару [ua]*'] || pRow.titleOriginal}
-                        </div>
-                        {pRow.titleFormattedUa && pRow.titleFormattedUa !== pRow.titleOriginal && (
-                          <div className="text-[10px] text-amber-300 mt-0.5 flex items-center gap-1">
-                            <Tag className="w-2.5 h-2.5" />
-                            <span>Формула Епіцентру застосована</span>
-                          </div>
-                        )}
+                      <div className="font-semibold text-slate-900 leading-snug">
+                        {pRow.updatedRow['Назва товару [ua]*'] || pRow.titleFormattedUa || pRow.titleOriginal}
                       </div>
+                      {pRow.titleFormattedUa && pRow.titleFormattedUa !== pRow.titleOriginal && (
+                        <div className="text-[11px] text-slate-500 mt-0.5 line-through decoration-slate-400">
+                          {pRow.titleOriginal}
+                        </div>
+                      )}
                     </td>
 
-                    {/* SKU */}
-                    <td className="py-2.5 px-3 font-mono text-slate-300 whitespace-nowrap">
-                      {pRow.vendorCode || pRow.updatedRow['Артикул*'] || '—'}
+                    {/* SKU / Article */}
+                    <td className="py-2.5 px-3 font-mono text-slate-700 whitespace-nowrap">
+                      {pRow.vendorCode || pRow.updatedRow['Артикул*'] || '-'}
                     </td>
 
-                    {/* Mandatory Attributes */}
-                    {mandatoryCols
+                    {/* Dynamic Columns values */}
+                    {displayCols
                       .filter(c => !c.cleanName.toLowerCase().includes('назва') && !c.cleanName.toLowerCase().includes('артикул') && !c.cleanName.toLowerCase().includes('id') && !c.cleanName.toLowerCase().includes('фото') && !c.cleanName.toLowerCase().includes('опис'))
                       .map(col => {
                         const val = pRow.updatedRow[col.originalName];
                         const diff = pRow.diffs[col.originalName];
-                        const isFilled = val !== undefined && val !== null && String(val).trim() !== '';
-
-                        let badgeColor = 'bg-slate-900 text-slate-400';
-                        let badgeBorder = 'border-slate-800';
-
-                        if (!isFilled) {
-                          badgeColor = 'bg-rose-950/40 text-rose-300';
-                          badgeBorder = 'border-rose-800/40';
-                        } else if (diff?.source === 'already_filled') {
-                          badgeColor = 'bg-blue-950/40 text-blue-300';
-                          badgeBorder = 'border-blue-800/40';
-                        } else if (diff?.source === 'photo') {
-                          badgeColor = 'bg-amber-950/40 text-amber-300';
-                          badgeBorder = 'border-amber-800/40';
-                        } else if (pRow.isBrandOther && col.cleanName.toLowerCase().includes('бренд')) {
-                          badgeColor = 'bg-purple-950/40 text-purple-300';
-                          badgeBorder = 'border-purple-800/40';
-                        } else {
-                          badgeColor = 'bg-emerald-950/40 text-emerald-300';
-                          badgeBorder = 'border-emerald-800/40';
-                        }
+                        const isMandatory = col.isRequired;
+                        const isEmpty = !val || String(val).trim() === '';
 
                         return (
                           <td key={col.originalName} className="py-2.5 px-3">
-                            <div className={`px-2 py-1 rounded-md border text-xs font-medium inline-block max-w-[200px] truncate ${badgeColor} ${badgeBorder}`} title={diff?.note || String(val)}>
-                              {isFilled ? String(val) : 'Порожнє'}
-                            </div>
+                            {isEmpty && isMandatory ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-50 border border-rose-200 text-rose-700">
+                                <AlertTriangle className="w-3 h-3 text-rose-500" />
+                                Порожнє (*)
+                              </span>
+                            ) : diff && diff.source === 'photo' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 border border-amber-200 text-amber-900">
+                                <Camera className="w-3 h-3 text-[#FF7A00]" />
+                                <span>{String(val)}</span>
+                              </span>
+                            ) : diff && diff.source !== 'already_filled' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>{String(val)}</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-700">
+                                {val ? String(val) : <span className="text-slate-300">-</span>}
+                              </span>
+                            )}
                           </td>
                         );
                       })}
 
-                    {/* Details toggle */}
+                    {/* Details action */}
                     <td className="py-2.5 px-3 text-center">
                       <button
                         type="button"
                         onClick={() => setExpandedRowIdx(isExpanded ? null : pRow.rowIdx)}
-                        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-                        title="Переглянути деталі аналізу"
+                        className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors"
+                        title="Переглянути всі параметри товару"
                       >
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </td>
                   </tr>
 
-                  {/* Expanded Row Detail */}
+                  {/* Expanded Row Details */}
                   {isExpanded && (
-                    <tr className="bg-slate-900/80 border-b border-slate-700/80">
-                      <td colSpan={mandatoryCols.length + 5} className="p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-                          {/* Visuals Analysis */}
-                          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 space-y-2">
-                            <h5 className="font-bold text-amber-400 flex items-center gap-1.5">
-                              <Eye className="w-3.5 h-3.5" />
-                              Аналіз першого фото товару
-                            </h5>
-                            <div className="space-y-1 text-slate-300">
-                              <div>Базовий колір: <strong className="text-white">{pRow.photoAnalysis?.primaryColor || '—'}</strong></div>
-                              <div>Колір виробника: <strong className="text-white">{pRow.photoAnalysis?.manufacturerColor || '—'}</strong></div>
-                              <div>Візерунок: <strong className="text-white">{pRow.photoAnalysis?.patternType || '—'}</strong></div>
+                    <tr className="bg-slate-50/80 border-y border-slate-200">
+                      <td colSpan={displayCols.length + 5} className="p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                          <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                            <span className="font-bold text-slate-800 flex items-center gap-1.5 mb-2">
+                              <Tag className="w-3.5 h-3.5 text-[#004BB7]" />
+                              Формула назви Епіцентру
+                            </span>
+                            <div className="space-y-1 text-slate-600">
+                              <div><strong>[UA]:</strong> {pRow.titleFormattedUa || pRow.updatedRow['Назва товару [ua]*']}</div>
+                              <div><strong>[RU]:</strong> {pRow.titleFormattedRu || pRow.updatedRow['Назва товару [ru]*'] || '-'}</div>
+                              <div><strong>Бренд:</strong> {pRow.brand || '-'} {pRow.isBrandOther && <span className="text-purple-600 font-bold">(Інше)</span>}</div>
                             </div>
                           </div>
 
-                          {/* Language Corrections */}
-                          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 space-y-2">
-                            <h5 className="font-bold text-indigo-400 flex items-center gap-1.5">
-                              <Languages className="w-3.5 h-3.5" />
-                              Мовна відповідність [ua] / [ru]
-                            </h5>
-                            {pRow.languageCorrections.length > 0 ? (
-                              <div className="space-y-1.5 text-slate-300">
-                                {pRow.languageCorrections.map((lc, i) => (
-                                  <div key={i} className="border-l-2 border-indigo-500 pl-2">
-                                    <div className="text-[10px] text-slate-400">{lc.columnName}</div>
-                                    <div className="text-emerald-300">Виправлено мову на: {lc.toLang.toUpperCase()}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="text-slate-400">Мовних конфліктів не виявлено.</div>
-                            )}
+                          <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                            <span className="font-bold text-slate-800 flex items-center gap-1.5 mb-2">
+                              <Camera className="w-3.5 h-3.5 text-[#FF7A00]" />
+                              Аналіз першого фото
+                            </span>
+                            <div className="space-y-1 text-slate-600">
+                              <div><strong>Основний колір:</strong> {pRow.photoAnalysis?.primaryColor || 'Визначено за зображенням'}</div>
+                              <div><strong>Колір виробника:</strong> {pRow.photoAnalysis?.manufacturerColor || '-'}</div>
+                              <div><strong>Візерунок:</strong> {pRow.photoAnalysis?.patternType || 'без візерунка (однотонний)'}</div>
+                            </div>
                           </div>
 
-                          {/* Titles Diff */}
-                          <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800 space-y-2">
-                            <h5 className="font-bold text-blue-400 flex items-center gap-1.5">
-                              <Tag className="w-3.5 h-3.5" />
-                              Назви [UA] та [RU]
-                            </h5>
-                            <div className="space-y-1 text-slate-300">
-                              <div><span className="text-slate-400">[UA]:</span> {pRow.titleFormattedUa || pRow.titleOriginal}</div>
-                              <div><span className="text-slate-400">[RU]:</span> {pRow.titleFormattedRu || pRow.updatedRow['Назва товару [ru]*']}</div>
+                          <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                            <span className="font-bold text-slate-800 flex items-center gap-1.5 mb-2">
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              Статус відповідності
+                            </span>
+                            <div className="space-y-1 text-slate-600">
+                              <div><strong>Обов'язкових полів:</strong> {mandatoryCols.length}</div>
+                              <div><strong>Порожніх полів:</strong> {pRow.unfilledRequiredFields.length > 0 ? <span className="text-rose-600 font-bold">{pRow.unfilledRequiredFields.length}</span> : <span className="text-emerald-600 font-bold">0 (Все заповнено)</span>}</div>
+                              <div><strong>Мовних правок:</strong> {pRow.languageCorrections.length}</div>
                             </div>
                           </div>
                         </div>
@@ -365,20 +661,27 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
         </table>
       </div>
 
-      {/* Photo Modal */}
+      {/* Lightbox Modal for Photo preview */}
       {selectedPhoto && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs"
           onClick={() => setSelectedPhoto(null)}
         >
-          <div className="max-w-2xl w-full bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden p-3 relative">
+          <div className="bg-white rounded-2xl p-4 max-w-lg w-full shadow-2xl relative" onClick={e => e.stopPropagation()}>
             <img
               src={selectedPhoto}
-              alt="Перше фото товару"
-              className="w-full max-h-[75vh] object-contain rounded-xl mx-auto"
+              alt="Збільшене фото товару"
+              className="w-full h-auto rounded-xl object-contain max-h-[70vh]"
             />
-            <div className="p-3 text-center text-xs text-slate-300">
-              Перше фото товару — джерело кольору, візерунка, матеріалу та конструкції за регламентом Епіцентру
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-600">
+              <span className="font-semibold text-slate-800">1-е фото товару (Аналіз кольору та візерунка)</span>
+              <button
+                type="button"
+                onClick={() => setSelectedPhoto(null)}
+                className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 font-bold text-slate-700"
+              >
+                Закрити
+              </button>
             </div>
           </div>
         </div>

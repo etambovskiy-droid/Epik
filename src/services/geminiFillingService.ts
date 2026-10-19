@@ -6,6 +6,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { getActiveApiKey, getStoredApiKey } from './aiApiKeyService';
 import { EpicentrColumn, EpicentrDictionaryAttribute, EpicentrProductRow } from '../types/epicentr';
+import { EPICENTR_SYSTEM_PROMPT } from '../constants/epicentrPrompt';
 
 /**
  * Event name dispatched when an AI request cannot proceed due to missing key.
@@ -106,7 +107,7 @@ export async function generateAiEpicentrTitle(
 <Тип товару> <Особливість> <Бренд> <Модель> <Ключова характеристика/Розмір> <Колір> (<Артикул>)
 
 Правила:
-1. Заборонені маркетингові слова (Топ, Акція, Хіт, Дешево, Супер, Новинка, 100%, Якісний тощо).
+1. За заборонені маркетингові слова (Топ, Акція, Хіт, Дешево, Супер, Новинка, 100%, Якісний тощо).
 2. Назва товару українською мовою. Бренд і модель латиницею (як в оригіналі).
 3. Перше фото має пріоритет для кольору.
 4. Довжина до 150 символів. Наприкінці обов'язково артикул у круглих дужках: (АРТИКУЛ).
@@ -117,7 +118,10 @@ ${JSON.stringify(productRow, null, 2)}`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-1.5-flash',
-      contents: prompt
+      contents: prompt,
+      config: {
+        systemInstruction: EPICENTR_SYSTEM_PROMPT
+      }
     });
 
     const text = response?.text?.trim();
@@ -225,6 +229,7 @@ ${JSON.stringify(productRow, null, 2)}
       model: 'gemini-1.5-flash',
       contents: prompt,
       config: {
+        systemInstruction: EPICENTR_SYSTEM_PROMPT,
         responseMimeType: 'application/json'
       }
     });

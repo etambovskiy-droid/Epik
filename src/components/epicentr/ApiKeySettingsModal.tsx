@@ -336,7 +336,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
             <div>
               <div className="text-xs font-bold text-slate-800">Перевірка зв'язку</div>
               <div className="text-[11px] text-slate-500">
-                Надіслати тестовий запит до моделі gemini-1.5-flash
+                Надіслати тестовий запит до моделі gemini-3.5-flash-lite
               </div>
             </div>
             <button

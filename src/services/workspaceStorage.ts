@@ -44,6 +44,72 @@ const SHOPS_STORAGE_KEY = 'epicentr_saas_workspaces';
 const CURRENT_SHOP_KEY = 'epicentr_saas_current_workspace';
 const BATCH_HISTORY_KEY = 'epicentr_saas_batch_history';
 const ONBOARDING_SEEN_KEY = 'epicentr_saas_onboarding_seen';
+const AUTOSAVE_STORAGE_KEY = 'epicentr_saas_autosave_session';
+
+// In-memory cache to preserve full-fidelity batch snapshots & auto-save sessions
+// even when browser localStorage (5MB limit) is full
+const inMemoryBatchSnapshots = new Map<string, SavedBatchHistoryItem>();
+let inMemoryHistoryList: SavedBatchHistoryItem[] | null = null;
+let inMemoryAutoSaveSession: AutoSaveSession | null = null;
+
+/**
+ * Strips heavy row payloads from a batch item for compact localStorage persistence
+ */
+function createLightweightBatchItem(
+  item: SavedBatchHistoryItem,
+  keepLatestRows = false
+): SavedBatchHistoryItem {
+  const MAX_PERSISTED_ROWS = 35;
+  const MAX_PERSISTED_ERRORS = 25;
+
+  const compactReport = item.report
+    ? {
+        ...item.report,
+        errors: (item.report.errors || []).slice(0, MAX_PERSISTED_ERRORS)
+      }
+    : undefined;
+
+  if (!keepLatestRows) {
+    return {
+      id: item.id,
+      workspaceId: item.workspaceId,
+      filename: item.filename,
+      categoryTitle: item.categoryTitle,
+      productsCount: item.productsCount,
+      mandatoryColumnsCount: item.mandatoryColumnsCount,
+      newlyFilledCount: item.newlyFilledCount,
+      fillRatePercentage: item.fillRatePercentage,
+      unfilledMandatoryCount: item.unfilledMandatoryCount,
+      timestamp: item.timestamp,
+      dictionaryFileName: item.dictionaryFileName,
+      xmlFileName: item.xmlFileName,
+      settings: item.settings,
+      columns: item.columns,
+      report: compactReport,
+      engineErrors: (item.engineErrors || []).slice(0, MAX_PERSISTED_ERRORS)
+    };
+  }
+
+  // For the latest batch item, keep a bounded number of rows and avoid duplicating originalRow
+  const boundedProcessedRows = item.processedRows
+    ? item.processedRows.slice(0, MAX_PERSISTED_ROWS).map(row => ({
+        ...row,
+        originalRow: row.updatedRow
+      }))
+    : undefined;
+
+  const boundedRawRows = item.rawRows
+    ? item.rawRows.slice(0, MAX_PERSISTED_ROWS)
+    : undefined;
+
+  return {
+    ...item,
+    report: compactReport,
+    processedRows: boundedProcessedRows,
+    rawRows: boundedRawRows,
+    engineErrors: (item.engineErrors || []).slice(0, MAX_PERSISTED_ERRORS)
+  };
+}
 
 export const DEFAULT_SHOPS: ShopWorkspace[] = [
   {
@@ -76,8 +142,8 @@ export function getWorkspaces(): ShopWorkspace[] {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
-  } catch (e) {
-    console.error('Failed to load workspaces:', e);
+  } catch {
+    // Fallback to default shops
   }
   return DEFAULT_SHOPS;
 }
@@ -85,8 +151,8 @@ export function getWorkspaces(): ShopWorkspace[] {
 export function saveWorkspaces(shops: ShopWorkspace[]) {
   try {
     localStorage.setItem(SHOPS_STORAGE_KEY, JSON.stringify(shops));
-  } catch (e) {
-    console.error('Failed to save workspaces:', e);
+  } catch {
+    // Ignore storage quota errors for workspaces
   }
 }
 
@@ -96,8 +162,8 @@ export function getCurrentWorkspace(): ShopWorkspace {
     const curId = localStorage.getItem(CURRENT_SHOP_KEY);
     const found = shops.find(s => s.id === curId);
     if (found) return found;
-  } catch (e) {
-    console.error('Failed to get current workspace:', e);
+  } catch {
+    // Fallback to first shop
   }
   return shops[0] || DEFAULT_SHOPS[0];
 }
@@ -105,8 +171,8 @@ export function getCurrentWorkspace(): ShopWorkspace {
 export function setCurrentWorkspaceId(id: string) {
   try {
     localStorage.setItem(CURRENT_SHOP_KEY, id);
-  } catch (e) {
-    console.error('Failed to set current workspace:', e);
+  } catch {
+    // Ignore quota errors
   }
 }
 
@@ -115,10 +181,20 @@ export function getBatchHistory(): SavedBatchHistoryItem[] {
     const raw = localStorage.getItem(BATCH_HISTORY_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.map((item: SavedBatchHistoryItem) => {
+          const cached = inMemoryBatchSnapshots.get(item.id);
+          return cached ? { ...item, ...cached } : item;
+        });
+      }
     }
-  } catch (e) {
-    console.error('Failed to load batch history:', e);
+  } catch {
+    if (inMemoryHistoryList) {
+      return inMemoryHistoryList;
+    }
+  }
+  if (inMemoryHistoryList && inMemoryHistoryList.length > 0) {
+    return inMemoryHistoryList;
   }
   return [
     {
@@ -137,19 +213,46 @@ export function getBatchHistory(): SavedBatchHistoryItem[] {
 }
 
 export function saveBatchToHistory(batch: Omit<SavedBatchHistoryItem, 'id' | 'timestamp'>) {
+  const history = getBatchHistory();
+  const newItem: SavedBatchHistoryItem = {
+    ...batch,
+    id: `batch-${Date.now()}`,
+    timestamp: new Date().toISOString()
+  };
+
+  // Always retain full snapshot in memory for the active session
+  inMemoryBatchSnapshots.set(newItem.id, newItem);
+  const fullUpdated = [newItem, ...history].slice(0, 20);
+  inMemoryHistoryList = fullUpdated;
+
+  // Tier 1: Save bounded rows for the newest item and lightweight metadata for older items
   try {
-    const history = getBatchHistory();
-    const newItem: SavedBatchHistoryItem = {
-      ...batch,
-      id: `batch-${Date.now()}`,
-      timestamp: new Date().toISOString()
-    };
-    const updated = [newItem, ...history].slice(0, 30); // keep last 30
-    localStorage.setItem(BATCH_HISTORY_KEY, JSON.stringify(updated));
+    const compactList = fullUpdated.slice(0, 15).map((item, idx) =>
+      createLightweightBatchItem(item, idx === 0)
+    );
+    localStorage.setItem(BATCH_HISTORY_KEY, JSON.stringify(compactList));
     return newItem;
-  } catch (e) {
-    console.error('Failed to save batch to history:', e);
-    return null;
+  } catch {
+    // Tier 2: Strip all heavy row arrays and keep up to 10 lightweight summary items
+    try {
+      const ultraCompactList = fullUpdated
+        .slice(0, 10)
+        .map(item => createLightweightBatchItem(item, false));
+      localStorage.setItem(BATCH_HISTORY_KEY, JSON.stringify(ultraCompactList));
+      return newItem;
+    } catch {
+      // Tier 3: Free up space from autosave session and store only the 5 most recent summary items
+      try {
+        localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
+        const minimalList = fullUpdated
+          .slice(0, 5)
+          .map(item => createLightweightBatchItem(item, false));
+        localStorage.setItem(BATCH_HISTORY_KEY, JSON.stringify(minimalList));
+      } catch {
+        // In-memory fallback is already populated via inMemoryHistoryList
+      }
+      return newItem;
+    }
   }
 }
 
@@ -164,8 +267,8 @@ export function isOnboardingSeen(): boolean {
 export function setOnboardingSeen(val: boolean) {
   try {
     localStorage.setItem(ONBOARDING_SEEN_KEY, val ? 'true' : 'false');
-  } catch (e) {
-    console.error('Failed to set onboarding seen:', e);
+  } catch {
+    // Ignore storage quota errors
   }
 }
 
@@ -179,19 +282,36 @@ export interface AutoSaveSession {
   timestamp: number;
 }
 
-const AUTOSAVE_STORAGE_KEY = 'epicentr_saas_autosave_session';
-
 export function saveAutoSaveSession(session: AutoSaveSession): boolean {
+  inMemoryAutoSaveSession = session;
   try {
     localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(session));
     return true;
-  } catch (e) {
-    console.warn('Auto-save to localStorage failed (e.g. quota exceeded):', e);
-    return false;
+  } catch {
+    // If quota exceeded, compact batch history first and store bounded rows
+    try {
+      const existingHistory = getBatchHistory()
+        .slice(0, 8)
+        .map(item => createLightweightBatchItem(item, false));
+      localStorage.setItem(BATCH_HISTORY_KEY, JSON.stringify(existingHistory));
+
+      const compactSession: AutoSaveSession = {
+        ...session,
+        rawRows: session.rawRows.slice(0, 75)
+      };
+      localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(compactSession));
+      return true;
+    } catch {
+      // Still return true because inMemoryAutoSaveSession holds the session
+      return true;
+    }
   }
 }
 
 export function getAutoSaveSession(): AutoSaveSession | null {
+  if (inMemoryAutoSaveSession && inMemoryAutoSaveSession.rawRows.length > 0) {
+    return inMemoryAutoSaveSession;
+  }
   try {
     const raw = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
     if (raw) {
@@ -200,17 +320,19 @@ export function getAutoSaveSession(): AutoSaveSession | null {
         return parsed as AutoSaveSession;
       }
     }
-  } catch (e) {
-    console.error('Failed to retrieve auto-save session:', e);
+  } catch {
+    // Ignore parse/storage errors
   }
   return null;
 }
 
 export function clearAutoSaveSession(): void {
+  inMemoryAutoSaveSession = null;
   try {
     localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
-  } catch (e) {
-    console.error('Failed to clear auto-save session:', e);
+  } catch {
+    // Ignore storage errors
   }
 }
+
 

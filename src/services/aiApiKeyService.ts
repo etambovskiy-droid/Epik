@@ -131,19 +131,21 @@ export async function testApiKeyConnection(key: string): Promise<{ success: bool
   }
 
   try {
-    // URL більше не містить ?key=...
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': trimmed // Передаємо новий AQ. ключ через заголовок
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: 'Ping test. Reply with word OK.' }]
-        }]
-      })
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': trimmed
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{ text: 'Ping test. Reply with word OK.' }]
+          }]
+        })
+      }
+    );
 
     const data = await response.json();
 
@@ -156,7 +158,7 @@ export async function testApiKeyConnection(key: string): Promise<{ success: bool
 
     return {
       success: true,
-      message: 'З\'єднання успішно підтверджено! Модель gemini-1.5-flash працює.'
+      message: 'З\'єднання успішно підтверджено! Модель gemini-3.5-flash-lite працює.'
     };
   } catch (error: any) {
     return {

@@ -256,7 +256,8 @@ export function App() {
         setSettings(autoSaved.settings);
       }
       if (autoSaved.columns && autoSaved.columns.length > 0) {
-        setColumns(autoSaved.columns);
+        const rawHeaders = autoSaved.columns.map(c => c.originalName);
+        setColumns(analyzeEpicentrColumns(rawHeaders));
       } else {
         const headers = Object.keys(autoSaved.rawRows[0]);
         setColumns(analyzeEpicentrColumns(headers));
@@ -532,7 +533,9 @@ export function App() {
     let targetProcessedRows = batch.processedRows;
     let targetColumns = batch.columns;
     let targetRawRows = batch.rawRows;
-    let targetErrors = batch.engineErrors || (batch.report?.errors || []);
+    let targetErrors = (batch.engineErrors || (batch.report?.errors || [])).filter(
+      err => err.phase !== 'photo_parsing' || !err.message.toLowerCase().includes('відсутнє фото')
+    );
 
     // If batch was saved prior or is the initial sample record without full snapshot, dynamically reconstruct it
     if (!targetReport || !targetProcessedRows || targetProcessedRows.length === 0) {
@@ -550,12 +553,16 @@ export function App() {
       targetProcessedRows = res.processedRows;
       targetColumns = catCols;
       targetRawRows = matchedCat.defaultData;
-      targetErrors = res.report.errors || [];
+      targetErrors = (res.report.errors || []).filter(
+        err => err.phase !== 'photo_parsing' || !err.message.toLowerCase().includes('відсутнє фото')
+      );
     }
 
     setReport(targetReport);
     setProcessedRows(targetProcessedRows);
-    if (targetColumns && targetColumns.length > 0) setColumns(targetColumns);
+    if (targetColumns && targetColumns.length > 0) {
+      setColumns(analyzeEpicentrColumns(targetColumns.map(c => c.originalName)));
+    }
     if (targetRawRows && targetRawRows.length > 0) setRawRows(targetRawRows);
     setEngineErrors(targetErrors);
     setTemplateFileName(batch.filename);

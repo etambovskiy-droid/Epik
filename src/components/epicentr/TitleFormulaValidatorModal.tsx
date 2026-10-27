@@ -69,7 +69,7 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
         httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
       });
       const res = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-3.5-flash-lite',
         contents: `Ти — головний редактор контенту маркетплейсу Епіцентр.
 Перетвори та нормалізуй наступну назву товару за офіційною формулою Епіцентру:
 <Тип товару> <Особливість> <Бренд> <Модель> <Ключова характеристика/Розмір> <Колір> (<Артикул>)

@@ -218,7 +218,7 @@ export class EpicentrXmlGeneratorService {
                         </xs:simpleContent>
                       </xs:complexType>
                     </xs:element>
-                    <xs:element name="picture" type="xs:anyURI" minOccurs="1" maxOccurs="15"/>
+                    <xs:element name="picture" type="xs:anyURI" minOccurs="0" maxOccurs="15"/>
                     <xs:element name="name" minOccurs="2" maxOccurs="2">
                       <xs:complexType>
                         <xs:simpleContent>
@@ -554,16 +554,7 @@ export class EpicentrXmlGeneratorService {
       }
 
       const pictureNodes = Array.from(offer.querySelectorAll(':scope > picture'));
-      if (pictureNodes.length === 0) {
-        elementsStructurePassed = false;
-        issues.push({
-          severity: 'error',
-          code: 'XSD_MISSING_PICTURE',
-          offerId: offerLabel,
-          element: 'picture',
-          message: `Товар [${offerLabel}]: обов'язковий принаймні один тег <picture> з URL фото (xs:minOccurs="1").`
-        });
-      } else {
+      if (pictureNodes.length > 0) {
         pictureNodes.forEach((pic) => {
           const url = pic.textContent?.trim() || '';
           if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -698,8 +689,8 @@ export class EpicentrXmlGeneratorService {
 
     checkpoints.push({
       id: 'mandatory_elements',
-      title: 'Обовʼязкові вузли: price, availability, category, picture, attribute_set',
-      xsdRule: 'xs:sequence (price, availability, category[@code], picture, attribute_set[@code])',
+      title: 'Обовʼязкові вузли: price, availability, category, attribute_set (picture опціонально)',
+      xsdRule: 'xs:sequence (price, availability, category[@code], attribute_set[@code])',
       passed: elementsStructurePassed,
       details: elementsStructurePassed
         ? 'Усі обовʼязкові теги та коди категорій присутні'

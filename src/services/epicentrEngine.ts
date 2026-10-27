@@ -156,8 +156,18 @@ const COMMON_SYNONYMS: Record<string, string> = {
  */
 export function analyzeEpicentrColumns(headers: string[]): EpicentrColumn[] {
   return headers.map((rawHeader, colIndex) => {
-    const isRequired = rawHeader.includes('*');
     const lower = rawHeader.toLowerCase();
+
+    // Check if it is a photo / image column (фото не є обов'язковим)
+    const isPhoto =
+      lower.includes('фото') ||
+      lower.includes('зображення') ||
+      lower.includes('photo') ||
+      lower.includes('image') ||
+      lower.includes('picture');
+
+    // Фото НЕ є обов'язковим
+    const isRequired = isPhoto ? false : rawHeader.includes('*');
 
     // Type detection from column header like (select), (multiselect), (float), (text), (array), (string)
     let type: EpicentrColumnType = 'string';
@@ -601,23 +611,14 @@ export function runEpicentrFillingEngine(
       // Visuals and description analysis
       const visuals = analyzeProductVisualsAndText(row, columns);
 
-      // Diagnostic check: Photo URL validation
-      const photoCol = columns.find(c => c.cleanName.toLowerCase().includes('фото товару') || c.cleanName.toLowerCase().includes('фото'));
-      if (photoCol && photoCol.isRequired) {
-        if (!visuals.firstPhotoUrl) {
-          errors.push({
-            id: `err-photo-missing-${productId}`,
-            timestamp: new Date().toISOString(),
-            severity: 'warning',
-            phase: 'photo_parsing',
-            rowIdx,
-            productId,
-            columnName: photoCol.originalName,
-            message: 'Відсутнє фото товару в обов\'язковій колонці',
-            technicalDetails: `Значення в комірці: "${row[photoCol.originalName] || ''}". Аналіз кольору та візерунка обмежено описом.`,
-            remediation: 'Додайте пряме HTTPS-посилання на фото товару (мін. 800х800 px на білому фоні).'
-          });
-        } else if (visuals.firstPhotoUrl.startsWith('http://')) {
+      // Diagnostic check: Photo URL validation (Фото не є обов'язковим)
+      const photoCol = columns.find(c => {
+        const lower = (c.cleanName || c.originalName).toLowerCase();
+        return lower.includes('фото') || lower.includes('зображення') || lower.includes('photo') || lower.includes('image');
+      });
+
+      if (photoCol && visuals.firstPhotoUrl) {
+        if (visuals.firstPhotoUrl.startsWith('http://')) {
           errors.push({
             id: `err-photo-http-${productId}`,
             timestamp: new Date().toISOString(),
@@ -639,7 +640,7 @@ export function runEpicentrFillingEngine(
             rowIdx,
             productId,
             columnName: photoCol.originalName,
-            message: `Виявлено ${visuals.allPhotoUrls.length} фото. Відповідно до регламенту взято строго перше фото`,
+            message: `Виявлено ${visuals.allPhotoUrls.length} фото. Відповідно до регламенту взято перше фото`,
             technicalDetails: `Перше фото: ${visuals.firstPhotoUrl.substring(0, 60)}... Джерело базового кольору та візерунка.`
           });
         }
@@ -688,6 +689,31 @@ export function runEpicentrFillingEngine(
 
       const existingVal = row[col.originalName];
       const hasExistingVal = existingVal !== undefined && existingVal !== null && String(existingVal).trim() !== '';
+
+      // Фото не є обов'язковим для заповнення
+      const isPhotoCol =
+        col.cleanName.toLowerCase().includes('фото') ||
+        col.originalName.toLowerCase().includes('фото') ||
+        col.cleanName.toLowerCase().includes('зображення') ||
+        col.cleanName.toLowerCase().includes('photo') ||
+        col.cleanName.toLowerCase().includes('image');
+
+      if (isPhotoCol) {
+        if (hasExistingVal) {
+          diffs[col.originalName] = {
+            colIndex: col.colIndex,
+            columnName: col.originalName,
+            isRequired: false,
+            type: col.type,
+            oldValue: String(existingVal),
+            newValue: String(existingVal),
+            source: 'already_filled',
+            confidence: 1.0,
+            note: 'Фото товару (опціональне поле)'
+          };
+        }
+        return;
+      }
 
       if (col.isRequired) {
         totalMandatoryFields++;

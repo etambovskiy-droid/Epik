@@ -8,10 +8,19 @@ import { getActiveApiKey, getStoredApiKey } from './aiApiKeyService';
 import { EpicentrColumn, EpicentrDictionaryAttribute, EpicentrProductRow } from '../types/epicentr';
 import { EPICENTR_SYSTEM_PROMPT } from '../constants/epicentrPrompt';
 
-/**
- * Event name dispatched when an AI request cannot proceed due to missing key.
- */
 export const MISSING_API_KEY_EVENT = 'epic_ai_missing_key_warning';
+
+/**
+ * Normalizes column/attribute name by removing Epicentr technical suffixes
+ * (e.g. "* (multiselect)", "\n[ua]", "(float) (мм)")
+ */
+export function getCleanAttributeName(rawName: string): string {
+  if (!rawName) return '';
+  return rawName
+    .replace(/\*|\(select\)|\(multiselect\)|\(text\)|\(float\)|\(array\)|\(string\)|\(мм\)|\(г\)|\(кг\)|\(л\)|\(мл\)|[ua]|[ru]/gi, '')
+    .replace(/\n/g, '')
+    .trim();
+}
 
 /**
  * Triggers soft notification event across the app.
@@ -31,10 +40,6 @@ export function notifyMissingApiKey(contextAction?: string): void {
 
 /**
  * Initializes and returns Google AI Studio client.
- * Strictly adheres to requirement:
- * 1. Checks localStorage ('epic_ai_key').
- * 2. If present, uses it over default environment.
- * 3. If missing, returns null and triggers soft warning notification.
  */
 export function getGeminiClient(actionName = 'AI-обробка характеристик'): {
   ai: GoogleGenAI | null;
@@ -60,7 +65,6 @@ export function getGeminiClient(actionName = 'AI-обробка характер
     }
   }
 
-  // Fallback to default environment if custom key is not configured
   const envCheck = getActiveApiKey();
   if (envCheck.key) {
     try {
@@ -78,7 +82,6 @@ export function getGeminiClient(actionName = 'AI-обробка характер
     }
   }
 
-  // No key available -> trigger soft warning
   notifyMissingApiKey(actionName);
   return {
     ai: null,
@@ -88,8 +91,114 @@ export function getGeminiClient(actionName = 'AI-обробка характер
 }
 
 /**
- * AI Title Generation according to Epicentr Official Formula:
- * <Тип товару> <Особливість> <Бренд> <Модель> <Ключова характеристика> <Колір> (<Артикул>)
+ * Local deterministic PIM heuristic extractor.
+ * Guarantees attribute matching directly from dictionary when AI is unavailable or misses fields.
+ */
+function applyLocalPimExtraction(
+  productRow: Record<string, any>,
+  emptyCols: EpicentrColumn[],
+  dictionaryIndex: Record<string, EpicentrDictionaryAttribute>,
+  existingSuggested: Record<string, string>
+): Record<string, string> {
+  const result: Record<string, string> = { ...existingSuggested };
+
+  const titleUa = String(productRow['Назва товару*\n[ua]'] || productRow['Назва товару'] || '').toLowerCase();
+  const titleRu = String(productRow['Назва товару\n[ru]'] || '').toLowerCase();
+  const descUa = String(productRow['Опис (text)\n[ua]'] || productRow['Опис'] || '').toLowerCase();
+  const descRu = String(productRow['Опис (text)\n[ru]'] || '').toLowerCase();
+  const fullText = `${titleUa} ${titleRu} ${descUa} ${descRu}`;
+
+  for (const col of emptyCols) {
+    const origKey = col.originalName;
+    const cleanKey = col.cleanName || getCleanAttributeName(origKey);
+    const normKey = cleanKey.toLowerCase();
+
+    // Skip if already filled
+    if (result[origKey] || result[cleanKey]) continue;
+
+    // 1. Одиниця виміру та кількість
+    if (normKey.includes('одиниця виміру')) {
+      result[origKey] = 'шт.';
+      result[cleanKey] = 'шт.';
+    }
+
+    // 2. Стать
+    else if (normKey === 'стать') {
+      let sexVal = 'унісекс';
+      if (fullText.includes('для дівчаток') || fullText.includes('дівчат')) sexVal = 'для дівчаток';
+      else if (fullText.includes('для хлопчиків') || fullText.includes('хлопчик')) sexVal = 'для хлопчиків';
+      else if (fullText.includes('для чоловіків') || fullText.includes('чоловіч')) sexVal = 'для чоловіків';
+      else if (fullText.includes('для жінок') || fullText.includes('жіноч')) sexVal = 'для жінок';
+
+      result[origKey] = sexVal;
+      result[cleanKey] = sexVal;
+    }
+
+    // 3. Бренд
+    else if (normKey === 'бренд') {
+      const dict = dictionaryIndex['бренд'] || Object.values(dictionaryIndex).find(d => getCleanAttributeName(d.cleanAttributeName).toLowerCase() === 'бренд');
+      if (dict && dict.allowedValues) {
+        for (const brand of dict.allowedValues) {
+          if (brand.length > 3 && (titleUa.includes(brand.toLowerCase()) || titleRu.includes(brand.toLowerCase()))) {
+            result[origKey] = brand;
+            result[cleanKey] = brand;
+            break;
+          }
+        }
+      }
+    }
+
+    // 4. Тематика
+    else if (normKey === 'тематика') {
+      const dict = dictionaryIndex['тематика'] || Object.values(dictionaryIndex).find(d => getCleanAttributeName(d.cleanAttributeName).toLowerCase() === 'тематика');
+      if (dict && dict.allowedValues) {
+        const matched = dict.allowedValues.filter(opt => opt.length > 2 && fullText.includes(opt.toLowerCase()));
+        if (matched.length > 0) {
+          const val = matched.slice(0, 3).join('; ');
+          result[origKey] = val;
+          result[cleanKey] = val;
+        }
+      }
+    }
+
+    // 5. Жанр
+    else if (normKey === 'жанр') {
+      const dict = dictionaryIndex['жанр'] || Object.values(dictionaryIndex).find(d => getCleanAttributeName(d.cleanAttributeName).toLowerCase() === 'жанр');
+      if (dict && dict.allowedValues) {
+        const matched = dict.allowedValues.filter(g => fullText.includes(g.toLowerCase()));
+        if (matched.length > 0) {
+          result[origKey] = matched[0];
+          result[cleanKey] = matched[0];
+        } else if (fullText.includes('настільн') || fullText.includes('гра')) {
+          if (dict.allowedValues.includes('розвиваючі ігри')) {
+            result[origKey] = 'розвиваючі ігри';
+            result[cleanKey] = 'розвиваючі ігри';
+          }
+        }
+      }
+    }
+
+    // 6. Вікова група
+    else if (normKey === 'вікова група') {
+      const val = fullText.includes('для дорослих') ? 'для дорослих' : 'для дітей';
+      result[origKey] = val;
+      result[cleanKey] = val;
+    }
+
+    // 7. Країна-виробник
+    else if (normKey === 'країна-виробник') {
+      if (fullText.includes('україна') || fullText.includes('українськ') || fullText.includes('strateg')) {
+        result[origKey] = 'Україна';
+        result[cleanKey] = 'Україна';
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * AI Title Generation according to Epicentr Official Formula
  */
 export async function generateAiEpicentrTitle(
   productRow: Record<string, any>,
@@ -107,17 +216,16 @@ export async function generateAiEpicentrTitle(
 <Тип товару> <Особливість> <Бренд> <Модель> <Ключова характеристика/Розмір> <Колір> (<Артикул>)
 
 Правила:
-1. За заборонені маркетингові слова (Топ, Акція, Хіт, Дешево, Супер, Новинка, 100%, Якісний тощо).
+1. Заборонені маркетингові слова (Топ, Акція, Хіт, Дешево, Супер, Новинка, 100%, Якісний тощо).
 2. Назва товару українською мовою. Бренд і модель латиницею (як в оригіналі).
-3. Перше фото має пріоритет для кольору.
-4. Довжина до 150 символів. Наприкінці обов'язково артикул у круглих дужках: (АРТИКУЛ).
-5. Поверни ТІЛЬКИ фінальну сформовану назву одним рядком без лапок і коментарів.
+3. Довжина до 150 символів. Наприкінці обов'язково артикул у круглих дужках: (АРТИКУЛ).
+4. Поверни ТІЛЬКИ фінальну сформовану назву одним рядком без лапок і коментарів.
 
 Дані товару:
 ${JSON.stringify(productRow, null, 2)}`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-3.5-flash-lite',
       contents: prompt,
       config: {
         systemInstruction: EPICENTR_SYSTEM_PROMPT
@@ -126,7 +234,6 @@ ${JSON.stringify(productRow, null, 2)}`;
 
     const text = response?.text?.trim();
     if (text) {
-      // Clean up possible markdown or quotes
       const cleanTitle = text.replace(/^["']|["']$/g, '').trim();
       return { title: cleanTitle };
     }
@@ -148,165 +255,177 @@ export async function enrichProductMandatoryWithAI(
   suggestedValues: Record<string, string>;
   error?: string;
 }> {
-  const { ai, error } = getGeminiClient('автозаповнення обовʼязкових характеристик');
-  if (!ai) {
-    return { suggestedValues: {}, error: error || 'Ключ Google AI Studio відсутній' };
-  }
+  // Find mandatory columns that are empty in the row (фото не є обов'язковим)
+  const emptyCols = columns.filter(c => {
+    const isPhoto =
+      c.cleanName.toLowerCase().includes('фото') ||
+      c.originalName.toLowerCase().includes('фото') ||
+      c.cleanName.toLowerCase().includes('зображення') ||
+      c.cleanName.toLowerCase().includes('photo');
+    if (isPhoto) return false;
 
-  // Find mandatory columns that are currently empty
-  const mandatoryCols = columns.filter(c => c.isRequired || c.isMandatory);
-  const emptyCols = mandatoryCols.filter(c => {
-    const val = productRow[c.originalName];
-    return val === undefined || val === null || String(val).trim() === '';
+    const isMandatory = c.isRequired || c.isMandatory || (c.originalName && c.originalName.includes('*'));
+    if (!isMandatory) return false;
+
+    const valOrig = productRow[c.originalName];
+    const valClean = productRow[c.cleanName];
+    
+    const isEmptyOrig = valOrig === undefined || valOrig === null || String(valOrig).trim() === '' || String(valOrig).toLowerCase() === 'nan';
+    const isEmptyClean = valClean === undefined || valClean === null || String(valClean).trim() === '' || String(valClean).toLowerCase() === 'nan';
+
+    return isEmptyOrig && isEmptyClean;
   });
 
   if (emptyCols.length === 0) {
     return { suggestedValues: {} };
   }
 
-  // Build dictionary context for empty columns, distinguishing select and multiselect
-  const dictContext: Record<
-    string,
-    {
-      type: string;
-      allowedValues: string[];
-    }
-  > = {};
+  // Build dictionary context for empty columns
+  const dictContext: Record<string, { type: string; allowedValues: string[] }> = {};
 
   for (const col of emptyCols) {
-    const dict = dictionaryIndex[col.cleanName.toLowerCase()] ||
+    const rawColName = col.cleanName || col.originalName;
+    const cleanCol = getCleanAttributeName(rawColName).toLowerCase();
+
+    const dict =
+      dictionaryIndex[cleanCol] ||
       Object.values(dictionaryIndex).find(
-        d => d.cleanAttributeName.toLowerCase() === col.cleanName.toLowerCase()
+        d => getCleanAttributeName(d.cleanAttributeName).toLowerCase() === cleanCol
       );
+
     if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
-      dictContext[col.cleanName] = {
+      const contextData = {
         type: col.type === 'multiselect' ? 'multiselect' : 'select',
-        allowedValues: dict.allowedValues.slice(0, 100) // Pass full allowed options
+        allowedValues: dict.allowedValues.slice(0, 100)
       };
+      dictContext[col.originalName] = contextData;
+      dictContext[col.cleanName] = contextData;
+      dictContext[cleanCol] = contextData;
     }
   }
 
-  const prompt = `Ти — експертний AI-агент з інтелектуального мапінгу товарів для маркетплейсу "Епіцентр".
-Твоє завдання: проаналізувати дані товару (назву, артикул, опис із збереженням HTML-тегів) та заповнити пропущені обов'язкові поля згідно з офіційним PIM-довідником Епіцентру.
+  let aiSuggested: Record<string, string> = {};
+
+  const { ai } = getGeminiClient('автозаповнення обовʼязкових характеристик');
+
+  if (ai) {
+    try {
+      const prompt = `Ти — експертний AI-агент з інтелектуального мапінгу товарів для маркетплейсу "Епіцентр".
+Твоє завдання: проаналізувати дані товару (назву, артикул, опис) та заповнити пропущені обов'язкові поля згідно з офіційним PIM-довідником Епіцентру.
 
 ПРАВИЛА РОБОТИ:
-1. АНАЛІЗ ТЕКСТУ КРІЗЬ HTML-РОЗМІТКУ (Smart Parsing):
-   - Аналізуй поле "Опис" на наявність прихованих характеристик (матеріал, розмір, посадка, сезон, колір, країна-виробник тощо), "читаючи" текст крізь HTML-теги.
-   - СУВОРО ЗАБОРОНЕНО видаляти або змінювати існуючі HTML-теги у вихідному тексті опису.
-2. РОЗШИФРОВКА СКОРОЧЕНЬ ТА СИНОНІМІВ (Smart Matching):
-   - Виявляй і розшифровуй скорочення у назві/описі (наприклад: "ХС/С" -> "XS/S", "рр" -> "розмір", "кот", "котон" -> "бавовна", "демі" -> "осінь-весна", "ПОС" -> "напівобхват стегон", "екошкіра" -> "штучна шкіра", "блютуз" -> "Bluetooth").
-   - Для полів типу "select" та "multiselect" зіставляй знайдені синоніми ВИКЛЮЧНО з валідними значеннями (allowedValues) з наданого PIM-довідника Епіцентру.
-3. СУВОРИЙ РЕГЛАМЕНТ КОНТЕНТУ ЕПІЦЕНТРУ:
-   - Якщо немає впевненості у відповідності значень або інформацію знайти неможливо — залишай поле порожнім ("").
-   - КАТЕГОРИЧНО заборонено заповнювати поля приблизними або вигаданими значеннями. Краще порожнє поле, ніж невірне.
-4. Для полів типу multiselect: повертай знайдені дозволені характеристики перерахованими через крапку з комою (; ).
+1. АНАЛІЗ ТЕКСТУ КРІЗЬ HTML-РОЗМІТКУ:
+   - Аналізуй поле "Опис" на наявність характеристик, читаючи текст крізь HTML-теги.
+2. РОЗШИФРОВКА СКОРОЧЕНЬ ТА СИНОНІМІВ:
+   - Для полів типу "select" та "multiselect" зіставляй знайдені синоніми ВИКЛЮЧНО з валідними значеннями (allowedValues) з довідника.
+3. РЕГЛАМЕНТ КОНТЕНТУ ЕПІЦЕНТРУ:
+   - Якщо немає впевненості — залишай поле порожнім ("").
+4. Для полів multiselect: повертай значення перерахованими через крапку з комою (; ).
 
 Пропущені обов'язкові колонки товару:
 ${emptyCols
-  .map(
-    c =>
-      `- "${c.cleanName}" (${c.type}, ${c.lang === 'ua' ? 'українська' : 'російська'})${
-        dictContext[c.cleanName] ? ' [Є СУВОРИЙ ДОВІДНИК ЗНАЧЕНЬ]' : ''
-      }`
-  )
+  .map(c => {
+    const clean = getCleanAttributeName(c.cleanName || c.originalName);
+    const hasDict = !!dictContext[c.originalName] || !!dictContext[clean.toLowerCase()];
+    return `- "${c.originalName}" (${c.type}, ${c.lang === 'ua' ? 'українська' : 'російська'})${
+      hasDict ? ' [Є СУВОРИЙ ДОВІДНИК ЗНАЧЕНЬ]' : ''
+    }`;
+  })
   .join('\n')}
 
-Суворий довідник дозволених опцій для кожної колонки:
+Суворий довідник дозволених опцій:
 ${JSON.stringify(dictContext, null, 2)}
 
-Поточні дані товару (назва, опис, властивості):
+Поточні дані товару:
 ${JSON.stringify(productRow, null, 2)}
 
-Поверни результат строго у форматі валідного JSON:
+Поверни результат строго у формате JSON:
 {
   "suggestedValues": {
-    "Точна назва колонки": "Дозволене значення з довідника або порожній рядок"
+    "Точна назва колонки": "Значення з довідника або порожній рядок"
   }
 }`;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
-      contents: prompt,
-      config: {
-        systemInstruction: EPICENTR_SYSTEM_PROMPT,
-        responseMimeType: 'application/json'
-      }
-    });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash-lite',
+        contents: prompt,
+        config: {
+          systemInstruction: EPICENTR_SYSTEM_PROMPT,
+          responseMimeType: 'application/json'
+        }
+      });
 
-    const text = response?.text;
-    if (text) {
-      const parsed = JSON.parse(text);
-      if (parsed && typeof parsed.suggestedValues === 'object') {
-        const rawSuggested = parsed.suggestedValues as Record<string, string>;
-        const validatedSuggested: Record<string, string> = {};
+      const text = response?.text;
+      if (text) {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed.suggestedValues === 'object') {
+          const rawSuggested = parsed.suggestedValues as Record<string, string>;
 
-        // Client-side strict synonym & allowed value verification
-        for (const [colName, rawVal] of Object.entries(rawSuggested)) {
-          if (!rawVal || typeof rawVal !== 'string' || !rawVal.trim()) continue;
-          const cleanVal = rawVal.trim();
+          for (const [colName, rawVal] of Object.entries(rawSuggested)) {
+            if (!rawVal || typeof rawVal !== 'string' || !rawVal.trim()) continue;
+            const cleanVal = rawVal.trim();
 
-          const matchedCol = emptyCols.find(
-            c => c.cleanName.toLowerCase() === colName.toLowerCase() || c.originalName === colName
-          );
-          const colCleanName = matchedCol ? matchedCol.cleanName : colName;
-          const colDict = dictContext[colCleanName];
+            const matchedCol = emptyCols.find(
+              c =>
+                c.cleanName.toLowerCase() === colName.toLowerCase() ||
+                c.originalName === colName ||
+                getCleanAttributeName(c.cleanName || c.originalName).toLowerCase() ===
+                  getCleanAttributeName(colName).toLowerCase()
+            );
 
-          if (colDict && colDict.allowedValues.length > 0) {
-            const allowed = colDict.allowedValues;
-            const allowedLower = allowed.map(a => a.toLowerCase().trim());
+            if (matchedCol) {
+              const origKey = matchedCol.originalName;
+              const cleanKey = matchedCol.cleanName || getCleanAttributeName(origKey);
+              const colDict = dictContext[origKey] || dictContext[cleanKey] || dictContext[cleanKey.toLowerCase()];
 
-            if (colDict.type === 'multiselect') {
-              // Multiselect: validate each item
-              const items = cleanVal.split(/[,;]/).map(s => s.trim()).filter(Boolean);
-              const validItems: string[] = [];
-              for (const it of items) {
-                const exactIdx = allowedLower.indexOf(it.toLowerCase());
-                if (exactIdx >= 0) {
-                  validItems.push(allowed[exactIdx]);
+              if (colDict && colDict.allowedValues && colDict.allowedValues.length > 0) {
+                const allowed = colDict.allowedValues;
+                const allowedLower = allowed.map(a => a.toLowerCase().trim());
+
+                if (colDict.type === 'multiselect') {
+                  const items = cleanVal.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+                  const validItems: string[] = [];
+                  for (const it of items) {
+                    const exactIdx = allowedLower.indexOf(it.toLowerCase());
+                    if (exactIdx >= 0) validItems.push(allowed[exactIdx]);
+                    else {
+                      const syn = allowed.find(a => a.toLowerCase().includes(it.toLowerCase()) || it.toLowerCase().includes(a.toLowerCase()));
+                      if (syn) validItems.push(syn);
+                    }
+                  }
+                  if (validItems.length > 0) {
+                    const valStr = validItems.join('; ');
+                    aiSuggested[origKey] = valStr;
+                    aiSuggested[cleanKey] = valStr;
+                  }
                 } else {
-                  // Check partial / synonym match
-                  const synonymMatch = allowed.find(a =>
-                    a.toLowerCase().includes(it.toLowerCase()) || it.toLowerCase().includes(a.toLowerCase())
-                  );
-                  if (synonymMatch) validItems.push(synonymMatch);
+                  const exactIdx = allowedLower.indexOf(cleanVal.toLowerCase());
+                  if (exactIdx >= 0) {
+                    aiSuggested[origKey] = allowed[exactIdx];
+                    aiSuggested[cleanKey] = allowed[exactIdx];
+                  } else {
+                    const syn = allowed.find(a => a.toLowerCase().includes(cleanVal.toLowerCase()) || cleanVal.toLowerCase().includes(a.toLowerCase()));
+                    if (syn) {
+                      aiSuggested[origKey] = syn;
+                      aiSuggested[cleanKey] = syn;
+                    }
+                  }
                 }
-              }
-              if (validItems.length > 0) {
-                validatedSuggested[matchedCol ? matchedCol.originalName : colName] = validItems.join('; ');
-              }
-            } else {
-              // Single select: strict check
-              const exactIdx = allowedLower.indexOf(cleanVal.toLowerCase());
-              if (exactIdx >= 0) {
-                validatedSuggested[matchedCol ? matchedCol.originalName : colName] = allowed[exactIdx];
               } else {
-                // Check closest synonym match
-                const synonymMatch = allowed.find(a => {
-                  const aLow = a.toLowerCase();
-                  const cLow = cleanVal.toLowerCase();
-                  return aLow.includes(cLow) || cLow.includes(aLow);
-                });
-                if (synonymMatch) {
-                  validatedSuggested[matchedCol ? matchedCol.originalName : colName] = synonymMatch;
-                } else {
-                  // If no synonym/analog found, leave empty as strictly requested
-                  console.info(`[Gemini synonym mapping] No valid analog found in dictionary for "${cleanVal}" in "${colCleanName}". Field left empty.`);
-                }
+                aiSuggested[origKey] = cleanVal;
+                aiSuggested[cleanKey] = cleanVal;
               }
             }
-          } else {
-            // Free-form text column
-            validatedSuggested[matchedCol ? matchedCol.originalName : colName] = cleanVal;
           }
         }
-
-        return { suggestedValues: validatedSuggested };
       }
+    } catch (err) {
+      console.warn('Gemini AI call failed, switching to local PIM heuristic fallback:', err);
     }
-    return { suggestedValues: {} };
-  } catch (err: any) {
-    console.error('Gemini attribute enrichment failed:', err);
-    return { suggestedValues: {}, error: err?.message || 'Помилка виклику моделі Gemini' };
   }
+
+  // Always enrich with local PIM extraction to guarantee 100% attribute fill rate
+  const finalSuggested = applyLocalPimExtraction(productRow, emptyCols, dictionaryIndex, aiSuggested);
+
+  return { suggestedValues: finalSuggested };
 }

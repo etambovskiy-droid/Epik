@@ -34,7 +34,7 @@ export const ProcessingProgressView: React.FC<ProcessingProgressViewProps> = ({
     },
     {
       title: 'Крок 2 — Аналіз фотографій та описів',
-      description: 'Визначення кольору та візерунка («з візерунком» / «без візерунка») строго за першим фото товару',
+      description: 'Визначення кольору та візерунка («з візерунком» / «без візерунка») за фото або описом товару (фото є опціональним)',
       icon: Camera,
       color: 'text-[#FF7A00]'
     },

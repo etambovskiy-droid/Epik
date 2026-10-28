@@ -20,8 +20,9 @@ import {
 } from 'lucide-react';
 import {
   epicentrMerchantApi,
-  EPICENTR_TOKEN_STORAGE_KEY
+  getEpicentrTokenStorageKey
 } from '../../services/epicentrMerchantApiService';
+import { authService } from '../../services/authService';
 
 interface EpicentrTokenModalProps {
   isOpen: boolean;
@@ -44,20 +45,22 @@ export const EpicentrTokenModal: React.FC<EpicentrTokenModalProps> = ({
     source?: string;
   } | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const activeStore = authService.getActiveStore();
+  const activeStorageKey = getEpicentrTokenStorageKey(activeStore?.id);
 
   useEffect(() => {
     if (isOpen) {
-      const stored = epicentrMerchantApi.getToken();
+      const stored = epicentrMerchantApi.getToken(activeStore?.id);
       setToken(stored);
       setTestResult(null);
       setSaveSuccess(false);
     }
-  }, [isOpen]);
+  }, [isOpen, activeStore?.id]);
 
   if (!isOpen) return null;
 
   const handleSave = () => {
-    epicentrMerchantApi.saveToken(token);
+    epicentrMerchantApi.saveToken(token, activeStore?.id);
     setSaveSuccess(true);
     if (onTokenUpdated) {
       onTokenUpdated(token.trim());
@@ -68,7 +71,7 @@ export const EpicentrTokenModal: React.FC<EpicentrTokenModalProps> = ({
   };
 
   const handleClear = () => {
-    epicentrMerchantApi.clearToken();
+    epicentrMerchantApi.clearToken(activeStore?.id);
     setToken('');
     setTestResult(null);
     if (onTokenUpdated) {
@@ -80,10 +83,10 @@ export const EpicentrTokenModal: React.FC<EpicentrTokenModalProps> = ({
     setIsTesting(true);
     setTestResult(null);
     try {
-      const res = await epicentrMerchantApi.testConnection(token);
+      const res = await epicentrMerchantApi.testConnection(token, activeStore?.id);
       setTestResult(res);
       if (res.success && token.trim()) {
-        epicentrMerchantApi.saveToken(token);
+        epicentrMerchantApi.saveToken(token, activeStore?.id);
         if (onTokenUpdated) {
           onTokenUpdated(token.trim());
         }
@@ -106,11 +109,11 @@ export const EpicentrTokenModal: React.FC<EpicentrTokenModalProps> = ({
               <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
                 API Token Епіцентру
                 <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                  Merchant API
+                  {activeStore?.sellerCode || 'Merchant API'}
                 </span>
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Авторизація для PIM-ендпоінтів категорій та атрибутів
+                Магазин: <strong className="text-slate-200">{activeStore?.name || 'Поточний магазин'}</strong>
               </p>
             </div>
           </div>
@@ -127,7 +130,7 @@ export const EpicentrTokenModal: React.FC<EpicentrTokenModalProps> = ({
           <Server className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
           <div>
             <span>
-              Токен використовується для запитів до <code className="font-mono text-sky-300">/v2/pim/categories</code> та <code className="font-mono text-sky-300">/v2/pim/attribute-sets</code> на сервері <code className="font-mono text-sky-300">merchant-api.epicentrm.com.ua</code>.
+              Токен прив'язано до кабінету <strong className="text-amber-300">{activeStore?.name}</strong> та використовується для запитів до <code className="font-mono text-sky-300">/v2/pim/categories</code> та <code className="font-mono text-sky-300">/v2/pim/attribute-sets</code>.
             </span>
           </div>
         </div>
@@ -135,7 +138,7 @@ export const EpicentrTokenModal: React.FC<EpicentrTokenModalProps> = ({
         {/* Input Field */}
         <div className="mt-4 space-y-2">
           <label className="block text-xs font-medium text-slate-300">
-            Bearer Token продавця (Merchant API):
+            Bearer Token продавця ({activeStore?.sellerCode || 'Merchant API'}):
           </label>
           <div className="relative">
             <input
@@ -161,7 +164,7 @@ export const EpicentrTokenModal: React.FC<EpicentrTokenModalProps> = ({
           </div>
           <div className="flex items-center justify-between text-[11px] text-slate-500 px-1">
             <span className="flex items-center gap-1 text-emerald-400">
-              <ShieldCheck className="w-3.5 h-3.5" /> Зберігається локально у localStorage ({EPICENTR_TOKEN_STORAGE_KEY})
+              <ShieldCheck className="w-3.5 h-3.5" /> Зберігається ізольовано ({activeStorageKey})
             </span>
             <a
               href="https://merchant-api.epicentrm.com.ua"

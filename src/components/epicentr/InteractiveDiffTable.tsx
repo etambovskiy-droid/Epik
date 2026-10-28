@@ -41,6 +41,7 @@ import { EpicentrDictionaryAttribute } from '../../types/epicentr';
 import {
   notifyMissingApiKey,
   enrichProductMandatoryWithAI,
+  enrichProductsBatchWithAI,
   researchProductAttributesWithWebGrounding,
   GroundedResearchResult
 } from '../../services/geminiFillingService';
@@ -81,6 +82,15 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   // Mandatory columns only for high-density display
   const mandatoryCols = columns.filter(c => c.isRequired);
   const displayCols = showOnlyMandatoryCols ? mandatoryCols : columns;
+
+  // Dynamic lookup for Ukrainian and Russian title columns and SKU column
+  const titleUaCol =
+    columns.find(c => c.lang === 'ua' && c.cleanName.toLowerCase().includes('назва')) ||
+    columns.find(c => !c.lang && c.cleanName.toLowerCase().includes('назва'));
+  const titleRuCol = columns.find(c => c.lang === 'ru' && c.cleanName.toLowerCase().includes('назва'));
+  const skuCol = columns.find(
+    c => c.cleanName.toLowerCase().includes('артикул') || c.cleanName.toLowerCase() === 'sku'
+  );
 
   // Filter rows based on search and selected pill
   const filteredRows = rows.filter(r => {
@@ -134,7 +144,25 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   // Quick Export to CSV
   const handleExportCsv = () => {
     try {
-      const dataToExport = filteredRows.map(r => r.updatedRow);
+      const dataToExport = filteredRows.map(r => {
+        const rowCopy = { ...r.updatedRow };
+        if (titleUaCol) {
+          rowCopy[titleUaCol.originalName] =
+            r.updatedRow[titleUaCol.originalName] ||
+            r.titleFormattedUa ||
+            (r.originalRow ? r.originalRow[titleUaCol.originalName] : '') ||
+            r.titleOriginal ||
+            '';
+        }
+        if (titleRuCol) {
+          rowCopy[titleRuCol.originalName] =
+            r.updatedRow[titleRuCol.originalName] ||
+            r.titleFormattedRu ||
+            (r.originalRow ? r.originalRow[titleRuCol.originalName] : '') ||
+            '';
+        }
+        return rowCopy;
+      });
       const ws = XLSX.utils.json_to_sheet(dataToExport);
       const csvStr = XLSX.utils.sheet_to_csv(ws);
       const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
@@ -153,13 +181,50 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   const handleCopyToClipboard = () => {
     try {
       if (filteredRows.length === 0) return;
-      const headers = ['ID', 'Назва товару [ua]*', 'Артикул*', ...displayCols.filter(c => !c.cleanName.toLowerCase().includes('назва') && !c.cleanName.toLowerCase().includes('артикул') && !c.cleanName.toLowerCase().includes('id')).map(c => c.cleanName)];
-      
+      const headers = [
+        'ID',
+        titleUaCol?.originalName || 'Назва товару [ua]*',
+        ...(titleRuCol ? [titleRuCol.originalName] : []),
+        skuCol?.originalName || 'Артикул*',
+        ...displayCols
+          .filter(
+            c =>
+              !c.cleanName.toLowerCase().includes('назва') &&
+              !c.cleanName.toLowerCase().includes('артикул') &&
+              !c.cleanName.toLowerCase().includes('id')
+          )
+          .map(c => c.cleanName)
+      ];
+
       const rowsData = filteredRows.map(r => {
-        const rowVals = [r.id, r.updatedRow['Назва товару [ua]*'] || r.titleFormattedUa || r.titleOriginal, r.vendorCode || ''];
-        displayCols.filter(c => !c.cleanName.toLowerCase().includes('назва') && !c.cleanName.toLowerCase().includes('артикул') && !c.cleanName.toLowerCase().includes('id')).forEach(col => {
-          rowVals.push(String(r.updatedRow[col.originalName] || ''));
-        });
+        const uaTitle =
+          (titleUaCol ? r.updatedRow[titleUaCol.originalName] : '') ||
+          r.titleFormattedUa ||
+          (titleUaCol && r.originalRow ? r.originalRow[titleUaCol.originalName] : '') ||
+          r.titleOriginal;
+        const ruTitle =
+          (titleRuCol ? r.updatedRow[titleRuCol.originalName] : '') ||
+          r.titleFormattedRu ||
+          (titleRuCol && r.originalRow ? r.originalRow[titleRuCol.originalName] : '') ||
+          '';
+        const skuVal =
+          r.vendorCode || (skuCol ? r.updatedRow[skuCol.originalName] : '') || '';
+        const rowVals = [
+          r.id,
+          uaTitle,
+          ...(titleRuCol ? [ruTitle] : []),
+          skuVal
+        ];
+        displayCols
+          .filter(
+            c =>
+              !c.cleanName.toLowerCase().includes('назва') &&
+              !c.cleanName.toLowerCase().includes('артикул') &&
+              !c.cleanName.toLowerCase().includes('id')
+          )
+          .forEach(col => {
+            rowVals.push(String(r.updatedRow[col.originalName] || ''));
+          });
         return rowVals.join('\t');
       });
 
@@ -184,7 +249,7 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
     selectedKeys: Record<string, boolean>;
   } | null>(null);
 
-  // AI-powered mandatory & optional attributes filling using Gemini server endpoint with optional Google Search Grounding
+  // 2-Step Cascading AI & Google Search Grounding filling with Variant Batching & LocalStorage Caching
   const handleTriggerAiFilling = async (forceWebGrounding?: boolean) => {
     const useGrounding = forceWebGrounding !== undefined ? forceWebGrounding : enableWebGrounding;
 
@@ -206,12 +271,14 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
       }
       return true;
     });
-    const unfilledRows = rows.map((r, idx) => ({ r, idx })).filter(({ r }) => {
-      return fillableCols.some(c => {
-        const val = r.updatedRow[c.originalName];
-        return val === undefined || val === null || String(val).trim() === '';
+    const unfilledRows = rows
+      .map((r, idx) => ({ r, idx, updatedRow: r.updatedRow }))
+      .filter(({ r }) => {
+        return fillableCols.some(c => {
+          const val = r.updatedRow[c.originalName];
+          return val === undefined || val === null || String(val).trim() === '';
+        });
       });
-    });
 
     if (unfilledRows.length === 0) {
       setAiProgressMessage('Усі характеристики для показаних товарів вже заповнено!');
@@ -222,37 +289,18 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
     setIsAiProcessing(true);
     setAiProgressMessage(
       useGrounding
-        ? `Gemini + Google Search Grounding: запуск розшуку (${unfilledRows.length} товарів)...`
-        : `Gemini: запуск обробки (${unfilledRows.length} товарів)...`
+        ? `Етап 1/2: Локальне AI-дозаповнення перед розшуком (${unfilledRows.length} тов.)...`
+        : `Етап 1/2: Локальне AI-дозаповнення (${unfilledRows.length} тов.)...`
     );
 
     try {
-      const BATCH_SIZE = 4;
-
-      for (let i = 0; i < unfilledRows.length; i += BATCH_SIZE) {
-        const batch = unfilledRows.slice(i, i + BATCH_SIZE);
-        const startNum = i + 1;
-        const endNum = Math.min(i + BATCH_SIZE, unfilledRows.length);
-
-        setAiProgressMessage(
-          useGrounding
-            ? `Google Розшук (пакет): товари ${startNum}–${endNum} з ${unfilledRows.length}...`
-            : `Gemini (пакет): обробка товарів ${startNum}–${endNum} з ${unfilledRows.length}...`
-        );
-
-        const batchResults = await Promise.all(
-          batch.map(async (item) => {
-            const result = await enrichProductMandatoryWithAI(
-              item.r.updatedRow,
-              columns,
-              dictionaryIndex || {},
-              { useWebGrounding: useGrounding }
-            );
-            return { item, result };
-          })
-        );
-
-        for (const { item, result } of batchResults) {
+      const stats = await enrichProductsBatchWithAI(unfilledRows, columns, dictionaryIndex || {}, {
+        useWebGrounding: useGrounding,
+        batchSize: 4,
+        onStageUpdate: (msg) => {
+          setAiProgressMessage(msg);
+        },
+        onItemEnriched: (item, result) => {
           if (result.suggestedValues && Object.keys(result.suggestedValues).length > 0) {
             for (const [colName, val] of Object.entries(result.suggestedValues)) {
               if (val && onUpdateCellValue) {
@@ -271,13 +319,22 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
             }));
           }
         }
+      });
+
+      if (useGrounding) {
+        if (stats.variantGroupsSearchedCount === 0 && stats.resolvedFromCacheCount === 0) {
+          setAiProgressMessage(
+            `Усі поля (${stats.resolvedLocallyCount} тов.) заповнено на Етапі 1 локально — мережевий пошук не знадобився!`
+          );
+        } else {
+          setAiProgressMessage(
+            `Готово! Локально: ${stats.resolvedLocallyCount}, з кешу: ${stats.resolvedFromCacheCount}, груп у Google: ${stats.variantGroupsSearchedCount}`
+          );
+        }
+      } else {
+        setAiProgressMessage('Успішно дозаповнено через Gemini!');
       }
-      setAiProgressMessage(
-        useGrounding
-          ? 'Успішно дозаповнено через Gemini та Google Search Grounding!'
-          : 'Успішно дозаповнено через Gemini!'
-      );
-      setTimeout(() => setAiProgressMessage(null), 3500);
+      setTimeout(() => setAiProgressMessage(null), 4000);
     } catch (e: any) {
       console.warn('AI filling notice:', e);
       setAiProgressMessage('Оброблено за допомогою локального PIM-рушія Епіцентру');
@@ -705,7 +762,10 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                     {/* Title UA */}
                     <td className="py-2.5 px-3">
                       <div className="font-semibold text-slate-900 leading-snug">
-                        {pRow.updatedRow['Назва товару [ua]*'] || pRow.titleFormattedUa || pRow.titleOriginal}
+                        {(titleUaCol ? pRow.updatedRow[titleUaCol.originalName] : undefined) ||
+                          pRow.titleFormattedUa ||
+                          (titleUaCol && pRow.originalRow ? pRow.originalRow[titleUaCol.originalName] : undefined) ||
+                          pRow.titleOriginal}
                       </div>
                       {pRow.titleFormattedUa && pRow.titleFormattedUa !== pRow.titleOriginal && (
                         <div className="text-[11px] text-slate-500 mt-0.5 line-through decoration-slate-400">
@@ -716,7 +776,7 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
 
                     {/* SKU / Article */}
                     <td className="py-2.5 px-3 font-mono text-slate-700 whitespace-nowrap">
-                      {pRow.vendorCode || pRow.updatedRow['Артикул*'] || '-'}
+                      {pRow.vendorCode || (skuCol ? pRow.updatedRow[skuCol.originalName] : undefined) || '-'}
                     </td>
 
                     {/* Dynamic Columns values */}
@@ -802,8 +862,21 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                               Формула назви Епіцентру
                             </span>
                             <div className="space-y-1 text-slate-600">
-                              <div><strong>[UA]:</strong> {pRow.titleFormattedUa || pRow.updatedRow['Назва товару [ua]*']}</div>
-                              <div><strong>[RU]:</strong> {pRow.titleFormattedRu || pRow.updatedRow['Назва товару [ru]*'] || '-'}</div>
+                              <div>
+                                <strong>[UA]:</strong>{' '}
+                                {(titleUaCol ? pRow.updatedRow[titleUaCol.originalName] : undefined) ||
+                                  pRow.titleFormattedUa ||
+                                  (titleUaCol && pRow.originalRow ? pRow.originalRow[titleUaCol.originalName] : undefined) ||
+                                  pRow.titleOriginal ||
+                                  '-'}
+                              </div>
+                              <div>
+                                <strong>[RU]:</strong>{' '}
+                                {(titleRuCol ? pRow.updatedRow[titleRuCol.originalName] : undefined) ||
+                                  pRow.titleFormattedRu ||
+                                  (titleRuCol && pRow.originalRow ? pRow.originalRow[titleRuCol.originalName] : undefined) ||
+                                  '-'}
+                              </div>
                               <div><strong>Бренд:</strong> {pRow.brand || '-'} {pRow.isBrandOther && <span className="text-purple-600 font-bold">(Інше)</span>}</div>
                             </div>
                           </div>

@@ -415,6 +415,8 @@ ${productContext ? `\nКонтекст товару з таблиці:\n${JSON.s
         brand,
         vendorCode,
         missingAttributes,
+        systemInstruction,
+        responseMimeType = 'application/json',
         maxOutputTokens = 350
       } = req.body;
 
@@ -430,8 +432,12 @@ ${productContext ? `\nКонтекст товару з таблиці:\n${JSON.s
 
       const ai = getAiClient();
 
-      // Build concise search query "<Бренд> <Артикул> <Коротка назва>"
-      const shortTitle = String(productTitle || '')
+      // Clean title noise and build focused search query: "${brand} ${vendorCode || model} характеристики специфікація"
+      const cleanedModelTitle = String(productTitle || '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/(?:^|[^\p{L}\p{N}])(акція|акция|знижка|скидка|original|оригінал|оригинал|розпродаж|распродажа|уцінка|уценка|новинка|топ|хіт|хит|супер|super|дешево|дешевий)(?:[^\p{L}\p{N}]|$)/giu, ' ')
+        .replace(/(?:розмір[иа]?|размер[ыа]?|р\.)\s*[:\-]?\s*[0-9a-zA-Zа-яіїєґА-ЯІЇЄҐ,\s\/;-]+/gi, ' ')
+        .replace(/\b(?:XXS|XS|S|M|L|XL|XXL|2XL|3XL|4XL|5XL)(?:\s*[,\/;-]\s*(?:XXS|XS|S|M|L|XL|XXL|2XL|3XL|4XL|5XL))+\b/gi, ' ')
         .replace(/\([^)]*\)/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
@@ -443,9 +449,7 @@ ${productContext ? `\nКонтекст товару з таблиці:\n${JSON.s
 
       const conciseQuery =
         (typeof searchQuery === 'string' && searchQuery.trim()) ||
-        [brand, vendorCode, shortTitle]
-          .filter(Boolean)
-          .join(' ')
+        `${brand || ''} ${vendorCode || cleanedModelTitle} характеристики специфікація`
           .replace(/\s+/g, ' ')
           .trim();
 
@@ -459,7 +463,11 @@ ${productContext ? `\nКонтекст товару з таблиці:\n${JSON.s
         })
         .join('\n');
 
-      const prompt = `Знайди у Google Search за коротким запитом "${conciseQuery}" характеристики товару та заповни пропущені поля для каталогу Епіцентр.
+      const groundingSystemInstruction =
+        systemInstruction ||
+        `Ти — експертний PIM-аналітик маркетплейсу Епіцентр. Шукай інформацію пріоритетно на офіційних сайтах виробників, офіційних дистриб'юторів та авторитетних каталогах товарів. Повертай виключно валідний JSON без markdown-обгорток.`;
+
+      const prompt = `Знайди у Google Search за запитом "${conciseQuery}" точні характеристики товару (пріоритетно на офіційному сайті виробника та перевірених каталогах) і заповни пропущені поля для шаблону Епіцентр.
 
 Пошуковий запит: ${conciseQuery}
 Пропущені колонки:
@@ -468,18 +476,39 @@ ${attributesPromptSection}
 ПРАВИЛА:
 1. Одиниці: (мм) -> число в міліметрах (1 см = 10 мм); (г) -> число в грамах; multiselect -> через "; ".
 2. Якщо надано Опції — обирай ТОЧНО зі списку дозволених значень (або "", якщо не підходить).
-3. Не вигадуй дані. Поверни ЛИШЕ чистий JSON без markdown-обгорток:
+3. Не вигадуй дані. Поверни ЛИШЕ чистий JSON:
 {"attributes":{"Назва колонки":"Значення"},"explanations":{"Назва колонки":"Джерело"}}`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-          maxOutputTokens
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: prompt,
+          config: {
+            systemInstruction: groundingSystemInstruction,
+            tools: [{ googleSearch: {} }],
+            responseMimeType,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            maxOutputTokens: Math.min(Number(maxOutputTokens) || 350, 350)
+          }
+        });
+      } catch (firstErr: any) {
+        const errMsg = String(firstErr?.message || '').toLowerCase();
+        if (errMsg.includes('responsemimetype') || errMsg.includes('invalid argument') || errMsg.includes('mime')) {
+          response = await ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: prompt,
+            config: {
+              systemInstruction: groundingSystemInstruction,
+              tools: [{ googleSearch: {} }],
+              thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+              maxOutputTokens: Math.min(Number(maxOutputTokens) || 350, 350)
+            }
+          });
+        } else {
+          throw firstErr;
         }
-      });
+      }
 
       const candidate = response.candidates?.[0];
       const groundingChunks = candidate?.groundingMetadata?.groundingChunks || [];

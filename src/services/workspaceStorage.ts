@@ -46,11 +46,24 @@ const BATCH_HISTORY_KEY = 'epicentr_saas_batch_history';
 const ONBOARDING_SEEN_KEY = 'epicentr_saas_onboarding_seen';
 const AUTOSAVE_STORAGE_KEY = 'epicentr_saas_autosave_session';
 
-// In-memory cache to preserve full-fidelity batch snapshots & auto-save sessions
+// In-memory cache to preserve full-fidelity batch snapshots & per-store auto-save sessions
 // even when browser localStorage (5MB limit) is full
 const inMemoryBatchSnapshots = new Map<string, SavedBatchHistoryItem>();
 let inMemoryHistoryList: SavedBatchHistoryItem[] | null = null;
-let inMemoryAutoSaveSession: AutoSaveSession | null = null;
+const inMemoryStoreAutoSaveSessions = new Map<string, AutoSaveSession>();
+
+function getStoreAutoSaveStorageKey(storeId?: string): string {
+  const resolved = (storeId || getCurrentWorkspaceId() || 'shop-electronics').trim();
+  return `${AUTOSAVE_STORAGE_KEY}_${resolved}`;
+}
+
+export function getCurrentWorkspaceId(): string {
+  try {
+    return localStorage.getItem(CURRENT_SHOP_KEY) || DEFAULT_SHOPS[0].id;
+  } catch {
+    return DEFAULT_SHOPS[0].id;
+  }
+}
 
 /**
  * Strips heavy row payloads from a batch item for compact localStorage persistence
@@ -114,22 +127,22 @@ function createLightweightBatchItem(
 export const DEFAULT_SHOPS: ShopWorkspace[] = [
   {
     id: 'shop-electronics',
-    name: 'Магазин «TechSmart» (Електроніка)',
-    sellerCode: 'SELLER-EP-1082',
+    name: 'Епіцентр Постач Трейд',
+    sellerCode: 'EP-89214',
     defaultCategory: 'headphones',
     createdAt: new Date().toISOString()
   },
   {
     id: 'shop-furniture',
     name: 'Меблевий салон «ComfortHome»',
-    sellerCode: 'SELLER-EP-4421',
+    sellerCode: 'EP-44210',
     defaultCategory: 'chairs',
     createdAt: new Date().toISOString()
   },
   {
     id: 'shop-lighting',
     name: 'Студія світла «Lumina»',
-    sellerCode: 'SELLER-EP-9930',
+    sellerCode: 'EP-99301',
     defaultCategory: 'chandeliers',
     createdAt: new Date().toISOString()
   }
@@ -176,13 +189,14 @@ export function setCurrentWorkspaceId(id: string) {
   }
 }
 
-export function getBatchHistory(): SavedBatchHistoryItem[] {
+export function getBatchHistory(storeId?: string): SavedBatchHistoryItem[] {
+  let list: SavedBatchHistoryItem[] = [];
   try {
     const raw = localStorage.getItem(BATCH_HISTORY_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.map((item: SavedBatchHistoryItem) => {
+        list = parsed.map((item: SavedBatchHistoryItem) => {
           const cached = inMemoryBatchSnapshots.get(item.id);
           return cached ? { ...item, ...cached } : item;
         });
@@ -190,26 +204,33 @@ export function getBatchHistory(): SavedBatchHistoryItem[] {
     }
   } catch {
     if (inMemoryHistoryList) {
-      return inMemoryHistoryList;
+      list = inMemoryHistoryList;
     }
   }
-  if (inMemoryHistoryList && inMemoryHistoryList.length > 0) {
-    return inMemoryHistoryList;
+  if (list.length === 0 && inMemoryHistoryList && inMemoryHistoryList.length > 0) {
+    list = inMemoryHistoryList;
   }
-  return [
-    {
-      id: 'batch-init-1',
-      workspaceId: 'shop-electronics',
-      filename: 'Шаблон_headphones_Епіцентр.xlsx',
-      categoryTitle: 'Електроніка: Бездротові навушники та гарнітури',
-      productsCount: 4,
-      mandatoryColumnsCount: 8,
-      newlyFilledCount: 19,
-      fillRatePercentage: 92,
-      unfilledMandatoryCount: 2,
-      timestamp: new Date(Date.now() - 3600000 * 4).toISOString()
-    }
-  ];
+  if (list.length === 0) {
+    list = [
+      {
+        id: 'batch-init-1',
+        workspaceId: 'shop-electronics',
+        filename: 'Шаблон_headphones_Епіцентр.xlsx',
+        categoryTitle: 'Електроніка: Бездротові навушники та гарнітури',
+        productsCount: 4,
+        mandatoryColumnsCount: 8,
+        newlyFilledCount: 19,
+        fillRatePercentage: 92,
+        unfilledMandatoryCount: 2,
+        timestamp: new Date(Date.now() - 3600000 * 4).toISOString()
+      }
+    ];
+  }
+  if (storeId) {
+    const filtered = list.filter(item => item.workspaceId === storeId);
+    return filtered;
+  }
+  return list;
 }
 
 export function saveBatchToHistory(batch: Omit<SavedBatchHistoryItem, 'id' | 'timestamp'>) {
@@ -273,6 +294,7 @@ export function setOnboardingSeen(val: boolean) {
 }
 
 export interface AutoSaveSession {
+  storeId?: string;
   rawRows: Record<string, any>[];
   settings: any; // ProcessSettings
   columns?: any[]; // EpicentrColumn[]
@@ -282,10 +304,18 @@ export interface AutoSaveSession {
   timestamp: number;
 }
 
-export function saveAutoSaveSession(session: AutoSaveSession): boolean {
-  inMemoryAutoSaveSession = session;
+export function saveAutoSaveSession(session: AutoSaveSession, storeId?: string): boolean {
+  const resolvedStoreId = (storeId || session.storeId || getCurrentWorkspaceId() || 'shop-electronics').trim();
+  const sessionWithStore: AutoSaveSession = {
+    ...session,
+    storeId: resolvedStoreId
+  };
+  inMemoryStoreAutoSaveSessions.set(resolvedStoreId, sessionWithStore);
+  const storageKey = getStoreAutoSaveStorageKey(resolvedStoreId);
+
   try {
-    localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(session));
+    localStorage.setItem(storageKey, JSON.stringify(sessionWithStore));
+    localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(sessionWithStore));
     return true;
   } catch {
     // If quota exceeded, compact batch history first and store bounded rows
@@ -296,28 +326,48 @@ export function saveAutoSaveSession(session: AutoSaveSession): boolean {
       localStorage.setItem(BATCH_HISTORY_KEY, JSON.stringify(existingHistory));
 
       const compactSession: AutoSaveSession = {
-        ...session,
+        ...sessionWithStore,
         rawRows: session.rawRows.slice(0, 75)
       };
+      localStorage.setItem(storageKey, JSON.stringify(compactSession));
       localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(compactSession));
       return true;
     } catch {
-      // Still return true because inMemoryAutoSaveSession holds the session
+      // Still return true because inMemoryStoreAutoSaveSessions holds the session
       return true;
     }
   }
 }
 
-export function getAutoSaveSession(): AutoSaveSession | null {
-  if (inMemoryAutoSaveSession && inMemoryAutoSaveSession.rawRows.length > 0) {
-    return inMemoryAutoSaveSession;
+export function getAutoSaveSession(storeId?: string): AutoSaveSession | null {
+  const resolvedStoreId = (storeId || getCurrentWorkspaceId() || 'shop-electronics').trim();
+  const mem = inMemoryStoreAutoSaveSessions.get(resolvedStoreId);
+  if (mem && mem.rawRows.length > 0) {
+    return mem;
   }
+
+  const storageKey = getStoreAutoSaveStorageKey(resolvedStoreId);
   try {
-    const raw = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.rawRows) && parsed.rawRows.length > 0 && parsed.settings) {
         return parsed as AutoSaveSession;
+      }
+    }
+
+    // Legacy fallback if storeId matches default or legacy session has no storeId
+    const legacyRaw = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
+    if (legacyRaw) {
+      const parsedLegacy = JSON.parse(legacyRaw);
+      if (
+        parsedLegacy &&
+        Array.isArray(parsedLegacy.rawRows) &&
+        parsedLegacy.rawRows.length > 0 &&
+        parsedLegacy.settings &&
+        (!parsedLegacy.storeId || parsedLegacy.storeId === resolvedStoreId)
+      ) {
+        return parsedLegacy as AutoSaveSession;
       }
     }
   } catch {
@@ -326,9 +376,12 @@ export function getAutoSaveSession(): AutoSaveSession | null {
   return null;
 }
 
-export function clearAutoSaveSession(): void {
-  inMemoryAutoSaveSession = null;
+export function clearAutoSaveSession(storeId?: string): void {
+  const resolvedStoreId = (storeId || getCurrentWorkspaceId() || 'shop-electronics').trim();
+  inMemoryStoreAutoSaveSessions.delete(resolvedStoreId);
+  const storageKey = getStoreAutoSaveStorageKey(resolvedStoreId);
   try {
+    localStorage.removeItem(storageKey);
     localStorage.removeItem(AUTOSAVE_STORAGE_KEY);
   } catch {
     // Ignore storage errors

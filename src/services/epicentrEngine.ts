@@ -681,23 +681,23 @@ function analyzeProductVisualsAndText(
     : [];
   const firstPhotoUrl = photoUrls.length > 0 ? photoUrls[0] : undefined;
 
-  // Find Title columns (works for "Назва товару*\n[ua]", "Назва товару [ua]*", "Назва товару", etc.)
+  // Find Title columns dynamically (works for "Назва товару*\n[ua]", "Назва товару [ua]*", "Назва товару", etc.)
   const titleUaCol =
     columns.find(c => c.lang === 'ua' && c.cleanName.toLowerCase().includes('назва')) ||
     columns.find(c => !c.lang && c.cleanName.toLowerCase().includes('назва'));
   const titleRuCol = columns.find(c => c.lang === 'ru' && c.cleanName.toLowerCase().includes('назва'));
 
-  const titleUa = titleUaCol ? String(row[titleUaCol.originalName] || '').trim() : String(row['Назва товару [ua]*'] || row['Назва товару*\n[ua]'] || row['Назва товару'] || '').trim();
-  const titleRu = titleRuCol ? String(row[titleRuCol.originalName] || '').trim() : String(row['Назва товару [ru]*'] || row['Назва товару*\n[ru]'] || '').trim();
+  const titleUa = titleUaCol ? String(row[titleUaCol.originalName] ?? '').trim() : '';
+  const titleRu = titleRuCol ? String(row[titleRuCol.originalName] ?? '').trim() : '';
 
-  // Find Description columns (works with or without [ua]/[ru] or multiline headers)
+  // Find Description columns dynamically (works with or without [ua]/[ru] or multiline headers)
   const descUaCol =
     columns.find(c => c.lang === 'ua' && c.cleanName.toLowerCase().includes('опис')) ||
     columns.find(c => !c.lang && c.cleanName.toLowerCase().includes('опис'));
   const descRuCol = columns.find(c => c.lang === 'ru' && c.cleanName.toLowerCase().includes('опис'));
 
-  const descUaRaw = descUaCol ? String(row[descUaCol.originalName] || '') : String(row['Опис [ua]*'] || row['Опис (text)\n[ua]'] || row['Опис'] || '');
-  const descRuRaw = descRuCol ? String(row[descRuCol.originalName] || '') : String(row['Опис [ru]*'] || row['Опис (text)\n[ru]'] || '');
+  const descUaRaw = descUaCol ? String(row[descUaCol.originalName] ?? '') : '';
+  const descRuRaw = descRuCol ? String(row[descRuCol.originalName] ?? '') : '';
 
   const descUa = stripHtmlToCleanText(descUaRaw);
   const descRu = stripHtmlToCleanText(descRuRaw);
@@ -783,8 +783,8 @@ function analyzeProductVisualsAndText(
   return {
     firstPhotoUrl,
     allPhotoUrls: photoUrls,
-    titleUaColName: titleUaCol?.originalName || 'Назва товару [ua]*',
-    titleRuColName: titleRuCol?.originalName || 'Назва товару [ru]*',
+    titleUaColName: titleUaCol?.originalName,
+    titleRuColName: titleRuCol?.originalName,
     titleUa,
     titleRu,
     descUa,
@@ -1094,6 +1094,11 @@ export function runEpicentrFillingEngine(
 
   // Phase 1: Column Analysis & ID validation
   const { col: idCol, isExplicitId } = findIdColumn(columns);
+  const titleUaCol =
+    columns.find(c => c.lang === 'ua' && c.cleanName.toLowerCase().includes('назва')) ||
+    columns.find(c => !c.lang && c.cleanName.toLowerCase().includes('назва'));
+  const titleRuCol = columns.find(c => c.lang === 'ru' && c.cleanName.toLowerCase().includes('назва'));
+
   if (idCol) {
     errors.push({
       id: `info-id-prot-${Date.now()}`,
@@ -1881,9 +1886,16 @@ export function runEpicentrFillingEngine(
         }
       });
 
-      // Step 4: Product Title Reformatting (If confirmed by user settings)
-      let titleFormattedUa = visuals.titleUa;
-      let titleFormattedRu = visuals.titleRu;
+      // Step 4: Product Title Reformatting & strict preservation under col.originalName
+      const originalTitleUa = titleUaCol ? String(row[titleUaCol.originalName] ?? '').trim() : visuals.titleUa;
+      const originalTitleRu = titleRuCol ? String(row[titleRuCol.originalName] ?? '').trim() : visuals.titleRu;
+
+      let titleFormattedUa = titleUaCol
+        ? String(updatedRow[titleUaCol.originalName] ?? originalTitleUa).trim()
+        : originalTitleUa;
+      let titleFormattedRu = titleRuCol
+        ? String(updatedRow[titleRuCol.originalName] ?? originalTitleRu).trim()
+        : originalTitleRu;
 
       if (settings.reformatTitles) {
         if (titleFormattedUa) {
@@ -1894,7 +1906,6 @@ export function runEpicentrFillingEngine(
             brand: detectedBrand || undefined,
             lang: 'ua'
           });
-          updatedRow[visuals.titleUaColName] = titleFormattedUa;
         }
 
         if (titleFormattedRu) {
@@ -1905,8 +1916,14 @@ export function runEpicentrFillingEngine(
             brand: detectedBrand || undefined,
             lang: 'ru'
           });
-          updatedRow[visuals.titleRuColName] = titleFormattedRu;
         }
+      }
+
+      if (titleUaCol) {
+        updatedRow[titleUaCol.originalName] = titleFormattedUa || originalTitleUa;
+      }
+      if (titleRuCol) {
+        updatedRow[titleRuCol.originalName] = titleFormattedRu || originalTitleRu;
       }
 
     // Determine row status
@@ -1923,9 +1940,9 @@ export function runEpicentrFillingEngine(
       originalRow: row,
       updatedRow,
       diffs,
-      titleOriginal: String(row['Назва товару [ua]*'] || `Товар #${rowIdx + 1}`),
-      titleFormattedUa,
-      titleFormattedRu,
+      titleOriginal: originalTitleUa || originalTitleRu || `Товар #${rowIdx + 1}`,
+      titleFormattedUa: titleFormattedUa || originalTitleUa,
+      titleFormattedRu: titleFormattedRu || originalTitleRu,
       vendorCode: visuals.sku,
       brand: detectedBrand,
       isBrandOther,
@@ -1996,6 +2013,45 @@ export function generateEpicentrExportWorkbook(
   processedRows: EpicentrProductRow[],
   columns: EpicentrColumn[]
 ): XLSX.WorkBook {
+  const titleUaCol =
+    columns.find(c => c.lang === 'ua' && c.cleanName.toLowerCase().includes('назва')) ||
+    columns.find(c => !c.lang && c.cleanName.toLowerCase().includes('назва'));
+  const titleRuCol = columns.find(c => c.lang === 'ru' && c.cleanName.toLowerCase().includes('назва'));
+
+  // Helper to resolve value for any column while strictly preserving UA and RU product titles in their original template columns
+  const resolveExportCellValue = (pRow: EpicentrProductRow, col: EpicentrColumn): any => {
+    if (titleUaCol && col.originalName === titleUaCol.originalName) {
+      const uaVal =
+        pRow.updatedRow[titleUaCol.originalName] ||
+        pRow.titleFormattedUa ||
+        (pRow.originalRow ? pRow.originalRow[titleUaCol.originalName] : '') ||
+        pRow.titleOriginal ||
+        '';
+      pRow.updatedRow[titleUaCol.originalName] = uaVal;
+      return uaVal;
+    }
+
+    if (titleRuCol && col.originalName === titleRuCol.originalName) {
+      const ruVal =
+        pRow.updatedRow[titleRuCol.originalName] ||
+        pRow.titleFormattedRu ||
+        (pRow.originalRow ? pRow.originalRow[titleRuCol.originalName] : '') ||
+        '';
+      pRow.updatedRow[titleRuCol.originalName] = ruVal;
+      return ruVal;
+    }
+
+    const updatedVal = pRow.updatedRow[col.originalName];
+    if (updatedVal !== undefined && updatedVal !== null && String(updatedVal) !== '') {
+      return updatedVal;
+    }
+    const origVal = pRow.originalRow ? pRow.originalRow[col.originalName] : undefined;
+    if (origVal !== undefined && origVal !== null && String(origVal) !== '') {
+      return origVal;
+    }
+    return '';
+  };
+
   // If original workbook exists, deep clone it
   let wb: XLSX.WorkBook;
 
@@ -2004,9 +2060,35 @@ export function generateEpicentrExportWorkbook(
     const firstSheetName = wb.SheetNames[0];
     const ws = wb.Sheets[firstSheetName];
 
+    // Detect the actual header row index in the original worksheet (usually row 0, or row 1+ if merged group titles exist)
+    let headerRowIdx = 0;
+    const colIndexByOriginalName = new Map<string, number>();
+    const normalizeCellHeader = (s: string) => s.replace(/\r\n/g, '\n').trim();
+
+    for (let r = 0; r < 10; r++) {
+      let matchCount = 0;
+      const candidateMap = new Map<string, number>();
+      for (let c = 0; c < Math.max(columns.length + 10, 50); c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        const cellVal = ws[ref]?.v !== undefined ? normalizeCellHeader(String(ws[ref].v)) : '';
+        if (!cellVal) continue;
+        const matchedCol = columns.find(col => normalizeCellHeader(col.originalName) === cellVal);
+        if (matchedCol) {
+          matchCount++;
+          candidateMap.set(matchedCol.originalName, c);
+        }
+      }
+      if (matchCount >= Math.min(2, columns.length)) {
+        headerRowIdx = r;
+        candidateMap.forEach((colIdx, origName) => colIndexByOriginalName.set(origName, colIdx));
+        break;
+      }
+    }
+
     // Ensure all header comments are hidden so JSON metadata does not pop up in Excel
-    columns.forEach((_, cIdx) => {
-      const headerCellRef = XLSX.utils.encode_cell({ r: 0, c: cIdx });
+    columns.forEach((col, cIdx) => {
+      const targetColIdx = colIndexByOriginalName.get(col.originalName) ?? cIdx;
+      const headerCellRef = XLSX.utils.encode_cell({ r: headerRowIdx, c: targetColIdx });
       if (ws[headerCellRef] && Array.isArray(ws[headerCellRef].c)) {
         (ws[headerCellRef].c as any).hidden = true;
         ws[headerCellRef].c.forEach((comment: any) => {
@@ -2016,17 +2098,18 @@ export function generateEpicentrExportWorkbook(
       }
     });
 
-    // Update cell data only, leaving row 1 (headers with comments and JSON metadata) completely intact!
+    // Update cell data only, leaving header row(s) (with comments and JSON metadata) completely intact!
     processedRows.forEach((pRow, rIdx) => {
-      const excelRowNumber = rIdx + 2; // Row 1 is header
+      const targetRowIdx = headerRowIdx + 1 + rIdx;
       columns.forEach((col, cIdx) => {
-        const cellAddress = XLSX.utils.encode_cell({ r: excelRowNumber - 1, c: cIdx });
-        const val = pRow.updatedRow[col.originalName] ?? '';
-        
-        // Preserve existing cell metadata if any
+        const targetColIdx = colIndexByOriginalName.get(col.originalName) ?? cIdx;
+        const cellAddress = XLSX.utils.encode_cell({ r: targetRowIdx, c: targetColIdx });
+        const val = resolveExportCellValue(pRow, col);
+
+        // Preserve existing cell metadata and do not overwrite existing template cell value with empty string
         if (!ws[cellAddress]) {
           ws[cellAddress] = { t: 's', v: String(val) };
-        } else {
+        } else if (val !== '' || ws[cellAddress].v === undefined || ws[cellAddress].v === null) {
           ws[cellAddress].v = String(val);
           ws[cellAddress].t = typeof val === 'number' ? 'n' : 's';
         }
@@ -2034,18 +2117,18 @@ export function generateEpicentrExportWorkbook(
     });
 
     // Update range
-    const maxRow = processedRows.length + 1;
-    const maxCol = columns.length;
+    const maxRow = headerRowIdx + 1 + processedRows.length;
+    const maxCol = Math.max(columns.length, ...Array.from(colIndexByOriginalName.values()).map(v => v + 1));
     ws['!ref'] = XLSX.utils.encode_range({
       s: { r: 0, c: 0 },
-      e: { r: maxRow - 1, c: maxCol - 1 }
+      e: { r: Math.max(0, maxRow - 1), c: Math.max(0, maxCol - 1) }
     });
   } else {
     // Generate new valid workbook if no file was uploaded
     wb = XLSX.utils.book_new();
     const headers = columns.map(c => c.originalName);
     const dataRows = processedRows.map(p => {
-      return columns.map(c => p.updatedRow[c.originalName] ?? '');
+      return columns.map(c => resolveExportCellValue(p, c));
     });
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);

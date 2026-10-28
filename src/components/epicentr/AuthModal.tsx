@@ -59,52 +59,72 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   const handleSwitchMode = (newMode: 'signin' | 'register' | 'forgot') => {
-    setMode(newMode);
-    resetForm();
+    try {
+      setMode(newMode);
+      resetForm();
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Помилка перемикання режиму');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+
+    if (mode === 'register' && !shopName.trim()) {
+      setErrorMsg('Будь ласка, вкажіть назву вашого магазину або компанії (обовʼязкове поле)');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       if (mode === 'signin') {
-        const res = await authService.login(email, password);
-        if (res.success && res.user) {
+        const res = await authService.login(email || '', password || '');
+        if (res?.success && res?.user) {
           onSuccess?.(res.user);
           onClose();
         } else {
-          setErrorMsg(res.error || 'Помилка входу');
+          setErrorMsg(res?.error || 'Помилка входу');
         }
       } else if (mode === 'register') {
-        const res = await authService.register(name, email, password, shopName);
-        if (res.success && res.user) {
+        const res = await authService.register(name || '', email || '', password || '', shopName || '');
+        if (res?.success && res?.user) {
           onSuccess?.(res.user);
           onClose();
         } else {
-          setErrorMsg(res.error || 'Помилка реєстрації');
+          setErrorMsg(res?.error || 'Помилка реєстрації');
         }
       } else if (mode === 'forgot') {
-        const res = await authService.requestPasswordReset(email);
-        if (res.success) {
-          setSuccessMsg(res.message);
+        const res = await authService.requestPasswordReset(email || '');
+        if (res?.success) {
+          setSuccessMsg(res?.message || 'Інструкції надіслано на вашу пошту');
         } else {
-          setErrorMsg(res.message);
+          setErrorMsg(res?.message || 'Не вдалося надіслати інструкції');
         }
       }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Непередбачена помилка авторизації');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleQuickDemo = async () => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
     setIsLoading(true);
     try {
       const res = await authService.loginAsDemo();
-      onSuccess?.(res.user);
-      onClose();
+      if (res?.user) {
+        onSuccess?.(res.user);
+        onClose();
+      } else {
+        setErrorMsg('Не вдалося запустити демо-сесію');
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Помилка демо-входу');
     } finally {
       setIsLoading(false);
     }
@@ -116,12 +136,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsLoading(true);
     try {
       const res = await authService.loginWithGoogle();
-      if (res.success && res.user) {
+      if (res?.success && res?.user) {
         onSuccess?.(res.user);
         onClose();
       } else {
-        setErrorMsg(res.error || 'Не вдалося авторизуватися через Google');
+        setErrorMsg(res?.error || 'Не вдалося авторизуватися через Google');
       }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Не вдалося авторизуватися через Google');
     } finally {
       setIsLoading(false);
     }
@@ -207,7 +229,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <>
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Ваше ім'я та прізвище:
+                  Ваше ім'я та прізвище <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -224,7 +246,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Назва магазину / компанії:
+                  Назва магазину / компанії <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <Store className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />

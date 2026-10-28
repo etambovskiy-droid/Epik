@@ -27,10 +27,12 @@ import {
   Check,
   Image as ImageIcon,
   Search,
-  MessageSquare
+  MessageSquare,
+  Plus,
+  ShieldCheck
 } from 'lucide-react';
 import { ShopWorkspace } from '../../services/workspaceStorage';
-import { UserProfile } from '../../services/authService';
+import { UserProfile, MerchantStore, authService } from '../../services/authService';
 import { uiPreferences, ThemeMode, LanguageMode } from '../../services/uiPreferencesService';
 
 interface EpicentrNavbarProps {
@@ -51,6 +53,7 @@ interface EpicentrNavbarProps {
   currentShop: ShopWorkspace;
   allShops: ShopWorkspace[];
   onSelectShop: (shop: ShopWorkspace) => void;
+  onAddStore?: (storeName: string) => void;
   appVersion: string;
   lastSavedTimestamp?: number | null;
   isAutoSaving?: boolean;
@@ -81,6 +84,7 @@ export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
   currentShop,
   allShops,
   onSelectShop,
+  onAddStore,
   appVersion = 'v1.2.0',
   lastSavedTimestamp,
   isAutoSaving,
@@ -93,6 +97,9 @@ export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
   onOpenChatbot
 }) => {
   const [shopMenuOpen, setShopMenuOpen] = useState(false);
+  const [isAddingStore, setIsAddingStore] = useState(false);
+  const [newStoreName, setNewStoreName] = useState('');
+  const [newStoreError, setNewStoreError] = useState<string | null>(null);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(uiPreferences.getTheme());
   const [lang, setLang] = useState<LanguageMode>(uiPreferences.getLanguage());
@@ -108,6 +115,8 @@ export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
       }
       if (shopMenuRef.current && !shopMenuRef.current.contains(e.target as Node)) {
         setShopMenuOpen(false);
+        setIsAddingStore(false);
+        setNewStoreError(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -135,6 +144,60 @@ export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
     setLang(nextLang);
     uiPreferences.setLanguage(nextLang);
   };
+
+  const handleCreateNewStore = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newStoreName.trim();
+    if (!trimmed) {
+      setNewStoreError('Вкажіть назву магазину');
+      return;
+    }
+    try {
+      if (onAddStore) {
+        onAddStore(trimmed);
+      } else {
+        const created = authService.addStore(trimmed);
+        onSelectShop({
+          id: created.id,
+          name: created.name,
+          sellerCode: created.sellerCode,
+          defaultCategory: 'headphones',
+          createdAt: created.createdAt
+        });
+      }
+      setNewStoreName('');
+      setNewStoreError(null);
+      setIsAddingStore(false);
+      setShopMenuOpen(false);
+    } catch (err: any) {
+      setNewStoreError(err?.message || 'Не вдалося додати магазин');
+    }
+  };
+
+  // Merge user stores and workspace shops so all stores are displayed with EP-XXXXX
+  const displayStores: Array<{
+    id: string;
+    name: string;
+    sellerCode: string;
+    defaultCategory: string;
+    createdAt: string;
+    isVerified?: boolean;
+  }> =
+    currentUser?.stores && currentUser.stores.length > 0
+      ? currentUser.stores.map((st: MerchantStore) => ({
+          id: st.id,
+          name: st.name,
+          sellerCode: st.sellerCode,
+          defaultCategory: 'headphones',
+          createdAt: st.createdAt,
+          isVerified: st.isVerified
+        }))
+      : allShops;
+
+  const activeDisplayStore =
+    displayStores.find((s) => s.id === (currentUser?.activeStoreId || currentShop?.id)) ||
+    currentShop ||
+    displayStores[0];
 
   const userInitials = currentUser?.name
     ? currentUser.name
@@ -175,39 +238,124 @@ export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
                 type="button"
                 onClick={() => setShopMenuOpen(!shopMenuOpen)}
                 className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors py-0.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800/60 px-1.5 cursor-pointer font-medium"
+                title="Перемкнути активний магазин або додати новий"
               >
                 <Store className="w-3.5 h-3.5 text-[#FF7A00]" />
                 <span className="font-bold truncate max-w-[200px]">
-                  {currentShop?.name || 'TechSmart'}
+                  {activeDisplayStore?.name || 'Епіцентр Постач Трейд'}
                 </span>
-                <span className="text-[10px] font-mono text-slate-400">
-                  ({currentShop?.sellerCode || 'TS-842'})
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-[#004BB7] dark:text-blue-400 font-bold border border-slate-200 dark:border-slate-700">
+                  {activeDisplayStore?.sellerCode || 'EP-89214'}
                 </span>
                 <ChevronDown className="w-3 h-3 text-slate-400" />
               </button>
 
               {shopMenuOpen && (
-                <div className="absolute top-full left-0 mt-1.5 w-64 bg-white dark:bg-[#0F1422] border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl p-1.5 z-50 text-xs animate-fade-in">
-                  <div className="px-2 py-1 text-[10px] text-slate-400 uppercase font-bold tracking-wider">
-                    {lang === 'ua' ? 'Кабінети селера' : 'Seller Cabinets'}
+                <div className="absolute top-full left-0 mt-1.5 w-76 bg-white dark:bg-[#0F1422] border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl p-2 z-50 text-xs animate-fade-in">
+                  <div className="px-2 py-1 flex items-center justify-between text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                    <span>{lang === 'ua' ? 'Кабінети селера' : 'Seller Cabinets'}</span>
+                    <span className="font-mono text-[10px] text-slate-500">
+                      {displayStores.length} {lang === 'ua' ? 'маг.' : 'stores'}
+                    </span>
                   </div>
-                  {allShops.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => {
-                        onSelectShop(s);
-                        setShopMenuOpen(false);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
-                        s.id === currentShop.id
-                          ? 'bg-[#FF6B00]/15 text-[#FF7A00] font-bold border border-[#FF6B00]/30'
-                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                      }`}
-                    >
-                      <span className="truncate">{s.name}</span>
-                      <span className="text-[10px] font-mono text-slate-400">{s.sellerCode}</span>
-                    </button>
-                  ))}
+
+                  <div className="max-h-56 overflow-y-auto space-y-1 my-1">
+                    {displayStores.map((s) => {
+                      const isActive = s.id === activeDisplayStore?.id;
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            authService.setActiveStore(s.id);
+                            onSelectShop({
+                              id: s.id,
+                              name: s.name,
+                              sellerCode: s.sellerCode,
+                              defaultCategory: s.defaultCategory || 'headphones',
+                              createdAt: s.createdAt
+                            });
+                            setShopMenuOpen(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-2 rounded-lg flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                            isActive
+                              ? 'bg-[#FF6B00]/15 text-[#FF7A00] font-bold border border-[#FF6B00]/30'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Store className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-[#FF7A00]' : 'text-slate-400'}`} />
+                            <span className="truncate">{s.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {s.isVerified !== false && (
+                              <span title="Верифікований магазин" className="inline-flex">
+                                <ShieldCheck className="w-3 h-3 text-emerald-500" />
+                              </span>
+                            )}
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                              {s.sellerCode}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="pt-1.5 mt-1 border-t border-slate-200 dark:border-slate-800">
+                    {!isAddingStore ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingStore(true);
+                          setNewStoreError(null);
+                        }}
+                        className="w-full px-2.5 py-2 rounded-lg text-xs font-bold text-[#004BB7] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Додати новий магазин</span>
+                      </button>
+                    ) : (
+                      <form onSubmit={handleCreateNewStore} className="p-1.5 space-y-2 bg-slate-50 dark:bg-slate-900/80 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <div className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                          Новий магазин / ФОП:
+                        </div>
+                        <input
+                          type="text"
+                          autoFocus
+                          value={newStoreName}
+                          onChange={(e) => {
+                            setNewStoreName(e.target.value);
+                            setNewStoreError(null);
+                          }}
+                          placeholder="Напр.: ФОП Коваленко (БудМаркет)"
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-[#004BB7]"
+                        />
+                        {newStoreError && (
+                          <div className="text-[10px] text-rose-500 font-medium">{newStoreError}</div>
+                        )}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAddingStore(false);
+                              setNewStoreName('');
+                              setNewStoreError(null);
+                            }}
+                            className="px-2.5 py-1 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
+                          >
+                            Скасувати
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-3 py-1 rounded-md bg-[#004BB7] hover:bg-blue-600 text-white text-[11px] font-bold cursor-pointer"
+                          >
+                            Створити
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

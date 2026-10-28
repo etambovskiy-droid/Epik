@@ -90,11 +90,106 @@ import {
   X as CloseIcon
 } from 'lucide-react';
 
+interface ErrorBoundaryState {
+  hasError: boolean;
+  errorMessage: string | null;
+}
+
+class AuthModalErrorBoundary extends React.Component<
+  { children: React.ReactNode; onClose: () => void },
+  ErrorBoundaryState
+> {
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    errorMessage: null
+  };
+
+  public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return {
+      hasError: true,
+      errorMessage: error?.message || 'Непередбачена помилка рендерингу вікна авторизації'
+    };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+    console.warn('AuthModal ErrorBoundary caught an error:', error, errorInfo);
+  }
+
+  public render(): React.ReactNode {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-rose-200 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-rose-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600" />
+                <span>Відновлення вікна авторизації</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  this.setState({ hasError: false, errorMessage: null });
+                  this.props.onClose();
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                <CloseIcon className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-600">
+              {this.state.errorMessage || 'Сталася тимчасова помилка відображення.'}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => this.setState({ hasError: false, errorMessage: null })}
+                className="px-3.5 py-2 rounded-xl bg-[#004BB7] hover:bg-blue-700 text-white text-xs font-bold cursor-pointer"
+              >
+                Спробувати знову
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function App() {
-  // Workspaces and history
-  const [allShops, setAllShops] = useState<ShopWorkspace[]>(getWorkspaces());
-  const [currentShop, setCurrentShop] = useState<ShopWorkspace>(getCurrentWorkspace());
-  const [history, setHistory] = useState<SavedBatchHistoryItem[]>(getBatchHistory());
+  // User Authentication & Profile Drawer
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
+
+  // Workspaces and history synchronized with currentUser.stores and activeStoreId
+  const [allShops, setAllShops] = useState<ShopWorkspace[]>(() => {
+    const u = authService.getCurrentUser();
+    if (u?.stores && u.stores.length > 0) {
+      return u.stores.map(s => ({
+        id: s.id,
+        name: s.name,
+        sellerCode: s.sellerCode,
+        defaultCategory: 'headphones',
+        createdAt: s.createdAt
+      }));
+    }
+    return getWorkspaces();
+  });
+
+  const [currentShop, setCurrentShop] = useState<ShopWorkspace>(() => {
+    const activeSt = authService.getActiveStore();
+    if (activeSt) {
+      return {
+        id: activeSt.id,
+        name: activeSt.name,
+        sellerCode: activeSt.sellerCode,
+        defaultCategory: 'headphones',
+        createdAt: activeSt.createdAt
+      };
+    }
+    return getCurrentWorkspace();
+  });
+
+  const [history, setHistory] = useState<SavedBatchHistoryItem[]>(() => getBatchHistory());
 
   // App file state
   const [templateFileName, setTemplateFileName] = useState<string | null>(null);
@@ -162,8 +257,7 @@ export function App() {
   const [isUserStoriesOpen, setIsUserStoriesOpen] = useState(false);
   const [appVersion, setAppVersion] = useState<string>(getCurrentAppVersion());
 
-  // User Authentication & Profile Drawer
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
+  // User Authentication & Profile Drawer Modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
   const [isImageStudioOpen, setIsImageStudioOpen] = useState(false);
@@ -173,6 +267,21 @@ export function App() {
   useEffect(() => {
     const unsub = authService.subscribe((u) => {
       setCurrentUser(u);
+      if (u && Array.isArray(u.stores) && u.stores.length > 0) {
+        const mappedShops: ShopWorkspace[] = u.stores.map(s => ({
+          id: s.id,
+          name: s.name,
+          sellerCode: s.sellerCode,
+          defaultCategory: 'headphones',
+          createdAt: s.createdAt
+        }));
+        setAllShops(mappedShops);
+        const active = mappedShops.find(s => s.id === u.activeStoreId) || mappedShops[0];
+        if (active) {
+          setCurrentShop(active);
+          setCurrentWorkspaceId(active.id);
+        }
+      }
     });
     return () => unsub();
   }, []);
@@ -527,10 +636,121 @@ export function App() {
     setDictionaryFileName(filename);
   };
 
-  // Switch workspace
+  // Helper to load workspace state for a specific storeId
+  const loadWorkspaceForStore = (shop: ShopWorkspace) => {
+    const autoSaved = getAutoSaveSession(shop.id);
+    if (autoSaved && Array.isArray(autoSaved.rawRows) && autoSaved.rawRows.length > 0) {
+      setRawRows(autoSaved.rawRows);
+      if (autoSaved.settings) {
+        setSettings(autoSaved.settings);
+      }
+      if (autoSaved.columns && autoSaved.columns.length > 0) {
+        const rawHeaders = autoSaved.columns.map(c => c.originalName);
+        setColumns(analyzeEpicentrColumns(rawHeaders));
+      } else {
+        const headers = Object.keys(autoSaved.rawRows[0]);
+        setColumns(analyzeEpicentrColumns(headers));
+      }
+      setTemplateFileName(autoSaved.templateFileName || `Шаблон_${shop.sellerCode}.xlsx`);
+      setDictionaryFileName(autoSaved.dictionaryFileName || null);
+      setXmlFileName(autoSaved.xmlFileName || null);
+      setLastSavedTimestamp(autoSaved.timestamp);
+      setProcessedRows([]);
+      setReport(null);
+      setWorkflowState('upload');
+    } else {
+      const matchedCat =
+        SAMPLE_CATEGORIES.find(c => c.id === shop.defaultCategory) || SAMPLE_CATEGORIES[0];
+      const headers = Object.keys(matchedCat.defaultData[0]);
+      const analyzedCols = analyzeEpicentrColumns(headers);
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(matchedCat.defaultData);
+      analyzedCols.forEach((col, idx) => {
+        const cellRef = XLSX.utils.encode_cell({ r: 0, c: idx });
+        if (ws[cellRef]) {
+          ws[cellRef].c = [
+            {
+              a: 'EpicentrMarketplace',
+              t: JSON.stringify({
+                attributeCode: `ATTR_${idx + 100}`,
+                attributeType: col.type,
+                isRequired: col.isRequired
+              }),
+              hidden: true,
+              visible: false
+            } as any
+          ];
+          (ws[cellRef].c as any).hidden = true;
+        }
+      });
+      XLSX.utils.book_append_sheet(wb, ws, 'Шаблон_Епіцентр');
+
+      setRawRows(matchedCat.defaultData);
+      setColumns(analyzedCols);
+      setRawWorkbook(wb);
+      setTemplateFileName(`Шаблон_${matchedCat.id}_${shop.sellerCode}.xlsx`);
+      setDictionaryFileName(`Довідник_${matchedCat.id}_Офіційний.xlsx`);
+      setXmlFileName(null);
+      setDictionaryIndex(buildDictionaryIndex(matchedCat.dictionaryData));
+      setProcessedRows([]);
+      setReport(null);
+      setWorkflowState('upload');
+    }
+    setHasCustomApiKey(!!getStoredApiKey(shop.id));
+  };
+
+  // Switch workspace / store
   const handleSelectShop = (shop: ShopWorkspace) => {
+    if (rawRows.length > 0 && currentShop?.id) {
+      saveAutoSaveSession(
+        {
+          storeId: currentShop.id,
+          rawRows,
+          settings,
+          columns,
+          templateFileName,
+          dictionaryFileName,
+          xmlFileName,
+          timestamp: Date.now()
+        },
+        currentShop.id
+      );
+    }
+    authService.setActiveStore(shop.id);
     setCurrentShop(shop);
     setCurrentWorkspaceId(shop.id);
+    loadWorkspaceForStore(shop);
+  };
+
+  // Add a new store and switch to its isolated workspace
+  const handleAddStore = (storeName: string) => {
+    if (rawRows.length > 0 && currentShop?.id) {
+      saveAutoSaveSession(
+        {
+          storeId: currentShop.id,
+          rawRows,
+          settings,
+          columns,
+          templateFileName,
+          dictionaryFileName,
+          xmlFileName,
+          timestamp: Date.now()
+        },
+        currentShop.id
+      );
+    }
+    const created = authService.addStore(storeName);
+    const newShop: ShopWorkspace = {
+      id: created.id,
+      name: created.name,
+      sellerCode: created.sellerCode,
+      defaultCategory: 'headphones',
+      createdAt: created.createdAt
+    };
+    setCurrentShop(newShop);
+    setCurrentWorkspaceId(newShop.id);
+    loadWorkspaceForStore(newShop);
   };
 
   // Trigger filling process
@@ -748,6 +968,7 @@ export function App() {
         currentShop={currentShop}
         allShops={allShops}
         onSelectShop={handleSelectShop}
+        onAddStore={handleAddStore}
         appVersion="v1.2.0"
         lastSavedTimestamp={lastSavedTimestamp}
         isAutoSaving={isAutoSaving}
@@ -1206,15 +1427,29 @@ export function App() {
         onClose={() => setIsEpicentrTokenModalOpen(false)}
       />
 
-      {/* Seller Authentication Modal (Sign In / Register / Reset Password) */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={(u) => {
-          setCurrentUser(u);
-          setIsAuthModalOpen(false);
-        }}
-      />
+      {/* Seller Authentication Modal wrapped in ErrorBoundary for White Screen Protection */}
+      <AuthModalErrorBoundary onClose={() => setIsAuthModalOpen(false)}>
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          onSuccess={(u) => {
+            setCurrentUser(u);
+            if (u?.stores && u.stores.length > 0) {
+              const activeSt = u.stores.find(s => s.id === u.activeStoreId) || u.stores[0];
+              if (activeSt) {
+                handleSelectShop({
+                  id: activeSt.id,
+                  name: activeSt.name,
+                  sellerCode: activeSt.sellerCode,
+                  defaultCategory: 'headphones',
+                  createdAt: activeSt.createdAt
+                });
+              }
+            }
+            setIsAuthModalOpen(false);
+          }}
+        />
+      </AuthModalErrorBoundary>
 
       {/* Seller Profile & Settings Slide-over Drawer */}
       <UserProfileDrawer

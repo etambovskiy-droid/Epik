@@ -21,6 +21,9 @@ import {
 } from 'lucide-react';
 import {
   getStoredApiKey,
+  getGlobalApiKey,
+  getStoreApiKey,
+  getStoreAiStorageKey,
   saveApiKey,
   removeApiKey,
   validateApiKeyFormat,
@@ -29,8 +32,9 @@ import {
 } from '../../services/aiApiKeyService';
 import {
   epicentrMerchantApi,
-  EPICENTR_TOKEN_STORAGE_KEY
+  getEpicentrTokenStorageKey
 } from '../../services/epicentrMerchantApiService';
+import { authService } from '../../services/authService';
 
 interface ApiKeySettingsModalProps {
   isOpen: boolean;
@@ -46,6 +50,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
   initialWarningMessage
 }) => {
   const [apiKey, setApiKey] = useState('');
+  const [aiKeyScope, setAiKeyScope] = useState<'global' | 'store'>('global');
   const [showKey, setShowKey] = useState(false);
   const [validationResult, setValidationResult] = useState<{
     isValid: boolean;
@@ -70,12 +75,21 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
   } | null>(null);
   const [epicentrSaveSuccess, setEpicentrSaveSuccess] = useState(false);
 
-  // Load existing keys on open
+  const activeStore = authService.getActiveStore();
+  const activeStoreId = activeStore?.id || 'shop-electronics';
+  const activeEpicentrStorageKey = getEpicentrTokenStorageKey(activeStoreId);
+  const activeAiStorageKey = aiKeyScope === 'store' ? getStoreAiStorageKey(activeStoreId) : AI_STORAGE_KEY;
+
+  // Load existing keys on open or store switch
   useEffect(() => {
     if (isOpen) {
-      const existing = getStoredApiKey() || '';
+      const storeSpecific = getStoreApiKey(activeStoreId);
+      const globalKey = getGlobalApiKey();
+      const scopeToUse = storeSpecific ? 'store' : 'global';
+      setAiKeyScope(scopeToUse);
+      const existing = (scopeToUse === 'store' ? storeSpecific : globalKey) || '';
       setApiKey(existing);
-      setEpicentrToken(epicentrMerchantApi.getToken());
+      setEpicentrToken(epicentrMerchantApi.getToken(activeStoreId));
       setTestResult(null);
       setEpicentrTestResult(null);
       setSaveSuccess(false);
@@ -86,9 +100,16 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
         setValidationResult(null);
       }
     }
-  }, [isOpen]);
+  }, [isOpen, activeStoreId]);
 
   if (!isOpen) return null;
+
+  const handleScopeChange = (newScope: 'global' | 'store') => {
+    setAiKeyScope(newScope);
+    const val = (newScope === 'store' ? getStoreApiKey(activeStoreId) : getGlobalApiKey()) || '';
+    setApiKey(val);
+    setValidationResult(val ? validateApiKeyFormat(val) : null);
+  };
 
   const handleInputChange = (val: string) => {
     setApiKey(val);
@@ -104,10 +125,10 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
   const handleSave = () => {
     const trimmed = apiKey.trim();
     if (!trimmed) {
-      removeApiKey();
+      removeApiKey(aiKeyScope, activeStoreId);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
-      onKeySaved?.('');
+      onKeySaved?.(getStoredApiKey(activeStoreId) || '');
       return;
     }
 
@@ -117,7 +138,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
       return;
     }
 
-    saveApiKey(trimmed);
+    saveApiKey(trimmed, aiKeyScope, activeStoreId);
     setSaveSuccess(true);
     onKeySaved?.(trimmed);
     setTimeout(() => {
@@ -127,11 +148,11 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
   };
 
   const handleRemove = () => {
-    removeApiKey();
+    removeApiKey(aiKeyScope, activeStoreId);
     setApiKey('');
     setValidationResult(null);
     setTestResult(null);
-    onKeySaved?.('');
+    onKeySaved?.(getStoredApiKey(activeStoreId) || '');
   };
 
   const handleTestConnection = async () => {
@@ -151,7 +172,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
   };
 
   const handleSaveEpicentr = () => {
-    epicentrMerchantApi.saveToken(epicentrToken);
+    epicentrMerchantApi.saveToken(epicentrToken, activeStoreId);
     setEpicentrSaveSuccess(true);
     setTimeout(() => {
       setEpicentrSaveSuccess(false);
@@ -160,7 +181,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
   };
 
   const handleRemoveEpicentr = () => {
-    epicentrMerchantApi.clearToken();
+    epicentrMerchantApi.clearToken(activeStoreId);
     setEpicentrToken('');
     setEpicentrTestResult(null);
   };
@@ -169,10 +190,10 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
     setIsTestingEpicentr(true);
     setEpicentrTestResult(null);
     try {
-      const res = await epicentrMerchantApi.testConnection(epicentrToken);
+      const res = await epicentrMerchantApi.testConnection(epicentrToken, activeStoreId);
       setEpicentrTestResult(res);
       if (res.success && epicentrToken.trim()) {
-        epicentrMerchantApi.saveToken(epicentrToken);
+        epicentrMerchantApi.saveToken(epicentrToken, activeStoreId);
       }
     } finally {
       setIsTestingEpicentr(false);
@@ -257,13 +278,48 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
             </div>
           )}
 
+          {/* Scope selector: Global vs Per-Store */}
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+            <div className="text-[11px] font-bold text-slate-700">
+              Область дії ключа Google AI Studio:
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleScopeChange('global')}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold border text-left transition-all cursor-pointer ${
+                  aiKeyScope === 'global'
+                    ? 'bg-white border-[#004BB7] text-[#004BB7] shadow-2xs'
+                    : 'bg-slate-100/70 border-slate-200 text-slate-600 hover:bg-white'
+                }`}
+              >
+                <div className="font-bold">Глобальний для акаунту</div>
+                <div className="text-[10px] font-mono text-slate-400">localStorage: &quot;{AI_STORAGE_KEY}&quot;</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleScopeChange('store')}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold border text-left transition-all cursor-pointer ${
+                  aiKeyScope === 'store'
+                    ? 'bg-white border-[#004BB7] text-[#004BB7] shadow-2xs'
+                    : 'bg-slate-100/70 border-slate-200 text-slate-600 hover:bg-white'
+                }`}
+              >
+                <div className="font-bold truncate">Магазин: {activeStore?.name || 'Поточний'}</div>
+                <div className="text-[10px] font-mono text-slate-400 truncate">
+                  localStorage: &quot;{getStoreAiStorageKey(activeStoreId)}&quot;
+                </div>
+              </button>
+            </div>
+          </div>
+
           {/* Key Input Section */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <span>API-ключ Google AI Studio</span>
                 <span className="text-slate-400 font-mono font-normal text-[11px]">
-                  (localStorage: &quot;{AI_STORAGE_KEY}&quot;)
+                  (localStorage: &quot;{activeAiStorageKey}&quot;)
                 </span>
               </label>
               {apiKey && (
@@ -336,7 +392,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
             <div>
               <div className="text-xs font-bold text-slate-800">Перевірка зв'язку</div>
               <div className="text-[11px] text-slate-500">
-                Надіслати тестовий запит до моделі gemini-3.5-flash-lite
+                Надіслати тестовий запит до моделі gemini-3.1-flash-lite
               </div>
             </div>
             <button
@@ -385,13 +441,13 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
             </div>
             <ul className="list-disc pl-4 space-y-1 text-slate-700 text-[11px]">
               <li>
-                Ключ зберігається виключно у вашому браузері в <code className="font-mono bg-blue-100 px-1 py-0.5 rounded text-[#004BB7]">localStorage(&apos;epic_ai_key&apos;)</code>.
+                Ключ можна задати як глобально (<code className="font-mono bg-blue-100 px-1 py-0.5 rounded text-[#004BB7]">epic_ai_key</code>), так і окремо для кожного магазину (<code className="font-mono bg-blue-100 px-1 py-0.5 rounded text-[#004BB7]">epic_ai_key_[storeId]</code>).
               </li>
               <li>
-                Він використовується замість дефолтного середовища для всіх прямих запитів до Google AI Studio.
+                При перемиканні активного магазину застосунок автоматично підтягує відповідний ключ.
               </li>
               <li>
-                Якщо ключ відсутній, застосунок попереджає користувача та працює на основі стандартних евристичних словників Епіцентру.
+                Якщо ключ відсутній, застосунок працює на основі стандартного серверного маршруту та евристичних словників Епіцентру.
               </li>
             </ul>
 
@@ -414,10 +470,10 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
             {/* Epicentr Bearer Token Section */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <span>Bearer Token продавця Епіцентру</span>
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5 flex-wrap">
+                  <span>Bearer Token магазину «{activeStore?.name || 'Епіцентр'}»</span>
                   <span className="text-slate-400 font-mono font-normal text-[11px]">
-                    (localStorage: &quot;{EPICENTR_TOKEN_STORAGE_KEY}&quot;)
+                    (localStorage: &quot;{activeEpicentrStorageKey}&quot;)
                   </span>
                 </label>
                 {epicentrToken && (

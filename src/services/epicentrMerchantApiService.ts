@@ -30,7 +30,33 @@ export interface EpicentrAttributeDef {
   options?: { code: string; value: string }[];
 }
 
-export const EPICENTR_TOKEN_STORAGE_KEY = 'epicentr_merchant_token';
+export const EPICENTR_TOKEN_STORAGE_KEY = 'epicentr_token';
+const LEGACY_EPICENTR_TOKEN_KEY = 'epicentr_merchant_token';
+
+export function getActiveMerchantStoreId(): string {
+  if (typeof window === 'undefined') return 'shop-electronics';
+  try {
+    const authUserRaw = localStorage.getItem('epicentr_auth_user');
+    if (authUserRaw) {
+      const parsed = JSON.parse(authUserRaw);
+      if (parsed && typeof parsed.activeStoreId === 'string' && parsed.activeStoreId.trim()) {
+        return parsed.activeStoreId.trim();
+      }
+    }
+    const workspaceId = localStorage.getItem('epicentr_saas_current_workspace');
+    if (workspaceId && workspaceId.trim()) {
+      return workspaceId.trim();
+    }
+  } catch {
+    // Fallback to default store id
+  }
+  return 'shop-electronics';
+}
+
+export function getEpicentrTokenStorageKey(storeId?: string): string {
+  const resolved = (storeId || getActiveMerchantStoreId()).trim();
+  return `${EPICENTR_TOKEN_STORAGE_KEY}_${resolved}`;
+}
 
 // Built-in realistic fallback categories from Epicentr PIM standard catalog
 export const FALLBACK_EPICENTR_CATEGORIES: EpicentrCategory[] = [
@@ -96,7 +122,14 @@ export class EpicentrMerchantApiService {
   private categoriesCache: EpicentrCategory[] | null = null;
   private attributeSetsCache: EpicentrAttributeSet[] | null = null;
 
-  private constructor() {}
+  private constructor() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('epicentr_active_store_changed', () => {
+        this.categoriesCache = null;
+        this.attributeSetsCache = null;
+      });
+    }
+  }
 
   public static getInstance(): EpicentrMerchantApiService {
     if (!EpicentrMerchantApiService.instance) {
@@ -105,42 +138,85 @@ export class EpicentrMerchantApiService {
     return EpicentrMerchantApiService.instance;
   }
 
-  /**
-   * Get stored Epicentr Merchant Bearer Token
-   */
-  public getToken(): string {
-    return localStorage.getItem(EPICENTR_TOKEN_STORAGE_KEY) || '';
+  public getStorageKey(storeId?: string): string {
+    return getEpicentrTokenStorageKey(storeId);
   }
 
   /**
-   * Save Epicentr Merchant Bearer Token
+   * Get stored Epicentr Merchant Bearer Token for the active (or specified) store
    */
-  public saveToken(token: string): void {
-    const trimmed = token.trim();
-    if (trimmed) {
-      localStorage.setItem(EPICENTR_TOKEN_STORAGE_KEY, trimmed);
-    } else {
-      localStorage.removeItem(EPICENTR_TOKEN_STORAGE_KEY);
+  public getToken(storeId?: string): string {
+    if (typeof window === 'undefined') return '';
+    try {
+      const key = getEpicentrTokenStorageKey(storeId);
+      const val = localStorage.getItem(key);
+      if (val !== null) {
+        return val;
+      }
+      // Fallback to legacy token only for initial default store if present
+      const resolved = (storeId || getActiveMerchantStoreId()).trim();
+      if (resolved === 'shop-electronics') {
+        return localStorage.getItem(LEGACY_EPICENTR_TOKEN_KEY) || '';
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return '';
+  }
+
+  /**
+   * Save Epicentr Merchant Bearer Token strictly for the active (or specified) store
+   */
+  public saveToken(token: string, storeId?: string): void {
+    const trimmed = (token || '').trim();
+    const key = getEpicentrTokenStorageKey(storeId);
+    try {
+      if (trimmed) {
+        localStorage.setItem(key, trimmed);
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      // Ignore storage errors
     }
     // Invalidate caches when token changes
     this.categoriesCache = null;
     this.attributeSetsCache = null;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('epicentr_token_changed', {
+          detail: { storeId: storeId || getActiveMerchantStoreId(), hasToken: Boolean(trimmed) }
+        })
+      );
+    }
   }
 
   /**
-   * Check if token is configured
+   * Check if token is configured for the active (or specified) store
    */
-  public hasToken(): boolean {
-    return Boolean(this.getToken());
+  public hasToken(storeId?: string): boolean {
+    return Boolean(this.getToken(storeId));
   }
 
   /**
-   * Clear token
+   * Clear token for the active (or specified) store
    */
-  public clearToken(): void {
-    localStorage.removeItem(EPICENTR_TOKEN_STORAGE_KEY);
+  public clearToken(storeId?: string): void {
+    const key = getEpicentrTokenStorageKey(storeId);
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Ignore storage errors
+    }
     this.categoriesCache = null;
     this.attributeSetsCache = null;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('epicentr_token_changed', {
+          detail: { storeId: storeId || getActiveMerchantStoreId(), hasToken: false }
+        })
+      );
+    }
   }
 
   /**
@@ -212,8 +288,8 @@ export class EpicentrMerchantApiService {
   /**
    * Test Bearer Token connectivity
    */
-  public async testConnection(tokenOverride?: string): Promise<{ success: boolean; message: string; categoriesCount?: number; source?: string }> {
-    const activeToken = tokenOverride !== undefined ? tokenOverride.trim() : this.getToken();
+  public async testConnection(tokenOverride?: string, storeId?: string): Promise<{ success: boolean; message: string; categoriesCount?: number; source?: string }> {
+    const activeToken = tokenOverride !== undefined ? tokenOverride.trim() : this.getToken(storeId);
     if (!activeToken) {
       return {
         success: false,
@@ -221,19 +297,23 @@ export class EpicentrMerchantApiService {
       };
     }
 
+    const storageKey = getEpicentrTokenStorageKey(storeId);
     try {
       // Temporarily override for test if provided
-      const prevToken = this.getToken();
+      const prevToken = this.getToken(storeId);
       if (tokenOverride !== undefined) {
-        localStorage.setItem(EPICENTR_TOKEN_STORAGE_KEY, activeToken);
+        localStorage.setItem(storageKey, activeToken);
       }
 
       const { data, source } = await this.executeRequest<any>('/v2/pim/categories');
       const cats = Array.isArray(data) ? data : (data.items || data.categories || data.data || []);
 
       if (tokenOverride !== undefined && prevToken !== activeToken) {
-        // Restore if user was just testing in modal without saving yet
-        localStorage.setItem(EPICENTR_TOKEN_STORAGE_KEY, prevToken);
+        if (prevToken) {
+          localStorage.setItem(storageKey, prevToken);
+        } else {
+          localStorage.removeItem(storageKey);
+        }
       }
 
       return {

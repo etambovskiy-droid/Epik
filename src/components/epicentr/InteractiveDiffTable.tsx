@@ -128,7 +128,7 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   // Quick Export to Excel .xlsx
   const handleExportExcel = () => {
     try {
-      const exportWb = generateEpicentrExportWorkbook(rawWorkbook, rows, columns);
+      const exportWb = generateEpicentrExportWorkbook(rawWorkbook, rows, columns, dictionaryIndex);
       const outName = originalFileName
         ? `Заповнено_${originalFileName.replace(/\.(xlsx|xls|csv)$/i, '')}.xlsx`
         : 'Епіцентр_Шаблон_Заповнено.xlsx';

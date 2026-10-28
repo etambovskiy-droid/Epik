@@ -16,18 +16,76 @@ import {
 } from '../types/epicentr';
 
 /**
- * Decode HTML entities for matching purposes only.
+ * Unifies all apostrophe variants (' ’ ʻ ʼ ‘ ` ´ &#039; &#39; &apos;) into standard ASCII apostrophe "'"
+ * and removes zero-width characters (\u200b, \u200c, \u200d, \ufeff).
+ */
+export function normalizeApostrophes(str: string): string {
+  if (!str) return '';
+  return String(str)
+    .replace(/[\u200b\u200c\u200d\ufeff]/g, '')
+    .replace(/&#0*39;|&apos;|&#x27;/gi, "'")
+    .replace(/[\u2018\u2019\u02bb\u02bc\u02b9\u0060\u00b4’ʻʼ‘`´]/g, "'");
+}
+
+/**
+ * Symmetric HTML entity decoder for all text comparisons:
+ * &#039; <-> ', &quot; <-> ", &amp; <-> &, \u200b <-> empty, and unified apostrophes.
  */
 export function decodeHtmlEntities(str: string): string {
   if (!str) return '';
-  return str
-    .replace(/&#039;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#39;/g, "'");
+  return normalizeApostrophes(String(str))
+    .replace(/&quot;|&#0*34;/gi, '"')
+    .replace(/&amp;|&#0*38;/gi, '&')
+    .replace(/&lt;|&#0*60;/gi, '<')
+    .replace(/&gt;|&#0*62;/gi, '>')
+    .replace(/&nbsp;|\u00a0/gi, ' ');
+}
+
+/**
+ * Symmetric HTML entity encoder:
+ * Converts ' / ’ / ʻ -> &#039;, " -> &quot;, & -> &amp;, \u200b -> empty.
+ */
+export function encodeHtmlEntities(str: string): string {
+  if (!str) return '';
+  const decoded = decodeHtmlEntities(str);
+  return decoded
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Universal text normalizer for dictionary comparisons:
+ * - Case-insensitive
+ * - Symmetric HTML entity & apostrophe normalization
+ * - Whitespace, bracket, and punctuation normalization
+ */
+export function normalizeForDictionaryComparison(
+  str: string,
+  mode: 'exact' | 'relaxed' = 'exact'
+): string {
+  if (!str) return '';
+  let norm = decodeHtmlEntities(str)
+    .replace(/["«»„“”]/g, '"')
+    .toLowerCase()
+    .replace(/\s*\(\s*/g, ' (')
+    .replace(/\s*\)\s*/g, ') ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (mode === 'relaxed') {
+    norm = norm
+      // Remove apostrophes inside words so e.g. пам'яті <-> памяті and в'єтнам <-> вєтнам match
+      .replace(/([а-яіїєґa-z])'([а-яіїєґa-z])/gi, '$1$2')
+      // Normalize brackets, quotes, punctuation, and extra spaces
+      .replace(/['"()[\]{}.,:;!?/\\+-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  return norm;
 }
 
 /**
@@ -394,7 +452,7 @@ export function analyzeEpicentrColumns(headers: string[]): EpicentrColumn[] {
 }
 
 /**
- * Normalize and build index of dictionary values for fast lookup with HTML entity support
+ * Normalize and build index of dictionary values for fast lookup with symmetric HTML entity & apostrophe support
  */
 export function buildDictionaryIndex(
   rawDict: Record<string, string[]>
@@ -406,23 +464,49 @@ export function buildDictionaryIndex(
     const strippedUnitAttrName = normalizeAttributeKey(attrName, true);
     const decodedMap: Record<string, string> = {};
     const synonyms: Record<string, string> = {};
+    const sanitizedAllowedList = allowedList
+      .map(v => String(v || '').replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim())
+      .filter(Boolean);
 
-    for (const rawVal of allowedList) {
-      const decoded = decodeHtmlEntities(rawVal).trim().toLowerCase();
-      decodedMap[decoded] = rawVal;
-      decodedMap[rawVal.toLowerCase()] = rawVal;
+    for (const rawVal of sanitizedAllowedList) {
+      const lowerRaw = rawVal.toLowerCase().trim();
+      const exactNorm = normalizeForDictionaryComparison(rawVal, 'exact');
+      const relaxedNorm = normalizeForDictionaryComparison(rawVal, 'relaxed');
+      const encodedNorm = encodeHtmlEntities(rawVal).toLowerCase().trim();
 
-      // also register without punctuation
-      const noPunct = decoded.replace(/['’"`]/g, '');
-      if (noPunct !== decoded) {
-        decodedMap[noPunct] = rawVal;
+      decodedMap[lowerRaw] = rawVal;
+      decodedMap[exactNorm] = rawVal;
+      if (relaxedNorm) {
+        decodedMap[relaxedNorm] = rawVal;
+      }
+      if (encodedNorm) {
+        decodedMap[encodedNorm] = rawVal;
+      }
+
+      // Also index without spaces around brackets or hyphens
+      const compact = exactNorm.replace(/\s+/g, '');
+      if (compact && !decodedMap[compact]) {
+        decodedMap[compact] = rawVal;
+      }
+
+      // Index primary part before parentheses if unambiguous (e.g. "радіоканал (2.4 GHz)" -> "радіоканал")
+      const parenMatch = exactNorm.match(/^([^()]+)\(([^()]+)\)$/);
+      if (parenMatch) {
+        const beforeParen = parenMatch[1].trim();
+        const insideParen = parenMatch[2].trim();
+        if (beforeParen.length >= 3 && !decodedMap[beforeParen]) {
+          decodedMap[beforeParen] = rawVal;
+        }
+        if (insideParen.length >= 3 && !decodedMap[insideParen]) {
+          decodedMap[insideParen] = rawVal;
+        }
       }
     }
 
     const entry: EpicentrDictionaryAttribute = {
       attributeName: attrName,
       cleanAttributeName: cleanAttrName,
-      allowedValues: allowedList,
+      allowedValues: sanitizedAllowedList,
       decodedValuesMap: decodedMap,
       synonymsMap: synonyms
     };
@@ -515,53 +599,220 @@ export function detectLanguageMismatch(
 }
 
 /**
- * Match a value against dictionary attribute respecting HTML entities, synonyms & Ukrainian/Russian word stems.
- * Returns the exact RAW string from dictionary with HTML entities intact.
+ * Universal Category-Agnostic Dictionary Matcher:
+ * Matches a candidate value against a dictionary attribute's allowedValues using:
+ * 1. Exact & case-insensitive match
+ * 2. Symmetric HTML entity & apostrophe normalization (&#039; <-> ', &quot; <-> ", &amp; <-> &, \u200b <-> "")
+ * 3. Bracket, whitespace, and punctuation normalization
+ * 4. Universal synonym & RU->UA translation resolution
+ * 5. Closest unambiguous equivalent in allowedValues (stem & token containment)
+ * Returns the exact RAW string from allowedValues (with HTML entities intact), or null if not found.
  */
 export function matchDictionaryValue(
-  dictAttr: EpicentrDictionaryAttribute,
+  dictAttr: EpicentrDictionaryAttribute | undefined,
   candidateValue: string
 ): string | null {
-  if (!candidateValue || !dictAttr) return null;
-
-  const candidateDecoded = decodeHtmlEntities(candidateValue).trim().toLowerCase();
-
-  // 1. Direct match on decoded map
-  if (dictAttr.decodedValuesMap[candidateDecoded]) {
-    return dictAttr.decodedValuesMap[candidateDecoded];
+  if (!candidateValue || !dictAttr || !Array.isArray(dictAttr.allowedValues) || dictAttr.allowedValues.length === 0) {
+    return null;
   }
 
-  // 2. Check synonyms
-  if (COMMON_SYNONYMS[candidateDecoded]) {
-    const synonymTarget = COMMON_SYNONYMS[candidateDecoded];
-    const targetDecoded = decodeHtmlEntities(synonymTarget).toLowerCase();
-    if (dictAttr.decodedValuesMap[targetDecoded]) {
-      return dictAttr.decodedValuesMap[targetDecoded];
+  const rawTrimmed = String(candidateValue).replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
+  if (!rawTrimmed || rawTrimmed.toLowerCase() === 'nan') return null;
+
+  // 0. Exact raw match in allowedValues
+  const exactAllowed = dictAttr.allowedValues.find(v => v === rawTrimmed);
+  if (exactAllowed) return exactAllowed;
+
+  const exactNorm = normalizeForDictionaryComparison(rawTrimmed, 'exact');
+  const relaxedNorm = normalizeForDictionaryComparison(rawTrimmed, 'relaxed');
+  const encodedNorm = encodeHtmlEntities(rawTrimmed).toLowerCase().trim();
+  const compactNorm = exactNorm.replace(/\s+/g, '');
+
+  // 1. Direct normalized lookup in decodedValuesMap
+  if (dictAttr.decodedValuesMap) {
+    if (dictAttr.decodedValuesMap[exactNorm]) return dictAttr.decodedValuesMap[exactNorm];
+    if (dictAttr.decodedValuesMap[encodedNorm]) return dictAttr.decodedValuesMap[encodedNorm];
+    if (relaxedNorm && dictAttr.decodedValuesMap[relaxedNorm]) return dictAttr.decodedValuesMap[relaxedNorm];
+    if (compactNorm && dictAttr.decodedValuesMap[compactNorm]) return dictAttr.decodedValuesMap[compactNorm];
+  }
+
+  // Direct scan across allowedValues with exact/relaxed normalization (handles dynamically constructed dictionaries)
+  for (const allowedVal of dictAttr.allowedValues) {
+    const allowedExact = normalizeForDictionaryComparison(allowedVal, 'exact');
+    if (allowedExact === exactNorm || allowedExact.replace(/\s+/g, '') === compactNorm) {
+      return allowedVal;
+    }
+    if (relaxedNorm && normalizeForDictionaryComparison(allowedVal, 'relaxed') === relaxedNorm) {
+      return allowedVal;
     }
   }
 
-  // 3. Substring match for compound values (e.g. "дихаюча сітка" -> "сітка")
-  for (const [decodedKey, rawVal] of Object.entries(dictAttr.decodedValuesMap)) {
-    if (candidateDecoded.includes(decodedKey) || decodedKey.includes(candidateDecoded)) {
-      if (decodedKey.length >= 3) {
-        return rawVal;
+  // 2. Check universal synonyms & RU->UA word map
+  const synonymCandidate =
+    COMMON_SYNONYMS[exactNorm] ||
+    COMMON_SYNONYMS[relaxedNorm] ||
+    RU_TO_UA_WORDS[exactNorm] ||
+    RU_TO_UA_WORDS[relaxedNorm];
+
+  if (synonymCandidate) {
+    const synExact = normalizeForDictionaryComparison(synonymCandidate, 'exact');
+    const synRelaxed = normalizeForDictionaryComparison(synonymCandidate, 'relaxed');
+    if (dictAttr.decodedValuesMap?.[synExact]) return dictAttr.decodedValuesMap[synExact];
+    if (synRelaxed && dictAttr.decodedValuesMap?.[synRelaxed]) return dictAttr.decodedValuesMap[synRelaxed];
+
+    for (const allowedVal of dictAttr.allowedValues) {
+      if (
+        normalizeForDictionaryComparison(allowedVal, 'exact') === synExact ||
+        (synRelaxed && normalizeForDictionaryComparison(allowedVal, 'relaxed') === synRelaxed)
+      ) {
+        return allowedVal;
       }
     }
   }
 
-  // 4. Stem match (e.g. "розважальна" <-> "розважальні", "розвиваюча" <-> "розвиваючі")
-  if (candidateDecoded.length >= 5) {
-    const stem = candidateDecoded.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою)$/i, '');
+  // 3. Closest equivalent in allowedValues: morphological stem match (e.g. "розважальна" <-> "розважальні", "чоловічі" <-> "чоловічий")
+  if (exactNorm.length >= 4) {
+    const stem = exactNorm.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою|ому|ям|ях|ів)$/i, '');
     if (stem.length >= 4) {
-      for (const [decodedKey, rawVal] of Object.entries(dictAttr.decodedValuesMap)) {
-        if (decodedKey.startsWith(stem)) {
-          return rawVal;
+      for (const allowedVal of dictAttr.allowedValues) {
+        const allowedDecoded = normalizeForDictionaryComparison(allowedVal, 'exact');
+        const allowedStem = allowedDecoded.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою|ому|ям|ях|ів)$/i, '');
+        if (allowedDecoded === stem || allowedStem === stem || allowedDecoded.startsWith(stem)) {
+          return allowedVal;
         }
       }
     }
   }
 
+  // 4. Unambiguous substring / token match in allowedValues (e.g. "дихаюча сітка" -> "сітка", "однотонний" -> "без візерунка (однотонний)")
+  if (exactNorm.length >= 3) {
+    let bestMatch: string | null = null;
+    let bestScore = 0;
+
+    for (const allowedVal of dictAttr.allowedValues) {
+      const allowedExact = normalizeForDictionaryComparison(allowedVal, 'exact');
+      if (allowedExact.length < 3) continue;
+
+      if (exactNorm.includes(allowedExact) || allowedExact.includes(exactNorm)) {
+        const overlapLen = Math.min(exactNorm.length, allowedExact.length);
+        const maxLen = Math.max(exactNorm.length, allowedExact.length);
+        const score = overlapLen / maxLen;
+        if (overlapLen >= 3 && score > bestScore) {
+          bestScore = score;
+          bestMatch = allowedVal;
+        }
+      }
+    }
+
+    if (bestMatch && bestScore >= 0.35) {
+      return bestMatch;
+    }
+  }
+
   return null;
+}
+
+/**
+ * Category-Agnostic Dictionary Enforcer:
+ * Strictly validates and normalizes values for ANY column across ANY category:
+ * - For `multiselect`: splits input by `;` or `,`, validates EACH element individually against `allowedValues`,
+ *   keeps ONLY valid elements, and joins them back via `; `. If no valid elements remain, returns `null` (deletes value).
+ * - For `select`: strictly matches value against `allowedValues` (with universal normalization).
+ *   If not found in `allowedValues`, returns `null` (deletes value).
+ * - Never permits arbitrary text in `select`/`multiselect` columns that have `allowedValues`.
+ */
+export function enforceDictionaryValue(
+  rawValue: string | null | undefined,
+  colType: EpicentrColumnType,
+  dictAttr?: EpicentrDictionaryAttribute
+): string | null {
+  if (rawValue === undefined || rawValue === null) return null;
+  const cleaned = String(rawValue).replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
+  if (!cleaned || cleaned.toLowerCase() === 'nan') return null;
+
+  const hasDictionary = Boolean(dictAttr && Array.isArray(dictAttr.allowedValues) && dictAttr.allowedValues.length > 0);
+
+  // 1. MULTISELECT: Element-by-element validation
+  if (colType === 'multiselect') {
+    const rawElements = cleaned
+      .split(/[;,]+/)
+      .map(item => item.trim())
+      .filter(Boolean);
+
+    if (rawElements.length === 0) return null;
+
+    if (hasDictionary && dictAttr) {
+      const validElements: string[] = [];
+      for (const element of rawElements) {
+        const matched = matchDictionaryValue(dictAttr, element);
+        if (matched && !validElements.includes(matched)) {
+          validElements.push(matched);
+        }
+      }
+      return validElements.length > 0 ? validElements.join('; ') : null;
+    }
+
+    // Even if no dictionary was loaded for this multiselect column, normalize delimiter to "; "
+    const uniqueElements = Array.from(new Set(rawElements));
+    return uniqueElements.join('; ');
+  }
+
+  // 2. SELECT: Strict single-option validation against allowedValues
+  if (colType === 'select') {
+    if (hasDictionary && dictAttr) {
+      const directMatch = matchDictionaryValue(dictAttr, cleaned);
+      if (directMatch) return directMatch;
+
+      // If input contains multiple tokens separated by ; or , take the first valid option from allowedValues
+      if (/[;,]/.test(cleaned)) {
+        const parts = cleaned
+          .split(/[;,]+/)
+          .map(p => p.trim())
+          .filter(Boolean);
+        for (const part of parts) {
+          const matchedPart = matchDictionaryValue(dictAttr, part);
+          if (matchedPart) return matchedPart;
+        }
+      }
+
+      // Strictly forbid any value outside allowedValues
+      return null;
+    }
+
+    return cleaned;
+  }
+
+  // 3. ARRAY: Normalize delimiter to "; " and match against dictionary if available
+  if (colType === 'array') {
+    const parts = cleaned
+      .split(/[;,]+/)
+      .map(p => p.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return null;
+    if (hasDictionary && dictAttr) {
+      const validParts: string[] = [];
+      for (const part of parts) {
+        const m = matchDictionaryValue(dictAttr, part);
+        if (m && !validParts.includes(m)) validParts.push(m);
+      }
+      return validParts.length > 0 ? validParts.join('; ') : null;
+    }
+    return Array.from(new Set(parts)).join('; ');
+  }
+
+  // 4. FLOAT: Ensure numeric format
+  if (colType === 'float') {
+    const numMatch = cleaned.replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+    return numMatch ? numMatch[0] : null;
+  }
+
+  // 5. STRING / TEXT: If a dictionary exists for this attribute, normalize to canonical dictionary value when matched
+  if (hasDictionary && dictAttr) {
+    const matched = matchDictionaryValue(dictAttr, cleaned);
+    if (matched) return matched;
+  }
+
+  return cleaned;
 }
 
 /**
@@ -1257,29 +1508,65 @@ export function runEpicentrFillingEngine(
           totalMandatoryFields++;
         }
 
-        if (hasExistingVal) {
-          if (col.isRequired) {
-            alreadyFilledCount++;
-          }
-          diffs[col.originalName] = {
-            colIndex: col.colIndex,
-            columnName: col.originalName,
-            isRequired: col.isRequired,
-            type: col.type,
-            oldValue: String(existingVal),
-            newValue: String(existingVal),
-            source: 'already_filled',
-            confidence: 1.0,
-            note: col.isRequired
-              ? 'Вже заповнено у шаблоні — захищено від змін'
-              : 'Необов\'язкове поле — заповнено користувачем'
-          };
-          return;
-        }
-
         const cleanKey = normalizeAttributeKey(col.cleanName || col.originalName, false);
         const normKeyNoUnit = normalizeAttributeKey(col.cleanName || col.originalName, true);
         const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
+
+        // If the cell already has a value in the template, validate/normalize it if it's a select/multiselect with a dictionary
+        if (hasExistingVal) {
+          const rawExisting = String(existingVal).trim();
+          if (
+            dictAttr &&
+            dictAttr.allowedValues.length > 0 &&
+            (col.type === 'select' || col.type === 'multiselect')
+          ) {
+            const enforcedExisting = enforceDictionaryValue(rawExisting, col.type, dictAttr);
+            if (enforcedExisting) {
+              updatedRow[col.originalName] = enforcedExisting;
+              if (col.isRequired) {
+                alreadyFilledCount++;
+              }
+              diffs[col.originalName] = {
+                colIndex: col.colIndex,
+                columnName: col.originalName,
+                isRequired: col.isRequired,
+                type: col.type,
+                oldValue: rawExisting,
+                newValue: enforcedExisting,
+                source: 'already_filled',
+                confidence: 1.0,
+                note:
+                  enforcedExisting !== rawExisting
+                    ? 'Нормалізовано за офіційним довідником Епіцентру'
+                    : col.isRequired
+                    ? 'Вже заповнено у шаблоні — валідне за довідником'
+                    : 'Необов\'язкове поле — валідне за довідником'
+              };
+              return;
+            } else {
+              // Existing value is NOT in allowedValues and cannot be normalized -> DELETE invalid value!
+              updatedRow[col.originalName] = '';
+            }
+          } else {
+            if (col.isRequired) {
+              alreadyFilledCount++;
+            }
+            diffs[col.originalName] = {
+              colIndex: col.colIndex,
+              columnName: col.originalName,
+              isRequired: col.isRequired,
+              type: col.type,
+              oldValue: rawExisting,
+              newValue: rawExisting,
+              source: 'already_filled',
+              confidence: 1.0,
+              note: col.isRequired
+                ? 'Вже заповнено у шаблоні — захищено від змін'
+                : 'Необов\'язкове поле — заповнено користувачем'
+            };
+            return;
+          }
+        }
 
         // Skip primary system text/price fields if they are not characteristics
         if (
@@ -1297,562 +1584,254 @@ export function runEpicentrFillingEngine(
           return;
         }
 
-        // Field is currently EMPTY (mandatory or optional). Try to fill it from context/synonyms/dictionary!
-        let filledValue: string | null = null;
+        // ====================================================================
+        // UNIVERSAL CATEGORY-AGNOSTIC ATTRIBUTE EXTRACTION & DICTIONARY ENFORCER
+        // ====================================================================
+        let candidateValue: string | null = null;
         let source: EpicentrValueDiff['source'] = 'description';
-        let confidence = 0.95;
+        const confidence = 0.95;
         let note = '';
 
-        // 1. BRAND (select)
-        if (normKeyNoUnit.includes('бренд') || normKeyNoUnit.includes('brand') || normKeyNoUnit === 'виробник') {
-          const brandDict = dictAttr || dictionaryIndex['бренд'];
-          let foundBrand = '';
+        const normalizedCombinedDesc = normalizeForDictionaryComparison(visuals.combinedDesc, 'exact');
 
-          if (brandDict) {
-            for (const brandVal of brandDict.allowedValues) {
-              if (brandVal.toLowerCase() === 'інше') continue;
-              const decodedBrand = decodeHtmlEntities(brandVal).toLowerCase();
-              if (decodedBrand.length >= 2 && visuals.combinedDesc.includes(decodedBrand)) {
-                foundBrand = brandVal;
-                break;
+        // 1. UNIVERSAL DICTIONARY-DRIVEN SCANNER (for ANY select / multiselect / dictionary-backed column in ANY category)
+        if (dictAttr && dictAttr.allowedValues.length > 0) {
+          const isBrandCol =
+            normKeyNoUnit.includes('бренд') || normKeyNoUnit.includes('brand') || normKeyNoUnit === 'виробник';
+
+          // Sort allowedValues by length descending so more specific multi-word options match before shorter substrings
+          const sortedOptions = [...dictAttr.allowedValues].sort((a, b) => b.length - a.length);
+          const matchedFromText: string[] = [];
+
+          for (const allowedVal of sortedOptions) {
+            if (isBrandCol && normalizeForDictionaryComparison(allowedVal, 'exact') === 'інше') {
+              continue;
+            }
+            const optExact = normalizeForDictionaryComparison(allowedVal, 'exact');
+            if (!optExact) continue;
+
+            // For short tokens (1-2 chars like sizes "S", "M", "L", "42"), require strict word boundaries
+            if (optExact.length <= 2) {
+              const escapedShort = optExact.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const boundaryRegex = new RegExp(
+                `(?<![а-яіїєґёъыэa-z0-9])${escapedShort}(?![а-яіїєґёъыэa-z0-9])`,
+                'i'
+              );
+              if (boundaryRegex.test(normalizedCombinedDesc)) {
+                if (!matchedFromText.includes(allowedVal)) {
+                  matchedFromText.push(allowedVal);
+                }
+              }
+            } else {
+              const stem = optExact.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою|ому)$/i, '');
+              if (
+                normalizedCombinedDesc.includes(optExact) ||
+                (stem.length >= 4 && normalizedCombinedDesc.includes(stem))
+              ) {
+                if (!matchedFromText.includes(allowedVal)) {
+                  matchedFromText.push(allowedVal);
+                }
               }
             }
 
-            if (!foundBrand && col.isRequired && settings.brandFallbackOther && brandDict.allowedValues.some(v => v.toLowerCase() === 'інше')) {
-              foundBrand = 'Інше';
-              isBrandOther = true;
-              brandsMarkedOther.push({
-                rowIdx,
-                productId,
-                title: visuals.titleUa || `Товар #${rowIdx + 1}`,
-                originalBrand: 'Не знайдено у довіднику'
-              });
-              note = 'Бренд відсутній у довіднику — встановлено "Інше"';
-            }
-          } else {
-            // Try common Ukrainian/international brands in text
-            const knownBrands = ['Strateg', 'Vladi Toys', 'Danko Toys', 'Ranok', 'Trefl', 'Ravensburger', 'Hasbro', 'Mattel', 'LEGO', 'Spin Master', 'Piatnik', 'Bombat Game', 'Feelindigo', 'Lord of Boards', 'Geekach', 'Rozum', 'IgroMag', 'Goki', 'Melissa & Doug'];
-            const matchedBrand = knownBrands.find(b => visuals.combinedDesc.includes(b.toLowerCase()));
-            if (matchedBrand) {
-              foundBrand = matchedBrand;
+            if (col.type !== 'multiselect' && matchedFromText.length > 0) {
+              break;
             }
           }
 
-          if (foundBrand) {
-            filledValue = foundBrand;
-            detectedBrand = foundBrand;
-            source = 'description';
+          // Check universal synonyms & bilingual vocabulary against this attribute's allowedValues
+          if (col.type === 'multiselect' || matchedFromText.length === 0) {
+            for (const [synKey, synTarget] of Object.entries(COMMON_SYNONYMS)) {
+              if (normalizedCombinedDesc.includes(normalizeForDictionaryComparison(synKey, 'exact'))) {
+                const resolvedSyn = matchDictionaryValue(dictAttr, synTarget);
+                if (resolvedSyn && !matchedFromText.includes(resolvedSyn)) {
+                  matchedFromText.push(resolvedSyn);
+                  if (col.type !== 'multiselect') break;
+                }
+              }
+            }
           }
-        }
 
-        // 2. CHILD AGE ("Вік дитини", "Вік", "Рекомендований вік")
-        else if (normKeyNoUnit === 'вік дитини' || normKeyNoUnit === 'вік' || normKeyNoUnit.includes('рекомендований вік')) {
-          const minAge = visuals.parsedAge.minAge;
-          const maxAge = visuals.parsedAge.maxAge;
-          const formattedAge = visuals.parsedAge.formattedUa;
+          // Context-aware candidate generation mapped strictly through matchDictionaryValue(dictAttr, ...)
+          if (matchedFromText.length === 0) {
+            const contextCandidates: string[] = [];
 
-          if (dictAttr && dictAttr.allowedValues.length > 0) {
-            if (minAge !== undefined) {
-              // Try exact "від X років" or "X років" or "X+" in dictionary
-              const candidates = [
+            // Brand fallback to "Інше" if present in allowedValues
+            if (isBrandCol && col.isRequired && settings.brandFallbackOther) {
+              const otherOpt = matchDictionaryValue(dictAttr, 'Інше');
+              if (otherOpt) {
+                matchedFromText.push(otherOpt);
+                isBrandOther = true;
+                brandsMarkedOther.push({
+                  rowIdx,
+                  productId,
+                  title: visuals.titleUa || `Товар #${rowIdx + 1}`,
+                  originalBrand: 'Не знайдено у довіднику'
+                });
+                note = 'Бренд відсутній у довіднику — встановлено офіційну опцію "Інше"';
+              }
+            }
+
+            // Color candidates from visual/text analysis
+            if (normKeyNoUnit.includes('колір') && visuals.detectedPrimaryColor) {
+              contextCandidates.push(visuals.detectedPrimaryColor);
+              source = 'photo';
+            }
+
+            // Pattern candidates
+            if (
+              (normKeyNoUnit.includes('візерунок') || normKeyNoUnit.includes('узор') || normKeyNoUnit.includes('принт')) &&
+              visuals.patternType
+            ) {
+              contextCandidates.push(visuals.patternType);
+              source = 'photo';
+            }
+
+            // Packaging unit candidates
+            if (normKeyNoUnit.includes('одиниця виміру') || normKeyNoUnit.includes('одиниці виміру')) {
+              contextCandidates.push(visuals.unitValue, 'шт.');
+            }
+
+            // Age candidates
+            if (
+              (normKeyNoUnit === 'вік' || normKeyNoUnit.includes('вік дитини') || normKeyNoUnit.includes('рекомендований вік')) &&
+              visuals.parsedAge.minAge !== undefined
+            ) {
+              const minAge = visuals.parsedAge.minAge;
+              contextCandidates.push(
                 `від ${minAge} років`,
                 `від ${minAge} року`,
                 `${minAge} років`,
                 `${minAge} роки`,
                 `${minAge} рік`,
                 `${minAge}+`
-              ];
-              for (const cand of candidates) {
-                const matched = matchDictionaryValue(dictAttr, cand);
-                if (matched) {
-                  filledValue = matched;
-                  break;
-                }
-              }
+              );
+            }
 
-              // If multiselect and dictionary has range of ages, collect matching ages
-              if (!filledValue && col.type === 'multiselect' && maxAge !== undefined) {
-                const matchedAges: string[] = [];
-                for (let a = minAge; a <= Math.min(maxAge, minAge + 6); a++) {
-                  const m =
-                    matchDictionaryValue(dictAttr, `${a} років`) ||
-                    matchDictionaryValue(dictAttr, `${a} роки`) ||
-                    matchDictionaryValue(dictAttr, `від ${a} років`);
-                  if (m && !matchedAges.includes(m)) matchedAges.push(m);
-                }
-                if (matchedAges.length > 0) {
-                  filledValue = matchedAges.join('; ');
-                }
-              }
-
-              // Fallback: check any allowed value containing the number minAge
-              if (!filledValue) {
-                const regexNum = new RegExp(`\\b${minAge}\\b`);
-                const byNumber = dictAttr.allowedValues.find(v => regexNum.test(v));
-                if (byNumber) filledValue = byNumber;
+            // Players count candidates
+            if (normKeyNoUnit.includes('гравців') && visuals.parsedPlayers.formatted) {
+              contextCandidates.push(visuals.parsedPlayers.formatted);
+              if (visuals.parsedPlayers.minPlayers && visuals.parsedPlayers.maxPlayers) {
+                contextCandidates.push(
+                  `від ${visuals.parsedPlayers.minPlayers} до ${visuals.parsedPlayers.maxPlayers}`,
+                  `${visuals.parsedPlayers.minPlayers} - ${visuals.parsedPlayers.maxPlayers}`
+                );
               }
             }
 
-            // Also check direct text match against dictionary allowedValues
-            if (!filledValue) {
-              const matchedList = dictAttr.allowedValues.filter(v => {
-                const dv = decodeHtmlEntities(v).toLowerCase();
-                return dv.length >= 3 && visuals.combinedDesc.includes(dv);
-              });
-              if (matchedList.length > 0) {
-                filledValue = col.type === 'multiselect' ? matchedList.slice(0, 5).join('; ') : matchedList[0];
+            // Gender / Sex candidates
+            if (normKeyNoUnit === 'стать' || normKeyNoUnit.includes('стать дитини')) {
+              const hasGirl = /дівчат|дівчин|девоч/i.test(normalizedCombinedDesc);
+              const hasBoy = /хлопч|хлопц|мальчик/i.test(normalizedCombinedDesc);
+              const hasWomen = /жіноч|для жінок|женск/i.test(normalizedCombinedDesc);
+              const hasMen = /чоловіч|для чоловіків|мужск/i.test(normalizedCombinedDesc);
+              if (hasGirl && !hasBoy) contextCandidates.push('для дівчаток', 'дівчинка', 'жіноча');
+              else if (hasBoy && !hasGirl) contextCandidates.push('для хлопчиків', 'хлопчик', 'чоловіча');
+              else if (hasWomen && !hasMen) contextCandidates.push('для жінок', 'жіноча', 'жіночий');
+              else if (hasMen && !hasWomen) contextCandidates.push('для чоловіків', 'чоловіча', 'чоловічий');
+              else contextCandidates.push('для хлопчиків; для дівчаток', 'унісекс');
+            }
+
+            for (const cand of contextCandidates) {
+              const enforcedCand = enforceDictionaryValue(cand, col.type, dictAttr);
+              if (enforcedCand) {
+                matchedFromText.push(enforcedCand);
+                break;
               }
             }
-          } else if (formattedAge) {
-            filledValue = formattedAge;
           }
 
-          if (filledValue) {
-            source = 'description';
-            note = 'Вік дитини визначено з назви/опису товару';
-          }
-        }
-
-        // 3. AGE GROUP ("Вікова група", "Вікова категорія")
-        else if (normKeyNoUnit.includes('вікова група') || normKeyNoUnit.includes('вікова категорія')) {
-          const isAdult =
-            (visuals.combinedDesc.includes('для дорослих') ||
-              visuals.combinedDesc.includes('18+') ||
-              visuals.combinedDesc.includes('жіноч') ||
-              visuals.combinedDesc.includes('чоловіч')) &&
-            !visuals.combinedDesc.includes('дит');
-          const targetGroup = isAdult ? 'для дорослих' : 'для дітей';
-          filledValue = dictAttr ? matchDictionaryValue(dictAttr, targetGroup) || targetGroup : targetGroup;
-          source = 'description';
-          note = 'Вікову групу визначено за контекстом товару';
-        }
-
-        // 4. GENDER & CHILD GENDER ("Стать", "Стать дитини")
-        else if (normKeyNoUnit === 'стать' || normKeyNoUnit.includes('стать дитини')) {
-          const hasGirl =
-            visuals.combinedDesc.includes('дівчат') ||
-            visuals.combinedDesc.includes('дівчин') ||
-            visuals.combinedDesc.includes('девоч') ||
-            visuals.combinedDesc.includes('принцес') ||
-            visuals.combinedDesc.includes('ляльк');
-          const hasBoy =
-            visuals.combinedDesc.includes('хлопч') ||
-            visuals.combinedDesc.includes('хлопц') ||
-            visuals.combinedDesc.includes('мальчик');
-          const hasWomen =
-            visuals.combinedDesc.includes('жіноч') ||
-            visuals.combinedDesc.includes('для жінок') ||
-            visuals.combinedDesc.includes('женск');
-          const hasMen =
-            visuals.combinedDesc.includes('чоловіч') ||
-            visuals.combinedDesc.includes('для чоловіків') ||
-            visuals.combinedDesc.includes('мужск');
-
-          let candidateGenders: string[] = [];
-          if (normKeyNoUnit.includes('дитини')) {
-            if (hasGirl && !hasBoy) {
-              candidateGenders = ['для дівчаток', 'дівчинка'];
-            } else if (hasBoy && !hasGirl) {
-              candidateGenders = ['для хлопчиків', 'хлопчик'];
-            } else {
-              // Both or universal children's product (board games, puzzles, creativity sets)
-              candidateGenders =
+          if (matchedFromText.length > 0) {
+            candidateValue = col.type === 'multiselect' ? matchedFromText.join('; ') : matchedFromText[0];
+            if (isBrandCol && candidateValue) {
+              detectedBrand = candidateValue;
+            }
+            if (!note) {
+              note =
                 col.type === 'multiselect'
-                  ? ['для хлопчиків; для дівчаток', 'унісекс']
-                  : ['унісекс', 'для хлопчиків та дівчаток', 'для дівчаток; для хлопчиків'];
+                  ? 'Мультиселект: елементи перевірено та зібрано за офіційним довідником'
+                  : 'Підібрано та нормалізовано за офіційним довідником атрибута';
             }
-          } else {
-            if (hasGirl && !hasBoy) {
-              candidateGenders = ['для дівчаток', 'жіноча'];
-            } else if (hasBoy && !hasGirl) {
-              candidateGenders = ['для хлопчиків', 'чоловіча'];
-            } else if (hasWomen && !hasMen) {
-              candidateGenders = ['для жінок', 'жіноча', 'жіночий'];
-            } else if (hasMen && !hasWomen) {
-              candidateGenders = ['для чоловіків', 'чоловіча', 'чоловічий'];
-            } else {
-              candidateGenders =
-                col.type === 'multiselect'
-                  ? ['унісекс', 'для хлопчиків; для дівчаток']
-                  : ['унісекс', 'для хлопчиків та дівчаток'];
-            }
-          }
-
-          if (dictAttr && dictAttr.allowedValues.length > 0) {
-            if (col.type === 'multiselect' && ((hasGirl && hasBoy) || (!hasGirl && !hasBoy))) {
-              const boyOpt = matchDictionaryValue(dictAttr, 'для хлопчиків');
-              const girlOpt = matchDictionaryValue(dictAttr, 'для дівчаток');
-              const unisexOpt = matchDictionaryValue(dictAttr, 'унісекс');
-              if (boyOpt && girlOpt) {
-                filledValue = `${boyOpt}; ${girlOpt}`;
-              } else if (unisexOpt) {
-                filledValue = unisexOpt;
-              }
-            }
-            if (!filledValue) {
-              for (const cand of candidateGenders) {
-                const m = matchDictionaryValue(dictAttr, cand);
-                if (m) {
-                  filledValue = m;
-                  break;
-                }
-              }
-            }
-          } else {
-            filledValue = candidateGenders[0];
-          }
-
-          if (filledValue) {
-            source = 'description';
-            note = 'Стать визначено за контекстом назви та опису';
           }
         }
 
-        // 5. PACKAGING & PRODUCT DIMENSIONS ("Висота упаковки (мм)", "Ширина упаковки (мм)", "Глибина упаковки (мм)", "Довжина упаковки (мм)")
-        else if (
-          normKeyNoUnit.includes('висота упаковки') ||
-          normKeyNoUnit.includes('ширина упаковки') ||
-          normKeyNoUnit.includes('глибина упаковки') ||
-          normKeyNoUnit.includes('довжина упаковки') ||
-          normKeyNoUnit === 'висота' ||
-          normKeyNoUnit === 'ширина' ||
-          normKeyNoUnit === 'глибина' ||
-          normKeyNoUnit === 'довжина' ||
-          normKeyNoUnit === 'розмір упаковки' ||
-          normKeyNoUnit === 'розміри упаковки'
-        ) {
-          const dims = visuals.parsedDimensions;
-          const isCmTarget = col.unit === 'см' || cleanKey.includes('(см)');
-          const formatDim = (mmVal?: number): string | null => {
-            if (!mmVal || mmVal <= 0) return null;
-            if (isCmTarget) {
-              return String(Number((mmVal / 10).toFixed(1)));
-            }
-            return String(Math.round(mmVal));
-          };
+        // 2. UNIVERSAL METRIC, NUMERIC & TEXT EXTRACTORS (for float/string/text or columns without fixed dictionary)
+        if (!candidateValue && (!dictAttr || dictAttr.allowedValues.length === 0)) {
+          // Dimensions (mm / cm)
+          if (
+            normKeyNoUnit.includes('висота') ||
+            normKeyNoUnit.includes('ширина') ||
+            normKeyNoUnit.includes('глибина') ||
+            normKeyNoUnit.includes('довжина') ||
+            normKeyNoUnit.includes('розмір упаковки') ||
+            normKeyNoUnit.includes('розміри упаковки')
+          ) {
+            const dims = visuals.parsedDimensions;
+            const isCmTarget = col.unit === 'см' || cleanKey.includes('(см)');
+            const formatDim = (mmVal?: number): string | null => {
+              if (!mmVal || mmVal <= 0) return null;
+              return isCmTarget ? String(Number((mmVal / 10).toFixed(1))) : String(Math.round(mmVal));
+            };
 
-          if (normKeyNoUnit.includes('висота')) {
-            filledValue = formatDim(dims.heightMm);
-          } else if (normKeyNoUnit.includes('ширина')) {
-            filledValue = formatDim(dims.widthMm);
-          } else if (normKeyNoUnit.includes('глибина')) {
-            filledValue = formatDim(dims.depthMm);
-          } else if (normKeyNoUnit.includes('довжина')) {
-            filledValue = formatDim(dims.lengthMm || dims.heightMm);
-          } else if (normKeyNoUnit.includes('розмір упаковки') || normKeyNoUnit.includes('розміри упаковки')) {
-            if (dims.heightMm && dims.widthMm && dims.depthMm) {
-              filledValue = isCmTarget
+            if (normKeyNoUnit.includes('висота')) candidateValue = formatDim(dims.heightMm);
+            else if (normKeyNoUnit.includes('ширина')) candidateValue = formatDim(dims.widthMm);
+            else if (normKeyNoUnit.includes('глибина')) candidateValue = formatDim(dims.depthMm);
+            else if (normKeyNoUnit.includes('довжина')) candidateValue = formatDim(dims.lengthMm || dims.heightMm);
+            else if (dims.heightMm && dims.widthMm && dims.depthMm) {
+              candidateValue = isCmTarget
                 ? `${dims.heightMm / 10}х${dims.widthMm / 10}х${dims.depthMm / 10} см`
                 : `${dims.heightMm}х${dims.widthMm}х${dims.depthMm} мм`;
-            } else if (dims.heightMm && dims.widthMm) {
-              filledValue = isCmTarget
-                ? `${dims.heightMm / 10}х${dims.widthMm / 10} см`
-                : `${dims.heightMm}х${dims.widthMm} мм`;
+            }
+
+            if (candidateValue) {
+              note = 'Габарити витягнуто з тексту з автоматичним перерахунком одиниць';
             }
           }
-
-          if (filledValue) {
-            source = 'description';
-            note = 'Габарити витягнуто з тексту опису/назви з автоматичним перерахунком одиниць (см -> мм)';
-          }
-        }
-
-        // 6. PACKAGING & PRODUCT WEIGHT ("Вага упаковки (г)", "Вага", "Вага в упаковці")
-        else if (normKeyNoUnit.includes('вага')) {
-          const weightG = visuals.parsedWeightGrams;
-          if (weightG !== undefined && weightG > 0) {
-            const isKgTarget = col.unit === 'кг' || cleanKey.includes('(кг)');
-            filledValue = isKgTarget ? String(Number((weightG / 1000).toFixed(3))) : String(Math.round(weightG));
-            source = 'description';
-            note = 'Вагу витягнуто з опису/назви товару';
-          }
-        }
-
-        // 7. NUMBER OF PLAYERS ("Кількість гравців")
-        else if (normKeyNoUnit.includes('кількість гравців') || normKeyNoUnit.includes('гравців')) {
-          const pInfo = visuals.parsedPlayers;
-          if (dictAttr && dictAttr.allowedValues.length > 0 && pInfo.formatted) {
-            const matched =
-              matchDictionaryValue(dictAttr, pInfo.formatted) ||
-              (pInfo.minPlayers && pInfo.maxPlayers
-                ? matchDictionaryValue(dictAttr, `від ${pInfo.minPlayers} до ${pInfo.maxPlayers}`) ||
-                  matchDictionaryValue(dictAttr, `${pInfo.minPlayers} - ${pInfo.maxPlayers}`)
-                : null);
-            if (matched) {
-              filledValue = matched;
-            } else if (col.type === 'multiselect' && pInfo.minPlayers && pInfo.maxPlayers) {
-              const items: string[] = [];
-              for (let p = pInfo.minPlayers; p <= Math.min(pInfo.maxPlayers, pInfo.minPlayers + 6); p++) {
-                const m = matchDictionaryValue(dictAttr, String(p));
-                if (m && !items.includes(m)) items.push(m);
-              }
-              if (items.length > 0) filledValue = items.join('; ');
+          // Weight (g / kg)
+          else if (normKeyNoUnit.includes('вага') || normKeyNoUnit.includes('маса')) {
+            const weightG = visuals.parsedWeightGrams;
+            if (weightG !== undefined && weightG > 0) {
+              const isKgTarget = col.unit === 'кг' || cleanKey.includes('(кг)');
+              candidateValue = isKgTarget
+                ? String(Number((weightG / 1000).toFixed(3)))
+                : String(Math.round(weightG));
+              note = 'Вагу витягнуто з опису/назви товару';
             }
           }
-
-          if (!filledValue && pInfo.formatted) {
-            filledValue = pInfo.formatted;
-          }
-
-          if (filledValue) {
-            source = 'description';
-            note = 'Кількість гравців визначено з опису/назви гри';
-          }
-        }
-
-        // 8. GENRE & THEME ("Жанр", "Тематика", "Вид", "Призначення")
-        else if (normKeyNoUnit === 'жанр' || normKeyNoUnit === 'тематика') {
-          const genreRules: Array<{ keywords: string[]; value: string }> = [
-            { keywords: ['розважальн', 'весел', 'вечірк', 'компані', 'гумор', 'мем'], value: 'розважальні' },
-            { keywords: ['розвиваюч', 'навчальн', 'пізнавальн', 'освітн', 'вивчен', 'абетк', 'рахуван', 'пам\'ят', 'уваг', 'моторик'], value: 'розвиваючі' },
-            { keywords: ['логічн', 'головоломк', 'інтелектуальн', 'шах', 'шашк', 'судоку', 'мислен'], value: 'логічні' },
-            { keywords: ['стратегічн', 'стратегія', 'тактичн'], value: 'стратегічні' },
-            { keywords: ['економічн', 'монополі', 'бізнес', 'фінанс', 'гроші'], value: 'економічні' },
-            { keywords: ['картков', 'карти', 'карток', 'уно', 'uno', 'мафія', 'мемо', 'дуплет', 'доміно', 'лото'], value: 'карткові' },
-            { keywords: ['сімейн', 'родинн', 'для всієї родини', 'для сім\'ї'], value: 'сімейні' },
-            { keywords: ['пригодницьк', 'пригод', 'бродилк', 'квест', 'мандрівк', 'подорож'], value: 'пригодницькі' },
-            { keywords: ['детектив', 'розслідуван'], value: 'детективні' },
-            { keywords: ['вікторин', 'питання', 'ерудит'], value: 'вікторини' },
-            { keywords: ['творч', 'малюван', 'розмальовк', 'картина за номерами', 'алмазна мозаїка', 'ліплен', 'тісто', 'слайм', 'бісер', 'гравюр', 'орігамі', 'аплікац'], value: 'творчість' }
-          ];
-
-          const matchedGenres: string[] = [];
-
-          // First check dictionary directly with stem matching
-          if (dictAttr && dictAttr.allowedValues.length > 0) {
-            for (const allowedVal of dictAttr.allowedValues) {
-              const decodedVal = decodeHtmlEntities(allowedVal).toLowerCase();
-              const stem = decodedVal.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою)$/i, '');
-              if (
-                (decodedVal.length >= 3 && visuals.combinedDesc.includes(decodedVal)) ||
-                (stem.length >= 4 && visuals.combinedDesc.includes(stem))
-              ) {
-                if (!matchedGenres.includes(allowedVal)) {
-                  matchedGenres.push(allowedVal);
-                }
-              }
-            }
-          }
-
-          // Second check heuristic keyword rules
-          for (const rule of genreRules) {
-            if (rule.keywords.some(kw => visuals.combinedDesc.includes(kw))) {
-              if (dictAttr && dictAttr.allowedValues.length > 0) {
-                const m = matchDictionaryValue(dictAttr, rule.value);
-                if (m && !matchedGenres.includes(m)) matchedGenres.push(m);
-              } else if (!matchedGenres.includes(rule.value)) {
-                matchedGenres.push(rule.value);
-              }
-            }
-          }
-
-          // Fallback if it explicitly mentions a board game / puzzle / toy
-          if (matchedGenres.length === 0 && (visuals.combinedDesc.includes('настільн') || visuals.combinedDesc.includes('гра ') || visuals.combinedDesc.includes('пазл') || visuals.combinedDesc.includes('іграшк'))) {
-            const fallbackGenre = dictAttr
-              ? matchDictionaryValue(dictAttr, 'розважальні') || matchDictionaryValue(dictAttr, 'розвиваючі') || dictAttr.allowedValues[0]
-              : 'розважальні';
-            if (fallbackGenre) matchedGenres.push(fallbackGenre);
-          }
-
-          if (matchedGenres.length > 0) {
-            filledValue = col.type === 'multiselect' ? matchedGenres.slice(0, 3).join('; ') : matchedGenres[0];
-            source = 'description';
-            note = 'Жанр/тематику визначено за контекстом назви та опису';
-          }
-        }
-
-        // 9. PRIMARY COLOR (select)
-        else if (normKeyNoUnit === 'колір' || normKeyNoUnit === 'колір плафона' || normKeyNoUnit === 'базовий колір') {
-          const colorDict = dictAttr || dictionaryIndex['колір'];
-          if (visuals.detectedPrimaryColor) {
-            filledValue = colorDict
-              ? matchDictionaryValue(colorDict, visuals.detectedPrimaryColor) || visuals.detectedPrimaryColor
-              : visuals.detectedPrimaryColor;
-            source = 'photo';
-            note = 'Визначено за першим фото та описом товару';
-          }
-        }
-
-        // 10. MANUFACTURER COLOR (string)
-        else if (normKeyNoUnit.includes('колір виробника')) {
-          if (visuals.detectedManufacturerColor) {
-            filledValue = visuals.detectedManufacturerColor;
+          // Manufacturer color (free string)
+          else if (normKeyNoUnit.includes('колір виробника') && visuals.detectedManufacturerColor) {
+            candidateValue = visuals.detectedManufacturerColor;
             source = 'photo';
             note = 'Точний відтінок за фото та назвою';
           }
-        }
-
-        // 11. PATTERN (select)
-        else if (normKeyNoUnit.includes('візерунок') || normKeyNoUnit.includes('узор') || normKeyNoUnit.includes('принт')) {
-          const patternDict = dictAttr || dictionaryIndex['візерунок'];
-          if (patternDict && (col.isRequired || visuals.patternType !== 'однотонний' || visuals.combinedDesc.includes('однотон'))) {
-            filledValue = matchDictionaryValue(patternDict, visuals.patternType) || (col.isRequired ? visuals.patternType : null);
+          // Primary color when no dictionary file was loaded
+          else if (
+            (normKeyNoUnit === 'колір' || normKeyNoUnit === 'базовий колір') &&
+            visuals.detectedPrimaryColor &&
+            col.type !== 'select' &&
+            col.type !== 'multiselect'
+          ) {
+            candidateValue = visuals.detectedPrimaryColor;
             source = 'photo';
-            note = 'Візерунок визначено за фото/описом: ' + visuals.patternType;
           }
-        }
-
-        // 12. UNIT (select)
-        else if (normKeyNoUnit.includes('одиниця виміру') || normKeyNoUnit.includes('одиниці виміру')) {
-          const unitDict = dictAttr || dictionaryIndex['одиниця виміру'];
-          filledValue = unitDict
-            ? matchDictionaryValue(unitDict, visuals.unitValue) || (col.isRequired ? 'шт.' : visuals.unitValue)
-            : visuals.unitValue;
-          source = 'description';
-          note = 'Одиниця виміру розрахована за типом упаковки';
-        }
-
-        // 13. COUNTRY OF ORIGIN ("Країна-виробник", "Країна реєстрації бренду")
-        else if (normKeyNoUnit.includes('країна')) {
-          const countryKeywords: Array<{ kw: string[]; val: string }> = [
-            { kw: ['україна', 'українськ', 'украина', 'strateg', 'vladi toys', 'danko toys', 'ranok', 'bombat'], val: 'Україна' },
-            { kw: ['китай', 'china', 'кнр'], val: 'Китай' },
-            { kw: ['польща', 'польськ', 'poland', 'trefl'], val: 'Польща' },
-            { kw: ['німеччина', 'германия', 'germany', 'ravensburger', 'goki'], val: 'Німеччина' },
-            { kw: ['туреччина', 'турция', 'turkey'], val: 'Туреччина' },
-            { kw: ['сша', 'usa', 'hasbro', 'mattel'], val: 'США' }
-          ];
-          for (const cRule of countryKeywords) {
-            if (cRule.kw.some(k => visuals.combinedDesc.includes(k))) {
-              filledValue = dictAttr ? matchDictionaryValue(dictAttr, cRule.val) || cRule.val : cRule.val;
-              source = 'description';
-              note = 'Країну визначено з опису/назви';
-              break;
+          // Generic float extractor by unit or label in description
+          else if (col.type === 'float') {
+            const escapedLabel = normKeyNoUnit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const labelNumMatch =
+              escapedLabel.length >= 3
+                ? normalizedCombinedDesc.match(new RegExp(`${escapedLabel}[\\s:=-]*(\\d+(?:[.,]\\d+)?)`, 'i'))
+                : null;
+            if (labelNumMatch && labelNumMatch[1]) {
+              candidateValue = labelNumMatch[1].replace(',', '.');
+              note = 'Числове значення витягнуто з тексту опису';
             }
           }
         }
 
-        // 14. LANGUAGE ("Мова")
-        else if (normKeyNoUnit === 'мова' || normKeyNoUnit.includes('мова гри') || normKeyNoUnit.includes('мова видання')) {
-          let langCandidate = '';
-          if (visuals.combinedDesc.includes('українськ') || visuals.combinedDesc.includes('укр.') || visuals.combinedDesc.includes('мова: українська')) {
-            langCandidate = 'українська';
-          } else if (visuals.combinedDesc.includes('англійськ') || visuals.combinedDesc.includes('english')) {
-            langCandidate = 'англійська';
-          } else if (visuals.combinedDesc.includes('російськ') || visuals.combinedDesc.includes('русск')) {
-            langCandidate = 'російська';
-          }
-          if (langCandidate) {
-            filledValue = dictAttr ? matchDictionaryValue(dictAttr, langCandidate) || langCandidate : langCandidate;
-            source = 'description';
-            note = 'Мову визначено з опису/назви';
-          }
-        }
-
-        // 15. GENERAL MULTISELECT / SELECT / STRING / FLOAT ATTRIBUTES (Матеріал, Склад, Сезон, Фасон, Розмір, etc.)
-        if (!filledValue) {
-          if (dictAttr) {
-            if (col.type === 'multiselect') {
-              const matchedComponents: string[] = [];
-              for (const allowedVal of dictAttr.allowedValues) {
-                const decodedVal = decodeHtmlEntities(allowedVal).toLowerCase();
-                const stem = decodedVal.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою)$/i, '');
-                if (
-                  (decodedVal.length >= 2 && visuals.combinedDesc.includes(decodedVal)) ||
-                  (stem.length >= 4 && visuals.combinedDesc.includes(stem))
-                ) {
-                  matchedComponents.push(allowedVal);
-                }
-              }
-
-              for (const [syn, targetVal] of Object.entries(COMMON_SYNONYMS)) {
-                if (visuals.combinedDesc.includes(syn)) {
-                  const m = matchDictionaryValue(dictAttr, targetVal);
-                  if (m && !matchedComponents.includes(m)) {
-                    matchedComponents.push(m);
-                  }
-                }
-              }
-
-              if (matchedComponents.length > 0) {
-                filledValue = matchedComponents.join('; ');
-                source = 'description';
-                note = 'Мультиселект: значення об\'єднано через ";" за контекстом і синонімами';
-              }
-            } else if (col.type === 'select' || col.type === 'string') {
-              for (const allowedVal of dictAttr.allowedValues) {
-                const decodedVal = decodeHtmlEntities(allowedVal).toLowerCase();
-                const stem = decodedVal.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою)$/i, '');
-                if (
-                  (decodedVal.length >= 2 && visuals.combinedDesc.includes(decodedVal)) ||
-                  (stem.length >= 4 && visuals.combinedDesc.includes(stem))
-                ) {
-                  filledValue = allowedVal;
-                  break;
-                }
-              }
-
-              if (!filledValue) {
-                for (const [syn, targetVal] of Object.entries(COMMON_SYNONYMS)) {
-                  if (visuals.combinedDesc.includes(syn)) {
-                    const m = matchDictionaryValue(dictAttr, targetVal);
-                    if (m) {
-                      filledValue = m;
-                      break;
-                    }
-                  }
-                }
-              }
-
-              if (filledValue) {
-                source = 'description';
-                note = 'Підібрано за описом/назвою та словником синонімів';
-              }
-            }
-          }
-
-          if (!filledValue && (normKeyNoUnit.includes('розмір') || normKeyNoUnit.includes('size'))) {
-            const sizeMatch = visuals.combinedDesc.match(/розмір[иа]?\s*[:\-]?\s*([0-9]+(?:\s*,\s*[0-9]+)+)/i);
-            if (sizeMatch && sizeMatch[1]) {
-              filledValue = sizeMatch[1].replace(/\s*,\s*/g, '; ');
-              source = 'description';
-              note = 'Розміри нормалізовано через крапку з комою';
-            }
-          } else if (!filledValue && (normKeyNoUnit.includes('матеріал') || normKeyNoUnit.includes('склад'))) {
-            const matKeywords: Array<{ kw: string; label: string }> = [
-              { kw: 'картон', label: 'картон' },
-              { kw: 'папір', label: 'папір' },
-              { kw: 'дерев', label: 'дерево' },
-              { kw: 'пластик', label: 'пластик' },
-              { kw: 'пластмас', label: 'пластик' },
-              { kw: 'полімер', label: 'полімер' },
-              { kw: 'бавовн', label: 'бавовна' },
-              { kw: 'котон', label: 'бавовна' },
-              { kw: 'стрейч', label: 'стретч' },
-              { kw: 'еластан', label: 'еластан' },
-              { kw: 'поліестер', label: 'поліестер' },
-              { kw: 'акрил', label: 'акрил' },
-              { kw: 'метал', label: 'метал' },
-              { kw: 'текстил', label: 'текстиль' },
-              { kw: 'гум', label: 'гума' },
-              { kw: 'силікон', label: 'силікон' }
-            ];
-            const foundMats: string[] = [];
-            for (const mItem of matKeywords) {
-              if (visuals.combinedDesc.includes(mItem.kw)) {
-                const valToAdd = dictAttr ? matchDictionaryValue(dictAttr, mItem.label) || mItem.label : mItem.label;
-                if (!foundMats.includes(valToAdd)) foundMats.push(valToAdd);
-              }
-            }
-            if (foundMats.length > 0) {
-              filledValue = col.type === 'multiselect' ? foundMats.join('; ') : foundMats[0];
-              source = 'description';
-              note = 'Матеріал визначено з опису/назви';
-            }
-          } else if (!filledValue && col.type === 'float') {
-            if (normKeyNoUnit.includes('навантаження') && visuals.combinedDesc.match(/(\d+)\s*кг/)) {
-              const m = visuals.combinedDesc.match(/(\d+)\s*кг/);
-              if (m) filledValue = m[1];
-              source = 'description';
-            } else if (normKeyNoUnit.includes('кількість елементів') || normKeyNoUnit.includes('кількість деталей') || normKeyNoUnit.includes('кількість предметів')) {
-              const m = visuals.combinedDesc.match(/(\d+)\s*(?:дет|елем|ел\.|шт|предм|частин)/i);
-              if (m) {
-                filledValue = m[1];
-                source = 'description';
-              }
-            }
-          }
-        }
+        // 3. STRICT FINAL DICTIONARY ENFORCEMENT GATE
+        // For ANY select or multiselect column with allowedValues, validate through enforceDictionaryValue.
+        // If not in allowedValues -> DELETE (set to null) so no invalid value ever enters Excel!
+        const filledValue = enforceDictionaryValue(candidateValue, col.type, dictAttr);
 
         // Finalize value check
         if (filledValue) {
@@ -1863,14 +1842,14 @@ export function runEpicentrFillingEngine(
             columnName: col.originalName,
             isRequired: col.isRequired,
             type: col.type,
-            oldValue: '',
+            oldValue: hasExistingVal ? String(existingVal) : '',
             newValue: filledValue,
             source,
             confidence,
-            note: note || (col.isRequired ? 'Обов\'язкова характеристика з опису/назви' : 'Додаткова характеристика з опису/назви')
+            note: note || (col.isRequired ? 'Обов\'язкова характеристика з опису/довідника' : 'Додаткова характеристика з опису/довідника')
           };
         } else if (col.isRequired) {
-          // Mandatory field could NOT be filled with sufficient confidence
+          // Mandatory field could NOT be filled with a valid dictionary option
           unfilledMandatoryCount++;
           unfilledRequiredFields.push(col.originalName);
 
@@ -1878,7 +1857,7 @@ export function runEpicentrFillingEngine(
             unfilledCountsMap[col.cleanName] = {
               count: 0,
               affectedIds: [],
-              reason: 'Інформація відсутня в описі, на фото та в довіднику (суворе правило: краще порожнє, ніж невірне)'
+              reason: 'Інформація відсутня в описі або значення не входить до дозволених опцій довідника (allowedValues)'
             };
           }
           unfilledCountsMap[col.cleanName].count++;
@@ -2011,7 +1990,8 @@ export function runEpicentrFillingEngine(
 export function generateEpicentrExportWorkbook(
   originalWorkbook: XLSX.WorkBook | null,
   processedRows: EpicentrProductRow[],
-  columns: EpicentrColumn[]
+  columns: EpicentrColumn[],
+  dictionaryIndex?: Record<string, EpicentrDictionaryAttribute>
 ): XLSX.WorkBook {
   const titleUaCol =
     columns.find(c => c.lang === 'ua' && c.cleanName.toLowerCase().includes('назва')) ||
@@ -2019,6 +1999,7 @@ export function generateEpicentrExportWorkbook(
   const titleRuCol = columns.find(c => c.lang === 'ru' && c.cleanName.toLowerCase().includes('назва'));
 
   // Helper to resolve value for any column while strictly preserving UA and RU product titles in their original template columns
+  // and enforcing dictionary rules on select/multiselect columns
   const resolveExportCellValue = (pRow: EpicentrProductRow, col: EpicentrColumn): any => {
     if (titleUaCol && col.originalName === titleUaCol.originalName) {
       const uaVal =
@@ -2041,15 +2022,30 @@ export function generateEpicentrExportWorkbook(
       return ruVal;
     }
 
-    const updatedVal = pRow.updatedRow[col.originalName];
-    if (updatedVal !== undefined && updatedVal !== null && String(updatedVal) !== '') {
-      return updatedVal;
+    const hasExplicitUpdatedKey = Object.prototype.hasOwnProperty.call(pRow.updatedRow, col.originalName);
+    const candidateVal = hasExplicitUpdatedKey
+      ? pRow.updatedRow[col.originalName]
+      : pRow.originalRow
+      ? pRow.originalRow[col.originalName]
+      : '';
+
+    if (candidateVal === undefined || candidateVal === null || String(candidateVal).trim() === '') {
+      return '';
     }
-    const origVal = pRow.originalRow ? pRow.originalRow[col.originalName] : undefined;
-    if (origVal !== undefined && origVal !== null && String(origVal) !== '') {
-      return origVal;
+
+    if ((col.type === 'select' || col.type === 'multiselect') && dictionaryIndex) {
+      const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
+      if (dictAttr && dictAttr.allowedValues.length > 0) {
+        const enforced = enforceDictionaryValue(String(candidateVal), col.type, dictAttr);
+        return enforced ?? '';
+      }
     }
-    return '';
+
+    if (col.type === 'multiselect') {
+      return enforceDictionaryValue(String(candidateVal), 'multiselect') ?? '';
+    }
+
+    return candidateVal;
   };
 
   // If original workbook exists, deep clone it
@@ -2106,10 +2102,9 @@ export function generateEpicentrExportWorkbook(
         const cellAddress = XLSX.utils.encode_cell({ r: targetRowIdx, c: targetColIdx });
         const val = resolveExportCellValue(pRow, col);
 
-        // Preserve existing cell metadata and do not overwrite existing template cell value with empty string
         if (!ws[cellAddress]) {
           ws[cellAddress] = { t: 's', v: String(val) };
-        } else if (val !== '' || ws[cellAddress].v === undefined || ws[cellAddress].v === null) {
+        } else {
           ws[cellAddress].v = String(val);
           ws[cellAddress].t = typeof val === 'number' ? 'n' : 's';
         }

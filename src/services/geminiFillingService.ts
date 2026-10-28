@@ -6,6 +6,9 @@
 import { EpicentrColumn, EpicentrDictionaryAttribute } from '../types/epicentr';
 import { EPICENTR_SYSTEM_PROMPT } from '../constants/epicentrPrompt';
 import {
+  decodeHtmlEntities,
+  encodeHtmlEntities,
+  enforceDictionaryValue,
   extractAgeFromText,
   extractDimensionsFromText,
   extractPlayersFromText,
@@ -13,10 +16,14 @@ import {
   findDictionaryAttr,
   formatEpicentrTitle,
   matchDictionaryValue,
+  normalizeApostrophes,
+  normalizeForDictionaryComparison,
   stripHtmlToCleanText
 } from './epicentrEngine';
 
 export const MISSING_API_KEY_EVENT = 'epic_ai_missing_key_warning';
+
+export const UNIVERSAL_PIM_SYSTEM_PROMPT = `Ти — універсальний PIM-агент маркетплейсу Епіцентр. Для будь-якої категорії товарів обирай значення для полів select/multiselect СУВОРО з наданого масиву allowedValues відповідної колонки. Якщо інформації немає або значення відсутнє в allowedValues — повертай порожній рядок. Вигадувати значення поза довідником суворо заборонено.`;
 
 /**
  * Normalizes column/attribute name by removing Epicentr technical suffixes
@@ -70,8 +77,9 @@ const AI_SYNONYM_MAP: Record<string, string> = {
 };
 
 /**
- * Local deterministic PIM heuristic extractor.
- * Guarantees attribute matching directly from dictionary and synonyms for both mandatory and optional fields.
+ * Universal Category-Agnostic Local PIM Extractor:
+ * Extracts and validates attributes for ANY product category strictly enforcing `allowedValues`
+ * for `select` and `multiselect` columns.
  */
 function applyLocalPimExtraction(
   productRow: Record<string, any>,
@@ -125,7 +133,10 @@ function applyLocalPimExtraction(
     .map(([, v]) => stripHtmlToCleanText(String(v || '')).toLowerCase())
     .join(' \n ');
 
-  const fullText = `${titleUa} \n ${titleRu} \n ${descUa} \n ${descRu} \n ${extraText}`.toLowerCase();
+  const fullText = normalizeForDictionaryComparison(
+    `${titleUa} \n ${titleRu} \n ${descUa} \n ${descRu} \n ${extraText}`,
+    'exact'
+  );
   const parsedDimensions = extractDimensionsFromText(fullText);
   const parsedWeightGrams = extractWeightGramsFromText(fullText);
   const parsedAge = extractAgeFromText(fullText);
@@ -139,223 +150,137 @@ function applyLocalPimExtraction(
     if (result[origKey] || result[cleanKey]) continue;
 
     const dict = findDictionaryAttr(dictionaryIndex, cleanKey);
+    const hasDict = Boolean(dict && Array.isArray(dict.allowedValues) && dict.allowedValues.length > 0);
+    let candidateVal: string | null = null;
 
-    // 1. Одиниця виміру та кількість
-    if (normKey.includes('одиниця виміру')) {
-      result[origKey] = 'шт.';
-      result[cleanKey] = 'шт.';
-    }
-
-    // 2. Вік дитини / Вік
-    else if (normKey === 'вік дитини' || normKey === 'вік' || normKey.includes('рекомендований вік')) {
-      if (dict && dict.allowedValues.length > 0 && parsedAge.minAge !== undefined) {
-        const m =
-          matchDictionaryValue(dict, `від ${parsedAge.minAge} років`) ||
-          matchDictionaryValue(dict, `${parsedAge.minAge} років`) ||
-          matchDictionaryValue(dict, `${parsedAge.minAge}+`) ||
-          dict.allowedValues.find(v => new RegExp(`\\b${parsedAge.minAge}\\b`).test(v));
-        if (m) {
-          result[origKey] = m;
-          result[cleanKey] = m;
-        }
-      } else if (parsedAge.formattedUa) {
-        result[origKey] = parsedAge.formattedUa;
-        result[cleanKey] = parsedAge.formattedUa;
-      }
-    }
-
-    // 3. Стать / Стать дитини
-    else if (normKey === 'стать' || normKey.includes('стать дитини')) {
-      const hasGirl = fullText.includes('дівчат') || fullText.includes('дівчин') || fullText.includes('девоч');
-      const hasBoy = fullText.includes('хлопч') || fullText.includes('хлопц') || fullText.includes('мальчик');
-      let sexVal = 'унісекс';
-      if (hasGirl && !hasBoy) sexVal = 'для дівчаток';
-      else if (hasBoy && !hasGirl) sexVal = 'для хлопчиків';
-      else if (fullText.includes('для чоловіків') || fullText.includes('чоловіч')) sexVal = 'для чоловіків';
-      else if (fullText.includes('для жінок') || fullText.includes('жіноч')) sexVal = 'для жінок';
-      else if (normKey.includes('дитини') && col.type === 'multiselect') sexVal = 'для хлопчиків; для дівчаток';
-
-      if (dict && dict.allowedValues.length > 0) {
-        const m = matchDictionaryValue(dict, sexVal) || matchDictionaryValue(dict, 'унісекс');
-        if (m) sexVal = m;
-      }
-
-      result[origKey] = sexVal;
-      result[cleanKey] = sexVal;
-    }
-
-    // 4. Габарити упаковки (Висота / Ширина / Глибина / Довжина упаковки (мм))
-    else if (
-      normKey.includes('висота упаковки') ||
-      normKey.includes('ширина упаковки') ||
-      normKey.includes('глибина упаковки') ||
-      normKey.includes('довжина упаковки') ||
-      normKey === 'висота' ||
-      normKey === 'ширина' ||
-      normKey === 'глибина' ||
-      normKey === 'довжина'
-    ) {
-      const isCm = col.unit === 'см' || origKey.toLowerCase().includes('(см)');
-      const toStr = (mm?: number) => (mm && mm > 0 ? String(isCm ? Number((mm / 10).toFixed(1)) : Math.round(mm)) : '');
-      let dimVal = '';
-      if (normKey.includes('висота')) dimVal = toStr(parsedDimensions.heightMm);
-      else if (normKey.includes('ширина')) dimVal = toStr(parsedDimensions.widthMm);
-      else if (normKey.includes('глибина')) dimVal = toStr(parsedDimensions.depthMm);
-      else if (normKey.includes('довжина')) dimVal = toStr(parsedDimensions.lengthMm || parsedDimensions.heightMm);
-      if (dimVal) {
-        result[origKey] = dimVal;
-        result[cleanKey] = dimVal;
-      }
-    }
-
-    // 5. Вага упаковки (г) / Вага
-    else if (normKey.includes('вага')) {
-      if (parsedWeightGrams && parsedWeightGrams > 0) {
-        const isKg = col.unit === 'кг' || origKey.toLowerCase().includes('(кг)');
-        const wStr = isKg ? String(Number((parsedWeightGrams / 1000).toFixed(3))) : String(Math.round(parsedWeightGrams));
-        result[origKey] = wStr;
-        result[cleanKey] = wStr;
-      }
-    }
-
-    // 6. Кількість гравців
-    else if (normKey.includes('кількість гравців') || normKey.includes('гравців')) {
-      if (parsedPlayers.formatted) {
-        const m = dict ? matchDictionaryValue(dict, parsedPlayers.formatted) || parsedPlayers.formatted : parsedPlayers.formatted;
-        result[origKey] = m;
-        result[cleanKey] = m;
-      }
-    }
-
-    // 7. Бренд
-    else if (normKey === 'бренд') {
-      if (dict && dict.allowedValues) {
-        for (const brand of dict.allowedValues) {
-          if (brand.length > 2 && (titleUa.includes(brand.toLowerCase()) || titleRu.includes(brand.toLowerCase()) || fullText.includes(brand.toLowerCase()))) {
-            result[origKey] = brand;
-            result[cleanKey] = brand;
-            break;
-          }
-        }
-      }
-    }
-
-    // 8. Розмір (наприклад '25, 26' -> '25; 26')
-    else if (normKey.includes('розмір')) {
-      if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
-        const matchedSizes = dict.allowedValues.filter(sz => {
-          const escaped = sz.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const reg = new RegExp(`(?<![0-9а-яіїєґa-z])${escaped}(?![0-9а-яіїєґa-z])`, 'i');
-          return reg.test(fullText);
-        });
-        if (matchedSizes.length > 0) {
-          const val = col.type === 'multiselect' || col.type === 'array' ? matchedSizes.join('; ') : matchedSizes[0];
-          result[origKey] = val;
-          result[cleanKey] = val;
-        }
-      } else {
-        const sizeMatch = fullText.match(/розмір[иа]?[:\s-]+([0-9,\s;-]+)/i) || titleUa.match(/\b(\d{2}(?:\s*,\s*\d{2})+)\b/);
-        if (sizeMatch && sizeMatch[1]) {
-          const normalizedSizes = sizeMatch[1]
-            .split(/[,;]/)
-            .map(s => s.trim())
-            .filter(Boolean)
-            .join('; ');
-          if (normalizedSizes) {
-            result[origKey] = normalizedSizes;
-            result[cleanKey] = normalizedSizes;
-          }
-        }
-      }
-    }
-
-    // 9. Тематика та Жанр
-    else if (normKey === 'тематика' || normKey === 'жанр') {
-      const genreRules: Array<{ kw: string[]; val: string }> = [
-        { kw: ['розважальн', 'весел', 'компані', 'вечірк'], val: 'розважальні' },
-        { kw: ['розвиваюч', 'навчальн', 'пізнавальн', 'пам\'ят', 'моторик'], val: 'розвиваючі' },
-        { kw: ['логічн', 'головоломк', 'шах', 'шашк'], val: 'логічні' },
-        { kw: ['стратегічн', 'стратегія'], val: 'стратегічні' },
-        { kw: ['економічн', 'монополі', 'бізнес'], val: 'економічні' },
-        { kw: ['картков', 'карти', 'уно', 'uno', 'мемо', 'доміно', 'лото'], val: 'карткові' },
-        { kw: ['сімейн', 'родинн'], val: 'сімейні' },
-        { kw: ['пригодницьк', 'бродилк', 'квест'], val: 'пригодницькі' },
-        { kw: ['творч', 'малюван', 'картина за номерами', 'алмазна мозаїка', 'ліплен'], val: 'творчість' }
-      ];
-      const matched: string[] = [];
-      if (dict && dict.allowedValues) {
-        for (const opt of dict.allowedValues) {
-          if (opt.length > 2 && fullText.includes(opt.toLowerCase())) {
-            matched.push(opt);
-          }
-        }
-      }
-      for (const r of genreRules) {
-        if (r.kw.some(k => fullText.includes(k))) {
-          const valToAdd = dict ? matchDictionaryValue(dict, r.val) || r.val : r.val;
-          if (!matched.includes(valToAdd)) matched.push(valToAdd);
-        }
-      }
-      if (matched.length === 0 && (fullText.includes('настільн') || fullText.includes('гра'))) {
-        matched.push(dict ? matchDictionaryValue(dict, 'розважальні') || 'розважальні' : 'розважальні');
-      }
-      if (matched.length > 0) {
-        const val = col.type === 'multiselect' ? matched.slice(0, 3).join('; ') : matched[0];
-        result[origKey] = val;
-        result[cleanKey] = val;
-      }
-    }
-
-    // 10. Вікова група
-    else if (normKey === 'вікова група') {
-      const val = fullText.includes('для дорослих') || fullText.includes('жіноч') || fullText.includes('чоловіч') ? 'для дорослих' : 'для дітей';
-      result[origKey] = val;
-      result[cleanKey] = val;
-    }
-
-    // 11. Країна-виробник
-    else if (normKey.includes('країна')) {
-      if (dict && dict.allowedValues) {
-        const foundCountry = dict.allowedValues.find(c => fullText.includes(c.toLowerCase()));
-        if (foundCountry) {
-          result[origKey] = foundCountry;
-          result[cleanKey] = foundCountry;
-        }
-      } else if (fullText.includes('україна') || fullText.includes('українськ') || fullText.includes('strateg')) {
-        result[origKey] = 'Україна';
-        result[cleanKey] = 'Україна';
-      }
-    }
-
-    // 12. Універсальний підбір за довідником та синонімами (для будь-яких інших обов'язкових та додаткових колонок)
-    if (!result[origKey] && dict && dict.allowedValues && dict.allowedValues.length > 0) {
+    // 1. Dictionary-backed columns (ANY category, ANY select / multiselect / dictionary column)
+    if (hasDict && dict) {
+      const isBrandCol = normKey.includes('бренд') || normKey.includes('brand') || normKey === 'виробник';
+      const sortedAllowed = [...dict.allowedValues].sort((a, b) => b.length - a.length);
       const matchedItems: string[] = [];
 
-      for (const allowedVal of dict.allowedValues) {
-        const cleanAllowed = allowedVal.toLowerCase().trim();
-        if (cleanAllowed.length >= 3 && fullText.includes(cleanAllowed)) {
-          if (!matchedItems.includes(allowedVal)) {
+      for (const allowedVal of sortedAllowed) {
+        if (isBrandCol && normalizeForDictionaryComparison(allowedVal, 'exact') === 'інше') {
+          continue;
+        }
+        const optNorm = normalizeForDictionaryComparison(allowedVal, 'exact');
+        if (!optNorm) continue;
+
+        if (optNorm.length <= 2) {
+          const escaped = optNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const reg = new RegExp(`(?<![0-9а-яіїєґёъыэa-z])${escaped}(?![0-9а-яіїєґёъыэa-z])`, 'i');
+          if (reg.test(fullText) && !matchedItems.includes(allowedVal)) {
             matchedItems.push(allowedVal);
+          }
+        } else {
+          const stem = optNorm.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою|ому)$/i, '');
+          if (
+            fullText.includes(optNorm) ||
+            (stem.length >= 4 && fullText.includes(stem))
+          ) {
+            if (!matchedItems.includes(allowedVal)) {
+              matchedItems.push(allowedVal);
+            }
+          }
+        }
+
+        if (col.type !== 'multiselect' && matchedItems.length > 0) {
+          break;
+        }
+      }
+
+      // Check universal synonyms against dictionary
+      if (col.type === 'multiselect' || matchedItems.length === 0) {
+        for (const [synKey, synTarget] of Object.entries(AI_SYNONYM_MAP)) {
+          if (fullText.includes(normalizeForDictionaryComparison(synKey, 'exact'))) {
+            const matchedSyn = matchDictionaryValue(dict, synTarget);
+            if (matchedSyn && !matchedItems.includes(matchedSyn)) {
+              matchedItems.push(matchedSyn);
+              if (col.type !== 'multiselect') break;
+            }
           }
         }
       }
 
-      for (const [synKey, synTarget] of Object.entries(AI_SYNONYM_MAP)) {
-        if (fullText.includes(synKey)) {
-          const foundInDict = dict.allowedValues.find(
-            a => a.toLowerCase().trim() === synTarget.toLowerCase()
+      // Context-based candidates verified strictly against dict.allowedValues
+      if (matchedItems.length === 0) {
+        const candidates: string[] = [];
+
+        if (normKey.includes('одиниця виміру')) {
+          if (fullText.includes('комплект') || fullText.includes('набір')) candidates.push('компл.');
+          else if (fullText.includes('упаковк') || fullText.includes('пачк')) candidates.push('уп.');
+          candidates.push('шт.');
+        }
+
+        if ((normKey === 'вік' || normKey.includes('вік дитини') || normKey.includes('рекомендований вік')) && parsedAge.minAge !== undefined) {
+          candidates.push(
+            `від ${parsedAge.minAge} років`,
+            `від ${parsedAge.minAge} року`,
+            `${parsedAge.minAge} років`,
+            `${parsedAge.minAge}+`
           );
-          if (foundInDict && !matchedItems.includes(foundInDict)) {
-            matchedItems.push(foundInDict);
+        }
+
+        if (normKey.includes('гравців') && parsedPlayers.formatted) {
+          candidates.push(parsedPlayers.formatted);
+        }
+
+        if (normKey === 'стать' || normKey.includes('стать дитини')) {
+          const hasGirl = /дівчат|дівчин|девоч/i.test(fullText);
+          const hasBoy = /хлопч|хлопц|мальчик/i.test(fullText);
+          const hasWomen = /жіноч|для жінок|женск/i.test(fullText);
+          const hasMen = /чоловіч|для чоловіків|мужск/i.test(fullText);
+          if (hasGirl && !hasBoy) candidates.push('для дівчаток', 'жіноча');
+          else if (hasBoy && !hasGirl) candidates.push('для хлопчиків', 'чоловіча');
+          else if (hasWomen && !hasMen) candidates.push('для жінок', 'жіноча');
+          else if (hasMen && !hasWomen) candidates.push('для чоловіків', 'чоловіча');
+          else candidates.push('для хлопчиків; для дівчаток', 'унісекс');
+        }
+
+        for (const cand of candidates) {
+          const validCand = enforceDictionaryValue(cand, col.type, dict);
+          if (validCand) {
+            matchedItems.push(validCand);
+            break;
           }
         }
       }
 
       if (matchedItems.length > 0) {
-        const finalVal = col.type === 'multiselect' ? matchedItems.join('; ') : matchedItems[0];
-        result[origKey] = finalVal;
-        result[cleanKey] = finalVal;
+        candidateVal = col.type === 'multiselect' ? matchedItems.join('; ') : matchedItems[0];
       }
+    }
+
+    // 2. Non-dictionary numeric & structural extractors (ONLY when column does NOT have fixed select/multiselect dictionary)
+    if (!candidateVal && !hasDict && col.type !== 'select' && col.type !== 'multiselect') {
+      if (
+        normKey.includes('висота') ||
+        normKey.includes('ширина') ||
+        normKey.includes('глибина') ||
+        normKey.includes('довжина')
+      ) {
+        const isCm = col.unit === 'см' || origKey.toLowerCase().includes('(см)');
+        const toStr = (mm?: number) =>
+          mm && mm > 0 ? String(isCm ? Number((mm / 10).toFixed(1)) : Math.round(mm)) : '';
+        if (normKey.includes('висота')) candidateVal = toStr(parsedDimensions.heightMm);
+        else if (normKey.includes('ширина')) candidateVal = toStr(parsedDimensions.widthMm);
+        else if (normKey.includes('глибина')) candidateVal = toStr(parsedDimensions.depthMm);
+        else if (normKey.includes('довжина')) candidateVal = toStr(parsedDimensions.lengthMm || parsedDimensions.heightMm);
+      } else if (normKey.includes('вага') || normKey.includes('маса')) {
+        if (parsedWeightGrams && parsedWeightGrams > 0) {
+          const isKg = col.unit === 'кг' || origKey.toLowerCase().includes('(кг)');
+          candidateVal = isKg
+            ? String(Number((parsedWeightGrams / 1000).toFixed(3)))
+            : String(Math.round(parsedWeightGrams));
+        }
+      }
+    }
+
+    // 3. Enforce strict dictionary validation before recording
+    const enforced = enforceDictionaryValue(candidateVal, col.type, dict);
+    if (enforced) {
+      result[origKey] = enforced;
+      result[cleanKey] = enforced;
     }
   }
 
@@ -452,35 +377,38 @@ ${JSON.stringify(productRow, null, 2)}`;
 }
 
 /**
- * Matches a token against allowed dictionary values using exact match, synonyms and partial match.
+ * Universal token resolver against allowed dictionary values using symmetric HTML-entity/apostrophe
+ * normalization, case-insensitive matching, punctuation/bracket normalization, and synonyms.
+ * Returns null if token cannot be unambiguously resolved to an option in `allowed`.
  */
 export function resolveTokenAgainstAllowed(
   token: string,
   allowed: string[],
-  allowedLower?: string[]
+  _allowedLower?: string[]
 ): string | null {
   if (!token || !allowed || allowed.length === 0) return null;
-  const lowerToken = token.toLowerCase().trim();
-  const lowerList = allowedLower || allowed.map(a => a.toLowerCase().trim());
-  const mappedSynonym = AI_SYNONYM_MAP[lowerToken]?.toLowerCase();
+  const cleanedToken = normalizeApostrophes(decodeHtmlEntities(token)).trim();
+  if (!cleanedToken) return null;
 
-  const exactIdx = lowerList.indexOf(lowerToken);
-  if (exactIdx >= 0) return allowed[exactIdx];
+  const syntheticDict: EpicentrDictionaryAttribute = {
+    attributeName: 'temp',
+    cleanAttributeName: 'temp',
+    allowedValues: allowed,
+    decodedValuesMap: {},
+    synonymsMap: {}
+  };
 
-  if (mappedSynonym) {
-    const synIdx = lowerList.indexOf(mappedSynonym);
-    if (synIdx >= 0) return allowed[synIdx];
+  for (const rawOpt of allowed) {
+    const exactNorm = normalizeForDictionaryComparison(rawOpt, 'exact');
+    const relaxedNorm = normalizeForDictionaryComparison(rawOpt, 'relaxed');
+    const encodedNorm = encodeHtmlEntities(rawOpt).toLowerCase().trim();
+    syntheticDict.decodedValuesMap[rawOpt.toLowerCase().trim()] = rawOpt;
+    syntheticDict.decodedValuesMap[exactNorm] = rawOpt;
+    if (relaxedNorm) syntheticDict.decodedValuesMap[relaxedNorm] = rawOpt;
+    if (encodedNorm) syntheticDict.decodedValuesMap[encodedNorm] = rawOpt;
   }
 
-  const partialMatch = allowed.find(a => {
-    const al = a.toLowerCase().trim();
-    return (
-      al.includes(lowerToken) ||
-      lowerToken.includes(al) ||
-      (mappedSynonym ? al.includes(mappedSynonym) || mappedSynonym.includes(al) : false)
-    );
-  });
-  return partialMatch || null;
+  return matchDictionaryValue(syntheticDict, cleanedToken);
 }
 
 export interface GroundedResearchResult {
@@ -496,7 +424,7 @@ export interface GroundedResearchResult {
 
 const SEARCH_CACHE_INDEX_KEY = 'epicentr_google_search_cache_v1';
 
-export const OFFICIAL_CATALOG_SYSTEM_INSTRUCTION = `Ти — експертний PIM-аналітик маркетплейсу Епіцентр. Шукай інформацію пріоритетно на офіційних сайтах виробників, офіційних дистриб'юторів та авторитетних каталогах товарів. Повертай виключно валідний JSON без markdown-обгорток.`;
+export const OFFICIAL_CATALOG_SYSTEM_INSTRUCTION = `${UNIVERSAL_PIM_SYSTEM_PROMPT} Шукай інформацію пріоритетно на офіційних сайтах виробників, офіційних дистриб'юторів та авторитетних каталогах товарів. Повертай виключно валідний JSON без markdown-обгорток.`;
 
 /**
  * Cleans product title from noise: strips HTML tags, size lists, parenthetical SKUs, and marketing buzzwords.
@@ -722,6 +650,10 @@ export function extractProductIdentity(productRow: Record<string, any>): {
 
 /**
  * Maps raw attribute key-value pairs against target columns and Epicentr dictionary allowed values.
+ * Strictly enforces Category-Agnostic Dictionary Validation:
+ * - For `select` / `multiselect`, matches against `allowedValues` (with universal normalization).
+ * - For `multiselect`, splits by `;` or `,`, validates EACH element against `allowedValues`, and joins valid ones with `; `.
+ * - If a value for a fixed dictionary column is not in `allowedValues` and cannot be normalized to an official option, it is DELETED.
  */
 function mapAttributesToColumns(
   rawAttributes: Record<string, string>,
@@ -731,8 +663,9 @@ function mapAttributesToColumns(
   const mapped: Record<string, string> = {};
 
   for (const [colName, rawVal] of Object.entries(rawAttributes)) {
-    if (!rawVal || typeof rawVal !== 'string' || !rawVal.trim()) continue;
-    const cleanVal = rawVal.trim();
+    if (!rawVal || typeof rawVal !== 'string') continue;
+    const cleanVal = rawVal.replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
+    if (!cleanVal) continue;
 
     const matchedCol = targetCols.find(
       c =>
@@ -745,46 +678,12 @@ function mapAttributesToColumns(
     if (matchedCol) {
       const origKey = matchedCol.originalName;
       const cleanKey = matchedCol.cleanName || getCleanAttributeName(origKey);
-      const normKey = getCleanAttributeName(cleanKey).toLowerCase();
+      const dict = findDictionaryAttr(dictionaryIndex, cleanKey);
 
-      const dict =
-        dictionaryIndex[normKey] ||
-        Object.values(dictionaryIndex).find(
-          d => getCleanAttributeName(d.cleanAttributeName).toLowerCase() === normKey
-        );
-
-      if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
-        const allowed = dict.allowedValues;
-        const allowedLower = allowed.map(a => a.toLowerCase().trim());
-
-        if (matchedCol.type === 'multiselect' || matchedCol.type === 'array') {
-          const items = cleanVal.split(/[,;]/).map(s => s.trim()).filter(Boolean);
-          const validItems: string[] = [];
-          for (const it of items) {
-            const resolved = resolveTokenAgainstAllowed(it, allowed, allowedLower);
-            if (resolved && !validItems.includes(resolved)) {
-              validItems.push(resolved);
-            }
-          }
-          if (validItems.length > 0) {
-            const valStr = validItems.join('; ');
-            mapped[origKey] = valStr;
-            mapped[cleanKey] = valStr;
-          }
-        } else {
-          const resolved = resolveTokenAgainstAllowed(cleanVal, allowed, allowedLower);
-          if (resolved) {
-            mapped[origKey] = resolved;
-            mapped[cleanKey] = resolved;
-          }
-        }
-      } else {
-        const formattedVal =
-          matchedCol.type === 'multiselect' || matchedCol.type === 'array'
-            ? cleanVal.split(/[,;]/).map(s => s.trim()).filter(Boolean).join('; ')
-            : cleanVal;
-        mapped[origKey] = formattedVal;
-        mapped[cleanKey] = formattedVal;
+      const enforcedVal = enforceDictionaryValue(cleanVal, matchedCol.type, dict);
+      if (enforcedVal) {
+        mapped[origKey] = enforcedVal;
+        mapped[cleanKey] = enforcedVal;
       }
     }
   }
@@ -1077,18 +976,14 @@ export async function enrichProductMandatoryWithAI(
     }
 
     try {
-      const prompt = `Ти — експертний AI-агент з інтелектуального мапінгу товарів для маркетплейсу "Епіцентр".
-Твоє завдання: проаналізувати дані товару (назву, артикул, опис) та заповнити порожні характеристики, якщо інформація про них наявна або випливає з контексту назви чи опису.
+      const prompt = `${UNIVERSAL_PIM_SYSTEM_PROMPT}
 
-ПРАВИЛА ПІДБОРУ ХАРАКТЕРИСТИК:
-1. АНАЛІЗ ТЕКСТУ КРІЗЬ HTML-РОЗМІТКУ ТА КОНТЕКСТ:
-   - Уважно аналізуй назву та опис товару для виявлення явних і контекстних характеристик.
-2. ГНУЧКЕ РОЗПІЗНАВАННЯ СИНОНІМІВ ТА СКОРОЧЕНЬ:
-   - Активно зіставляй розмовні назви та синоніми зі значеннями з довідника (allowedValues).
-3. ФОРМАТ ЗНАЧЕНЬ:
-   - Для полів "select" та "multiselect" обирай відповідні опції з наданого довідника (allowedValues).
-   - Для полів "multiselect" перераховуй значення через крапку з комою (; ).
-   - Залишай поле порожнім ("") лише якщо в назві й описі немає жодної підказки.
+Проаналізуй дані товару (назву, артикул, опис) та заповни порожні характеристики.
+
+ПРАВИЛА ВАЛІДАЦІЇ ТА ФОРМАТУВАННЯ:
+1. Для БУДЬ-ЯКОЇ колонки типу "select" або "multiselect" обирай значення СУВОРО з наданого масиву allowedValues відповідної колонки.
+2. Для полів типу "multiselect" перераховуй обрані з allowedValues значення через крапку з комою з пробілом ("; ").
+3. Якщо інформації немає в тексті або значення відсутнє в allowedValues — повертай порожній рядок (""). Вигадувати значення поза довідником суворо заборонено.
 
 Порожні колонки товару для заповнення:
 ${colsForAi
@@ -1096,12 +991,12 @@ ${colsForAi
     const clean = getCleanAttributeName(c.cleanName || c.originalName);
     const hasDict = !!dictContext[c.originalName] || !!dictContext[clean.toLowerCase()];
     return `- "${c.originalName}" (${c.type}, ${c.isRequired ? 'обовʼязкове *' : 'додаткове'}${c.lang ? `, мова: ${c.lang}` : ''})${
-      hasDict ? ' [Є ДОВІДНИК ЗНАЧЕНЬ]' : ''
+      hasDict ? ' [СУВОРИЙ ДОВІДНИК allowedValues]' : ''
     }`;
   })
   .join('\n')}
 
-Довідник дозволених опцій:
+Довідник дозволених опцій (allowedValues):
 ${JSON.stringify(dictContext, null, 2)}
 
 Поточні дані товару:
@@ -1110,7 +1005,7 @@ ${JSON.stringify(productRow, null, 2)}
 Поверни результат строго у форматі JSON:
 {
   "suggestedValues": {
-    "Точна назва колонки": "Значення з довідника або порожній рядок"
+    "Точна назва колонки": "Значення з allowedValues або порожній рядок"
   }
 }`;
 
@@ -1120,7 +1015,7 @@ ${JSON.stringify(productRow, null, 2)}
         body: JSON.stringify({
           model: 'gemini-3.1-flash-lite',
           prompt,
-          systemInstruction: EPICENTR_SYSTEM_PROMPT,
+          systemInstruction: UNIVERSAL_PIM_SYSTEM_PROMPT,
           responseMimeType: 'application/json',
           maxOutputTokens: 350
         })

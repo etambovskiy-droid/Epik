@@ -26,7 +26,8 @@ import {
 import {
   ProcessingReportSummary,
   EpicentrProductRow,
-  EpicentrColumn
+  EpicentrColumn,
+  EpicentrDictionaryAttribute
 } from '../../types/epicentr';
 import { generateEpicentrExportWorkbook } from '../../services/epicentrEngine';
 
@@ -36,6 +37,7 @@ interface SummaryReportViewProps {
   columns: EpicentrColumn[];
   rawWorkbook: XLSX.WorkBook | null;
   originalFileName: string | null;
+  dictionaryIndex?: Record<string, EpicentrDictionaryAttribute>;
   onViewTable: () => void;
   onViewErrors?: () => void;
 }
@@ -46,6 +48,7 @@ export const SummaryReportView: React.FC<SummaryReportViewProps> = ({
   columns,
   rawWorkbook,
   originalFileName,
+  dictionaryIndex,
   onViewTable,
   onViewErrors
 }) => {
@@ -55,7 +58,7 @@ export const SummaryReportView: React.FC<SummaryReportViewProps> = ({
   // Download filled Excel workbook
   const handleDownload = () => {
     try {
-      const exportWb = generateEpicentrExportWorkbook(rawWorkbook, processedRows, columns);
+      const exportWb = generateEpicentrExportWorkbook(rawWorkbook, processedRows, columns, dictionaryIndex);
       const outName = originalFileName
         ? `Заповнено_${originalFileName.replace(/\.(xlsx|xls|csv)$/i, '')}.xlsx`
         : 'Епіцентр_Шаблон_Заповнено.xlsx';

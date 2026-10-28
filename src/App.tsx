@@ -16,7 +16,9 @@ import { SAMPLE_CATEGORIES } from './data/sampleEpicentrCategories';
 import {
   analyzeEpicentrColumns,
   buildDictionaryIndex,
-  runEpicentrFillingEngine
+  runEpicentrFillingEngine,
+  enforceDictionaryValue,
+  findDictionaryAttr
 } from './services/epicentrEngine';
 import {
   ShopWorkspace,
@@ -915,6 +917,16 @@ export function App() {
 
   // Update cell value handler for table edits and AI enrichment
   const handleUpdateCellValue = (rowIdx: number, columnName: string, newValue: string) => {
+    const col = columns.find(c => c.originalName === columnName);
+    let finalValue = newValue;
+    if (col && (col.type === 'select' || col.type === 'multiselect') && newValue.trim() !== '') {
+      const dictAttr = findDictionaryAttr(dictionaryIndex, col.originalName || col.cleanName);
+      if (dictAttr && dictAttr.allowedValues.length > 0) {
+        const enforced = enforceDictionaryValue(newValue, col.type, dictAttr);
+        finalValue = enforced !== null ? enforced : '';
+      }
+    }
+
     setProcessedRows(prev => {
       const updated = [...prev];
       if (updated[rowIdx]) {
@@ -922,7 +934,7 @@ export function App() {
           ...updated[rowIdx],
           updatedRow: {
             ...updated[rowIdx].updatedRow,
-            [columnName]: newValue
+            [columnName]: finalValue
           }
         };
       }
@@ -933,7 +945,7 @@ export function App() {
       if (updated[rowIdx]) {
         updated[rowIdx] = {
           ...updated[rowIdx],
-          [columnName]: newValue
+          [columnName]: finalValue
         };
       }
       return updated;
@@ -1233,6 +1245,7 @@ export function App() {
                 columns={columns}
                 rawWorkbook={rawWorkbook}
                 originalFileName={templateFileName}
+                dictionaryIndex={dictionaryIndex}
                 onViewTable={() => setActiveTab('table')}
                 onViewErrors={() => setActiveTab('monitor')}
               />

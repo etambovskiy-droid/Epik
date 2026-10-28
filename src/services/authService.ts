@@ -3,6 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+import {
+  auth,
+  db,
+  onAuthStateChanged,
+  signInWithGooglePopup,
+  syncFirebaseUserProfile,
+  signOutFirebase,
+  handleFirestoreError,
+  OperationType
+} from '../firebase';
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -13,6 +25,7 @@ export interface UserProfile {
   role: 'seller' | 'admin' | 'manager';
   avatarUrl?: string;
   createdAt: string;
+  isFirebaseUser?: boolean;
 }
 
 export const AUTH_USER_STORAGE_KEY = 'epicentr_auth_user';
@@ -26,7 +39,7 @@ export const DEFAULT_DEMO_USER: UserProfile = {
   sellerCode: 'EP-89214',
   phone: '+380 (67) 123-45-67',
   role: 'seller',
-  avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+  avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?autoformat&fit=crop&w=200&q=80',
   createdAt: '2026-01-15T10:00:00Z'
 };
 
@@ -44,6 +57,7 @@ export class AuthService {
 
   private constructor() {
     this.initStorage();
+    this.initFirebaseAuthListener();
   }
 
   public static getInstance(): AuthService {
@@ -55,7 +69,6 @@ export class AuthService {
 
   private initStorage(): void {
     try {
-      // Check if registered users initialized
       const existingAccountsStr = localStorage.getItem(REGISTERED_USERS_STORAGE_KEY);
       if (!existingAccountsStr) {
         const initialAccounts: Record<string, StoredAccount> = {
@@ -67,12 +80,10 @@ export class AuthService {
         localStorage.setItem(REGISTERED_USERS_STORAGE_KEY, JSON.stringify(initialAccounts));
       }
 
-      // Check for active logged in user
       const savedUserStr = localStorage.getItem(AUTH_USER_STORAGE_KEY);
       if (savedUserStr) {
         this.currentUser = JSON.parse(savedUserStr);
       } else {
-        // Default to demo user for first visit convenience, or null
         this.currentUser = DEFAULT_DEMO_USER;
         localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(DEFAULT_DEMO_USER));
       }
@@ -80,6 +91,25 @@ export class AuthService {
       console.warn('Failed to initialize auth storage:', e);
       this.currentUser = DEFAULT_DEMO_USER;
     }
+  }
+
+  private initFirebaseAuthListener(): void {
+    onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        try {
+          const synced = await syncFirebaseUserProfile(fbUser);
+          const profile: UserProfile = {
+            ...synced,
+            isFirebaseUser: true
+          };
+          this.currentUser = profile;
+          localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(profile));
+          this.notify();
+        } catch (err) {
+          console.warn('Error syncing Firebase user profile:', err);
+        }
+      }
+    });
   }
 
   public subscribe(listener: (user: UserProfile | null) => void): () => void {
@@ -116,6 +146,28 @@ export class AuthService {
   }
 
   /**
+   * Sign in with Google via Firebase Auth (signInWithPopup)
+   */
+  public async loginWithGoogle(): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+    try {
+      const profile = await signInWithGooglePopup();
+      const userWithFlag: UserProfile = {
+        ...profile,
+        isFirebaseUser: true
+      };
+      this.currentUser = userWithFlag;
+      localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(userWithFlag));
+      this.notify();
+      return { success: true, user: userWithFlag };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error?.message || 'Не вдалося увійти через Google'
+      };
+    }
+  }
+
+  /**
    * Log in user with email and password
    */
   public async login(
@@ -133,7 +185,6 @@ export class AuthService {
     const account = accounts[cleanEmail];
 
     if (!account) {
-      // If user logs in with demo credentials directly
       if (cleanEmail === DEFAULT_DEMO_USER.email.toLowerCase() && cleanPassword === DEFAULT_DEMO_PASSWORD) {
         this.currentUser = DEFAULT_DEMO_USER;
         localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(DEFAULT_DEMO_USER));
@@ -177,7 +228,7 @@ export class AuthService {
     const cleanPassword = password.trim();
     const cleanShop = shopName.trim() || 'Мій кабінет Епіцентр';
 
-    if (!cleanName) return { success: false, error: 'Вкажіть ваше ім\'я' };
+    if (!cleanName) return { success: false, error: "Вкажіть ваше ім'я" };
     if (!cleanEmail || !cleanEmail.includes('@')) return { success: false, error: 'Вкажіть коректний email' };
     if (cleanPassword.length < 6) return { success: false, error: 'Пароль має містити не менше 6 символів' };
 
@@ -219,7 +270,6 @@ export class AuthService {
       return { success: false, message: 'Введіть коректну адресу електронної пошти' };
     }
 
-    // Simulate sending email instruction
     return {
       success: true,
       message: `Інструкцію для скидання пароля надіслано на ${cleanEmail}. Перевірте поштову скриньку.`
@@ -227,7 +277,7 @@ export class AuthService {
   }
 
   /**
-   * Update profile information
+   * Update profile information (also persists to Firestore if signed in with Firebase Auth)
    */
   public async updateProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
     if (!this.currentUser) {
@@ -239,10 +289,30 @@ export class AuthService {
       ...updates
     };
 
+    if (auth.currentUser && auth.currentUser.uid === updated.id) {
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      try {
+        const snap = await getDoc(userRef);
+        const existingCreatedAt = snap.exists() && snap.data().createdAt ? snap.data().createdAt : Timestamp.now();
+        await setDoc(userRef, {
+          uid: auth.currentUser.uid,
+          email: snap.exists() ? snap.data().email : updated.email,
+          name: (updated.name || 'Селер Епіцентр').slice(0, 120),
+          shopName: (updated.shopName || 'Кабінет Епіцентр').slice(0, 150),
+          sellerCode: (updated.sellerCode || 'EP-10001').slice(0, 50),
+          role: snap.exists() ? snap.data().role : updated.role,
+          ...(updated.avatarUrl ? { avatarUrl: updated.avatarUrl.slice(0, 2048) } : {}),
+          createdAt: existingCreatedAt,
+          updatedAt: Timestamp.now()
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
+      }
+    }
+
     this.currentUser = updated;
     localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(updated));
 
-    // Update in registered accounts database
     const accounts = this.getAccounts();
     const emailKey = updated.email.toLowerCase();
     if (accounts[emailKey]) {
@@ -290,6 +360,7 @@ export class AuthService {
    * Log out user
    */
   public logout(): void {
+    signOutFirebase().catch(() => {});
     this.currentUser = null;
     localStorage.removeItem(AUTH_USER_STORAGE_KEY);
     this.notify();

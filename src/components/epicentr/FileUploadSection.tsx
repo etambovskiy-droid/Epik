@@ -88,27 +88,121 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   const dictInputRef = useRef<HTMLInputElement>(null);
   const xmlInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper to parse dictionary sheets (supports both column-header lists and 2-column attribute->value pairs)
+  const extractDictionaryFromSheets = (wb: XLSX.WorkBook, sheetNames: string[]): Record<string, string[]> => {
+    const dict: Record<string, string[]> = {};
+
+    sheetNames.forEach(sName => {
+      const ws = wb.Sheets[sName];
+      if (!ws) return;
+      const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 });
+      if (!rows || rows.length < 2) return;
+
+      const firstRow = rows[0] as any[];
+      if (!Array.isArray(firstRow)) return;
+
+      const nonEmptyHeaders = firstRow.filter(h => h !== undefined && h !== null && String(h).trim() !== '');
+
+      // Check if it's a 2-column key->value table (e.g. ["Характеристика", "Значення"] or ["Атрибут", "Опція"])
+      const h0 = String(firstRow[0] || '').toLowerCase().trim();
+      const h1 = String(firstRow[1] || '').toLowerCase().trim();
+      const isKeyValuePairSheet =
+        nonEmptyHeaders.length === 2 &&
+        (h0.includes('характерист') || h0.includes('атрибут') || h0.includes('назва') || h0.includes('attribute')) &&
+        (h1.includes('значен') || h1.includes('опці') || h1.includes('value'));
+
+      if (isKeyValuePairSheet) {
+        for (let r = 1; r < rows.length; r++) {
+          const row = rows[r];
+          if (!Array.isArray(row)) continue;
+          const attrKey = String(row[0] || '').trim();
+          const attrVal = String(row[1] || '').trim();
+          if (attrKey && attrVal) {
+            if (!dict[attrKey]) dict[attrKey] = [];
+            if (!dict[attrKey].includes(attrVal)) dict[attrKey].push(attrVal);
+          }
+        }
+      } else {
+        // Standard column-based dictionary (each column is an attribute, rows 1..N are allowed values)
+        firstRow.forEach((colHeader, cIdx) => {
+          if (colHeader && typeof colHeader === 'string' && colHeader.trim()) {
+            const values: string[] = [];
+            for (let r = 1; r < rows.length; r++) {
+              const row = rows[r] as any[];
+              if (row && row[cIdx] !== undefined && row[cIdx] !== null && String(row[cIdx]).trim() !== '') {
+                const v = String(row[cIdx]).trim();
+                if (!values.includes(v)) values.push(v);
+              }
+            }
+            if (values.length > 0) {
+              dict[colHeader.trim()] = values;
+            }
+          }
+        });
+      }
+    });
+
+    return dict;
+  };
+
   // Handle template file upload
   const handleTemplateFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const buffer = e.target?.result;
-        const wb = XLSX.read(buffer, { type: 'binary' } as any);
+        const wb = XLSX.read(buffer, { type: 'array' });
         const sheetName = wb.SheetNames[0];
         const ws = wb.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
+        let jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
+
+        // If row 1 had merged group titles (producing __EMPTY keys), locate the real header row
+        if (jsonData.length > 0) {
+          const initialKeys = Object.keys(jsonData[0]);
+          const emptyKeyCount = initialKeys.filter(k => k.startsWith('__EMPTY')).length;
+          if (emptyKeyCount > initialKeys.length / 2) {
+            const rawMatrix = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
+            const headerRowIdx = rawMatrix.slice(0, 10).findIndex(row =>
+              Array.isArray(row) &&
+              row.some(cell => {
+                const s = String(cell || '').toLowerCase().trim();
+                return (
+                  s === 'id' ||
+                  s.startsWith('id ') ||
+                  s.includes('назва товару') ||
+                  s.includes('артикул') ||
+                  s.includes('(select)') ||
+                  s.includes('(multiselect)')
+                );
+              })
+            );
+            if (headerRowIdx > 0) {
+              jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(ws, {
+                defval: '',
+                range: headerRowIdx
+              });
+            }
+          }
+        }
 
         if (jsonData.length > 0) {
-          const rawHeaders = Object.keys(jsonData[0]);
-          const analyzedCols = analyzeEpicentrColumns(rawHeaders);
+          const rawHeaders = Object.keys(jsonData[0]).filter(h => !h.startsWith('__EMPTY'));
+          const analyzedCols = analyzeEpicentrColumns(rawHeaders.length > 0 ? rawHeaders : Object.keys(jsonData[0]));
           onLoadTemplate(jsonData, analyzedCols, wb, file.name);
+
+          // If the uploaded template workbook also contains a secondary dictionary sheet, load it automatically
+          if (wb.SheetNames.length > 1) {
+            const embeddedDict = extractDictionaryFromSheets(wb, wb.SheetNames.slice(1));
+            if (Object.keys(embeddedDict).length > 0) {
+              onLoadDictionary(embeddedDict, `${file.name} (${wb.SheetNames[1]})`);
+            }
+          }
         }
       } catch (err) {
         console.error('Error reading template Excel:', err);
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
 
   // Handle photos drag & drop (multiple images or ZIP archive)
@@ -147,32 +241,8 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     reader.onload = (e) => {
       try {
         const buffer = e.target?.result;
-        const wb = XLSX.read(buffer, { type: 'binary' });
-        const dict: Record<string, string[]> = {};
-
-        wb.SheetNames.forEach(sName => {
-          const ws = wb.Sheets[sName];
-          const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { header: 1 });
-          if (rows.length > 0) {
-            const firstRow = rows[0] as string[];
-            if (Array.isArray(firstRow)) {
-              firstRow.forEach((colHeader, cIdx) => {
-                if (colHeader && typeof colHeader === 'string') {
-                  const values: string[] = [];
-                  for (let r = 1; r < rows.length; r++) {
-                    const row = rows[r] as any[];
-                    if (row && row[cIdx] !== undefined && row[cIdx] !== null && String(row[cIdx]).trim() !== '') {
-                      values.push(String(row[cIdx]).trim());
-                    }
-                  }
-                  if (values.length > 0) {
-                    dict[colHeader] = values;
-                  }
-                }
-              });
-            }
-          }
-        });
+        const wb = XLSX.read(buffer, { type: 'array' });
+        const dict = extractDictionaryFromSheets(wb, wb.SheetNames);
 
         if (Object.keys(dict).length > 0) {
           onLoadDictionary(dict, file.name);
@@ -181,7 +251,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
         console.error('Error reading dictionary Excel:', err);
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
 
   // Load sample category with 1 click
@@ -208,9 +278,12 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               attributeCode: `ATTR_${idx + 100}`,
               attributeType: col.type,
               isRequired: col.isRequired
-            })
-          }
+            }),
+            hidden: true,
+            visible: false
+          } as any
         ];
+        (ws[cellRef].c as any).hidden = true;
       }
     });
     XLSX.utils.book_append_sheet(wb, ws, cat.title.substring(0, 25));

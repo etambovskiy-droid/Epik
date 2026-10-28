@@ -110,6 +110,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const handleGoogleLogin = async () => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setIsLoading(true);
+    try {
+      const res = await authService.loginWithGoogle();
+      if (res.success && res.user) {
+        onSuccess?.(res.user);
+        onClose();
+      } else {
+        setErrorMsg(res.error || 'Не вдалося авторизуватися через Google');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
       <div
@@ -304,18 +321,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             )}
           </button>
 
-          {/* 1-Click Demo Login Button (in sign in mode) */}
-          {mode === 'signin' && (
-            <div className="pt-2">
+          {/* Google Sign-In (Firebase Auth) & 1-Click Demo Login */}
+          {mode !== 'forgot' && (
+            <div className="pt-2 space-y-2">
               <button
                 type="button"
-                onClick={handleQuickDemo}
+                onClick={handleGoogleLogin}
                 disabled={isLoading}
-                className="w-full py-2 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full py-2.5 px-3 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-bold shadow-2xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                <Zap className="w-3.5 h-3.5 text-[#FF7A00]" />
-                <span>Швидкий демо-вхід (seller@epicentr.ua)</span>
+                <Sparkles className="w-4 h-4 text-[#004BB7]" />
+                <span>Увійти через Google (Firebase Auth & Хмарна БД)</span>
               </button>
+
+              {mode === 'signin' && (
+                <button
+                  type="button"
+                  onClick={handleQuickDemo}
+                  disabled={isLoading}
+                  className="w-full py-2 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Zap className="w-3.5 h-3.5 text-[#FF7A00]" />
+                  <span>Швидкий демо-вхід (seller@epicentr.ua)</span>
+                </button>
+              )}
             </div>
           )}
 

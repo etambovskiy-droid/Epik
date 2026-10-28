@@ -16,9 +16,7 @@ import {
   KeyRound
 } from 'lucide-react';
 import { formatEpicentrTitle } from '../../services/epicentrEngine';
-import { getStoredApiKey } from '../../services/aiApiKeyService';
-import { notifyMissingApiKey } from '../../services/geminiFillingService';
-import { GoogleGenAI } from '@google/genai';
+import { EPICENTR_SYSTEM_PROMPT } from '../../constants/epicentrPrompt';
 
 interface TitleFormulaValidatorModalProps {
   isOpen: boolean;
@@ -55,22 +53,18 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
     setTestTitle(fixed);
   };
 
-  // AI Generation with Gemini
+  // AI Generation with Gemini via server endpoint with deterministic auto-fix fallback
   const handleAiGenerateTitle = async () => {
-    const key = getStoredApiKey();
-    if (!key) {
-      notifyMissingApiKey('AI-генерація назви за регламентом Епіцентру');
-      return;
-    }
     setIsAiGenerating(true);
     try {
-      const ai = new GoogleGenAI({
-        apiKey: key,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
-      const res = await ai.models.generateContent({
-        model: 'gemini-3.5-flash-lite',
-        contents: `Ти — головний редактор контенту маркетплейсу Епіцентр.
+      const response = await fetch('/api/gemini/title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gemini-3.1-flash-lite',
+          systemInstruction: EPICENTR_SYSTEM_PROMPT,
+          rawTitle: testTitle,
+          prompt: `Ти — головний редактор контенту маркетплейсу Епіцентр.
 Перетвори та нормалізуй наступну назву товару за офіційною формулою Епіцентру:
 <Тип товару> <Особливість> <Бренд> <Модель> <Ключова характеристика/Розмір> <Колір> (<Артикул>)
 Правила:
@@ -81,13 +75,20 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
 - Відповідай ТІЛЬКИ фінальною назвою без коментарів.
 
 Поточна назва: ${testTitle}`
+        })
       });
-      const generated = res?.text?.trim().replace(/^["']|["']$/g, '');
-      if (generated) {
-        setTestTitle(generated);
+      if (response.ok) {
+        const data = await response.json();
+        const generated = data?.text?.trim().replace(/^["']|["']$/g, '');
+        if (generated) {
+          setTestTitle(generated);
+          return;
+        }
       }
+      handleAutoFix();
     } catch (e: any) {
-      console.error('AI title gen error:', e);
+      console.warn('AI title generation notice, applying rule-based auto-fix:', e);
+      handleAutoFix();
     } finally {
       setIsAiGenerating(false);
     }

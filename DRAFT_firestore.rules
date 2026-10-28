@@ -1,0 +1,171 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.size() >= 3 && email.size() <= 254 && email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$');
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email == "e.tambovskiy@gmail.com" && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // ===============================================================
+    // Entity Validators
+    // ===============================================================
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'name', 'shopName', 'sellerCode', 'role', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['uid', 'email', 'name', 'shopName', 'sellerCode', 'role', 'avatarUrl', 'createdAt', 'updatedAt']) &&
+             data.uid == userId &&
+             isValidId(data.uid) &&
+             isValidEmail(data.email) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+             data.shopName is string && data.shopName.size() >= 1 && data.shopName.size() <= 150 &&
+             data.sellerCode is string && data.sellerCode.size() >= 1 && data.sellerCode.size() <= 50 &&
+             data.role in ['seller', 'manager', 'admin'] &&
+             (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 2048)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCatalogSession(data, sessionId) {
+      return data.keys().hasAll([
+               'id', 'uid', 'workspaceId', 'filename', 'categoryTitle',
+               'productsCount', 'mandatoryColumnsCount', 'newlyFilledCount',
+               'fillRatePercentage', 'unfilledMandatoryCount', 'createdAt'
+             ]) &&
+             data.keys().hasOnly([
+               'id', 'uid', 'workspaceId', 'filename', 'categoryTitle',
+               'productsCount', 'mandatoryColumnsCount', 'newlyFilledCount',
+               'fillRatePercentage', 'unfilledMandatoryCount', 'createdAt'
+             ]) &&
+             data.id == sessionId &&
+             isValidId(data.id) &&
+             data.uid is string && isValidId(data.uid) &&
+             data.workspaceId is string && data.workspaceId.size() >= 1 && data.workspaceId.size() <= 100 &&
+             data.filename is string && data.filename.size() >= 1 && data.filename.size() <= 255 &&
+             data.categoryTitle is string && data.categoryTitle.size() >= 1 && data.categoryTitle.size() <= 200 &&
+             data.productsCount is int && data.productsCount >= 0 && data.productsCount <= 100000 &&
+             data.mandatoryColumnsCount is int && data.mandatoryColumnsCount >= 0 && data.mandatoryColumnsCount <= 1000 &&
+             data.newlyFilledCount is int && data.newlyFilledCount >= 0 && data.newlyFilledCount <= 1000000 &&
+             data.fillRatePercentage is number && data.fillRatePercentage >= 0 && data.fillRatePercentage <= 100 &&
+             data.unfilledMandatoryCount is int && data.unfilledMandatoryCount >= 0 && data.unfilledMandatoryCount <= 1000000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidGeneratedImage(data, imageId) {
+      return data.keys().hasAll([
+               'id', 'uid', 'prompt', 'aspectRatio', 'imageSize',
+               'imageUrl', 'productTitle', 'createdAt'
+             ]) &&
+             data.keys().hasOnly([
+               'id', 'uid', 'prompt', 'aspectRatio', 'imageSize',
+               'imageUrl', 'productTitle', 'createdAt'
+             ]) &&
+             data.id == imageId &&
+             isValidId(data.id) &&
+             data.uid is string && isValidId(data.uid) &&
+             data.prompt is string && data.prompt.size() >= 1 && data.prompt.size() <= 2000 &&
+             data.aspectRatio in ['1:1', '3:4', '4:3', '9:16', '16:9'] &&
+             data.imageSize in ['512px', '1K', '2K', '4K'] &&
+             data.imageUrl is string && data.imageUrl.size() >= 1 && data.imageUrl.size() <= 900000 &&
+             data.productTitle is string && data.productTitle.size() <= 300 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidChatMessage(data, messageId) {
+      return data.keys().hasAll(['id', 'uid', 'role', 'text', 'model', 'createdAt']) &&
+             data.keys().hasOnly(['id', 'uid', 'role', 'text', 'model', 'createdAt']) &&
+             data.id == messageId &&
+             isValidId(data.id) &&
+             data.uid is string && isValidId(data.uid) &&
+             data.role in ['user', 'model'] &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 20000 &&
+             data.model is string && data.model.size() >= 1 && data.model.size() <= 100 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) &&
+                       isValidUserProfile(request.resource.data, userId) &&
+                       (request.resource.data.role == 'seller' || isAdmin());
+      allow update: if (isOwner(userId) || isAdmin()) &&
+                       isValidUserProfile(request.resource.data, userId) &&
+                       request.resource.data.uid == resource.data.uid &&
+                       request.resource.data.email == resource.data.email &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       (request.resource.data.role == resource.data.role || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /sessions/{sessionId} {
+      allow get, list: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() &&
+                       request.resource.data.uid == request.auth.uid &&
+                       isValidCatalogSession(request.resource.data, sessionId);
+      allow update: if isAuthenticated() &&
+                       resource.data.uid == request.auth.uid &&
+                       request.resource.data.uid == resource.data.uid &&
+                       request.resource.data.id == resource.data.id &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       isValidCatalogSession(request.resource.data, sessionId);
+      allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+
+    match /images/{imageId} {
+      allow get, list: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() &&
+                       request.resource.data.uid == request.auth.uid &&
+                       isValidGeneratedImage(request.resource.data, imageId);
+      allow update: if isAuthenticated() &&
+                       resource.data.uid == request.auth.uid &&
+                       request.resource.data.uid == resource.data.uid &&
+                       request.resource.data.id == resource.data.id &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       isValidGeneratedImage(request.resource.data, imageId);
+      allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+
+    match /messages/{messageId} {
+      allow get, list: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() &&
+                       request.resource.data.uid == request.auth.uid &&
+                       isValidChatMessage(request.resource.data, messageId);
+      allow update: if false;
+      allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

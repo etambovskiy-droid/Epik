@@ -3,8 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenAI } from '@google/genai';
-import { getStoredApiKey, getDefaultEnvApiKey } from './aiApiKeyService';
 import { SourceProduct } from './xmlFeedParserService';
 
 export interface EnrichmentProgress {
@@ -13,7 +11,6 @@ export interface EnrichmentProgress {
   currentItemName: string;
 }
 
-// Rule-based dictionary for Ukrainian translation fallback
 const UA_DICTIONARY: Record<string, string> = {
   'дрель': 'дриль',
   'дрели': 'дрилі',
@@ -42,7 +39,6 @@ const UA_DICTIONARY: Record<string, string> = {
 function ruleBasedTranslateUa(text: string): string {
   if (!text) return '';
   let result = text;
-  // Common sentence beginnings / words
   result = result
     .replace(/\bНадежная\b/gi, 'Надійний')
     .replace(/\bКомпактная и мощная\b/gi, 'Компактний та потужний')
@@ -72,13 +68,12 @@ function ruleBasedTranslateUa(text: string): string {
 
 export class GeminiFeedEnrichmentService {
   /**
-   * Enriches a single product with name_ua and description_ua
+   * Enriches a single product with name_ua and description_ua via server-side Gemini endpoint
    */
   public static async enrichProduct(
     product: SourceProduct,
-    apiKeyOverride?: string
+    _apiKeyOverride?: string
   ): Promise<{ name_ua: string; description_ua: string; enrichedByAi: boolean }> {
-    // If already has both UA name and description, preserve them
     if (product.name_ua && product.description_ua) {
       return {
         name_ua: product.name_ua,
@@ -90,12 +85,8 @@ export class GeminiFeedEnrichmentService {
     const sourceName = product.name_ru || product.name || 'Товар';
     const sourceDesc = product.description_ru || product.description || '';
 
-    const effectiveKey = apiKeyOverride || getStoredApiKey() || getDefaultEnvApiKey();
-
-    if (effectiveKey) {
-      try {
-        const ai = new GoogleGenAI({ apiKey: effectiveKey });
-        const prompt = `Ви — експерт каталогу маркетплейсу Епіцентр.
+    try {
+      const prompt = `Ви — експерт каталогу маркетплейсу Епіцентр.
 Перекладіть назву та опис товару на літературну українську мову згідно зі стандартами e-commerce:
 
 Вхідна назва: "${sourceName}"
@@ -108,15 +99,18 @@ export class GeminiFeedEnrichmentService {
   "description_ua": "Зрозумілий, грамотний опис товару українською мовою з ключовими перевагами"
 }`;
 
-        const response = await ai.models.generateContent({
+      const response = await fetch('/api/gemini/enrich-feed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           model: 'gemini-3.5-flash-lite',
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json'
-          }
-        });
+          prompt
+        })
+      });
 
-        const rawText = response.text?.trim() || '{}';
+      if (response.ok) {
+        const data = await response.json();
+        const rawText = data?.text?.trim() || '{}';
         const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
         const parsed = JSON.parse(cleaned);
 
@@ -125,12 +119,11 @@ export class GeminiFeedEnrichmentService {
           description_ua: parsed.description_ua || product.description_ua || ruleBasedTranslateUa(sourceDesc),
           enrichedByAi: true
         };
-      } catch (e) {
-        console.warn('Gemini enrichment failed, using high-quality rule-based fallback:', e);
       }
+    } catch (e) {
+      console.warn('Gemini enrichment failed, using high-quality rule-based fallback:', e);
     }
 
-    // High quality rule-based fallback
     return {
       name_ua: product.name_ua || ruleBasedTranslateUa(sourceName),
       description_ua: product.description_ua || ruleBasedTranslateUa(sourceDesc),
@@ -159,7 +152,6 @@ export class GeminiFeedEnrichmentService {
         });
       }
 
-      // Check if enrichment needed
       if (!prod.name_ua || !prod.description_ua) {
         const { name_ua, description_ua } = await this.enrichProduct(prod, apiKeyOverride);
         updatedProducts.push({

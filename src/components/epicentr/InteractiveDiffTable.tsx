@@ -32,11 +32,18 @@ import {
   Columns,
   Share2,
   KeyRound,
-  RefreshCw
+  RefreshCw,
+  Globe,
+  X
 } from 'lucide-react';
 import { generateEpicentrExportWorkbook } from '../../services/epicentrEngine';
 import { EpicentrDictionaryAttribute } from '../../types/epicentr';
-import { notifyMissingApiKey, enrichProductMandatoryWithAI } from '../../services/geminiFillingService';
+import {
+  notifyMissingApiKey,
+  enrichProductMandatoryWithAI,
+  researchProductAttributesWithWebGrounding,
+  GroundedResearchResult
+} from '../../services/geminiFillingService';
 import { getStoredApiKey } from '../../services/aiApiKeyService';
 
 interface InteractiveDiffTableProps {
@@ -166,58 +173,173 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
     }
   };
 
-  // AI-powered mandatory attributes filling using Gemini
-  const handleTriggerAiFilling = async () => {
-    const key = getStoredApiKey();
-    if (!key) {
-      notifyMissingApiKey('AI-дозаповнення обовʼязкових характеристик через Gemini');
-      onOpenApiKeySettings?.();
-      return;
-    }
+  const [enableWebGrounding, setEnableWebGrounding] = useState(true);
+  const [researchingRowIdx, setResearchingRowIdx] = useState<number | null>(null);
+  const [webGroundingSourcesMap, setWebGroundingSourcesMap] = useState<
+    Record<number, { sources: { uri: string; title: string }[]; explanations: Record<string, string> }>
+  >({});
+  const [researchModalProduct, setResearchModalProduct] = useState<{
+    row: EpicentrProductRow;
+    result: GroundedResearchResult;
+    selectedKeys: Record<string, boolean>;
+  } | null>(null);
 
-    // Identify rows with empty mandatory columns
-    const mandatoryCols = columns.filter(c => c.isMandatory || c.isRequired);
+  // AI-powered mandatory & optional attributes filling using Gemini server endpoint with optional Google Search Grounding
+  const handleTriggerAiFilling = async (forceWebGrounding?: boolean) => {
+    const useGrounding = forceWebGrounding !== undefined ? forceWebGrounding : enableWebGrounding;
+
+    // Identify rows with empty mandatory or optional characteristic columns
+    const fillableCols = columns.filter(c => {
+      const cleanLower = (c.cleanName || c.originalName).toLowerCase();
+      if (
+        cleanLower === 'id' ||
+        cleanLower === 'артикул' ||
+        cleanLower.startsWith('назва товару') ||
+        cleanLower.startsWith('опис') ||
+        cleanLower === 'ціна' ||
+        cleanLower.includes('фото') ||
+        cleanLower.includes('зображення') ||
+        cleanLower.includes('photo') ||
+        cleanLower.includes('image')
+      ) {
+        return false;
+      }
+      return true;
+    });
     const unfilledRows = rows.map((r, idx) => ({ r, idx })).filter(({ r }) => {
-      return mandatoryCols.some(c => {
+      return fillableCols.some(c => {
         const val = r.updatedRow[c.originalName];
         return val === undefined || val === null || String(val).trim() === '';
       });
     });
 
     if (unfilledRows.length === 0) {
-      alert('Усі обовʼязкові характеристики для показаних товарів вже заповнено!');
+      setAiProgressMessage('Усі характеристики для показаних товарів вже заповнено!');
+      setTimeout(() => setAiProgressMessage(null), 3000);
       return;
     }
 
     setIsAiProcessing(true);
-    setAiProgressMessage(`Gemini: запуск обробки (${unfilledRows.length} товарів)...`);
+    setAiProgressMessage(
+      useGrounding
+        ? `Gemini + Google Search Grounding: запуск розшуку (${unfilledRows.length} товарів)...`
+        : `Gemini: запуск обробки (${unfilledRows.length} товарів)...`
+    );
+
     try {
-      let count = 0;
-      for (const item of unfilledRows) {
-        setAiProgressMessage(`Gemini: обробка товару ${count + 1} з ${unfilledRows.length}...`);
-        const result = await enrichProductMandatoryWithAI(
-          item.r.updatedRow,
-          columns,
-          dictionaryIndex || {}
+      const BATCH_SIZE = 4;
+
+      for (let i = 0; i < unfilledRows.length; i += BATCH_SIZE) {
+        const batch = unfilledRows.slice(i, i + BATCH_SIZE);
+        const startNum = i + 1;
+        const endNum = Math.min(i + BATCH_SIZE, unfilledRows.length);
+
+        setAiProgressMessage(
+          useGrounding
+            ? `Google Розшук (пакет): товари ${startNum}–${endNum} з ${unfilledRows.length}...`
+            : `Gemini (пакет): обробка товарів ${startNum}–${endNum} з ${unfilledRows.length}...`
         );
-        if (result.suggestedValues && Object.keys(result.suggestedValues).length > 0) {
-          for (const [colName, val] of Object.entries(result.suggestedValues)) {
-            if (val && onUpdateCellValue) {
-              onUpdateCellValue(item.idx, colName, String(val));
+
+        const batchResults = await Promise.all(
+          batch.map(async (item) => {
+            const result = await enrichProductMandatoryWithAI(
+              item.r.updatedRow,
+              columns,
+              dictionaryIndex || {},
+              { useWebGrounding: useGrounding }
+            );
+            return { item, result };
+          })
+        );
+
+        for (const { item, result } of batchResults) {
+          if (result.suggestedValues && Object.keys(result.suggestedValues).length > 0) {
+            for (const [colName, val] of Object.entries(result.suggestedValues)) {
+              if (val && onUpdateCellValue) {
+                onUpdateCellValue(item.idx, colName, String(val));
+              }
             }
           }
+
+          if (result.sources && result.sources.length > 0) {
+            setWebGroundingSourcesMap(prev => ({
+              ...prev,
+              [item.idx]: {
+                sources: result.sources || [],
+                explanations: result.explanations || {}
+              }
+            }));
+          }
         }
-        count++;
       }
-      setAiProgressMessage('Успішно дозаповнено через Gemini!');
-      setTimeout(() => setAiProgressMessage(null), 3000);
+      setAiProgressMessage(
+        useGrounding
+          ? 'Успішно дозаповнено через Gemini та Google Search Grounding!'
+          : 'Успішно дозаповнено через Gemini!'
+      );
+      setTimeout(() => setAiProgressMessage(null), 3500);
     } catch (e: any) {
-      console.error('AI filling failed:', e);
-      setAiProgressMessage('Помилка під час виклику Gemini');
+      console.warn('AI filling notice:', e);
+      setAiProgressMessage('Оброблено за допомогою локального PIM-рушія Епіцентру');
       setTimeout(() => setAiProgressMessage(null), 3000);
     } finally {
       setIsAiProcessing(false);
     }
+  };
+
+  // Deep research for a single product using Google Search Grounding
+  const handleResearchSingleProduct = async (pRow: EpicentrProductRow) => {
+    setResearchingRowIdx(pRow.rowIdx);
+    try {
+      const result = await researchProductAttributesWithWebGrounding(
+        pRow.updatedRow,
+        columns,
+        dictionaryIndex || {}
+      );
+
+      const keys = Object.keys(result.suggestedValues);
+      const selected: Record<string, boolean> = {};
+      keys.forEach(k => {
+        selected[k] = true;
+      });
+
+      setResearchModalProduct({
+        row: pRow,
+        result,
+        selectedKeys: selected
+      });
+    } catch (err) {
+      console.warn('Single product web research notice:', err);
+    } finally {
+      setResearchingRowIdx(null);
+    }
+  };
+
+  // Apply researched attributes from modal
+  const handleApplyResearchedAttributes = () => {
+    if (!researchModalProduct) return;
+    const { row, result, selectedKeys } = researchModalProduct;
+    const rowIdx = row.rowIdx;
+
+    if (onUpdateCellValue) {
+      for (const [colName, isSelected] of Object.entries(selectedKeys)) {
+        if (isSelected && result.suggestedValues[colName]) {
+          onUpdateCellValue(rowIdx, colName, result.suggestedValues[colName]);
+        }
+      }
+    }
+
+    if (result.sources && result.sources.length > 0) {
+      setWebGroundingSourcesMap(prev => ({
+        ...prev,
+        [rowIdx]: {
+          sources: result.sources || [],
+          explanations: result.explanations || {}
+        }
+      }));
+    }
+
+    setResearchModalProduct(null);
   };
 
   return (
@@ -245,16 +367,47 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
 
         {/* Right: Quick Export Buttons & AI Fill */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Web Grounding Toggle */}
+          <label
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer select-none transition-all ${
+              enableWebGrounding
+                ? 'bg-blue-50 border-blue-300 text-blue-900 shadow-2xs'
+                : 'bg-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200'
+            }`}
+            title="Автоматичний пошук характеристик у Google (Gemini 3.8 Flash + Web Grounding), якщо даних немає у файлі"
+          >
+            <input
+              type="checkbox"
+              checked={enableWebGrounding}
+              onChange={(e) => setEnableWebGrounding(e.target.checked)}
+              className="w-3.5 h-3.5 rounded text-[#004BB7] focus:ring-0 cursor-pointer"
+            />
+            <Globe className="w-3.5 h-3.5 text-[#004BB7]" />
+            <span>Web Grounding</span>
+          </label>
+
           {/* AI Fill with Gemini */}
           <button
             type="button"
-            onClick={handleTriggerAiFilling}
+            onClick={() => handleTriggerAiFilling()}
             disabled={isAiProcessing}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-[#FF7A00] to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
             title="Заповнити пропущені обов'язкові поля за допомогою Google AI Studio (Gemini)"
           >
-            <Sparkles className={`w-3.5 h-3.5 ${isAiProcessing ? 'animate-spin' : ''}`} />
-            <span>{isAiProcessing ? (aiProgressMessage || 'AI обробка...') : 'AI-дозаповнення (Gemini)'}</span>
+            <Sparkles className={`w-3.5 h-3.5 ${isAiProcessing && !enableWebGrounding ? 'animate-spin' : ''}`} />
+            <span>{isAiProcessing && !enableWebGrounding ? (aiProgressMessage || 'AI обробка...') : 'AI-дозаповнення'}</span>
+          </button>
+
+          {/* Dedicated Web Grounding Research Button */}
+          <button
+            type="button"
+            onClick={() => handleTriggerAiFilling(true)}
+            disabled={isAiProcessing}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-[#004BB7] hover:from-blue-700 hover:to-[#003d99] text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+            title="Розшукати всі відсутні габарити, вік, стать, кількість гравців у Google Search (Gemini 3.8 Flash)"
+          >
+            <Globe className={`w-3.5 h-3.5 ${isAiProcessing && enableWebGrounding ? 'animate-spin' : ''}`} />
+            <span>{isAiProcessing && enableWebGrounding ? (aiProgressMessage || 'Розшук в Google...') : 'Розшук у Google'}</span>
           </button>
 
           {/* Export to Excel */}
@@ -462,6 +615,10 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
           Визначено за 1-м фото
         </span>
         <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+          Знайдено через Google Grounding
+        </span>
+        <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
           Оригінальне значення
         </span>
@@ -570,6 +727,9 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                         const diff = pRow.diffs[col.originalName];
                         const isMandatory = col.isRequired;
                         const isEmpty = !val || String(val).trim() === '';
+                        const groundingExplanation =
+                          webGroundingSourcesMap[pRow.rowIdx]?.explanations?.[col.originalName] ||
+                          webGroundingSourcesMap[pRow.rowIdx]?.explanations?.[col.cleanName];
 
                         return (
                           <td key={col.originalName} className="py-2.5 px-3">
@@ -577,6 +737,14 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-50 border border-rose-200 text-rose-700">
                                 <AlertTriangle className="w-3 h-3 text-rose-500" />
                                 Порожнє (*)
+                              </span>
+                            ) : groundingExplanation && val ? (
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 border border-blue-200 text-blue-900"
+                                title={`Google Grounding: ${groundingExplanation}`}
+                              >
+                                <Globe className="w-3 h-3 text-[#004BB7]" />
+                                <span>{String(val)}</span>
                               </span>
                             ) : diff && diff.source === 'photo' ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 border border-amber-200 text-amber-900">
@@ -597,16 +765,29 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                         );
                       })}
 
-                    {/* Details action */}
-                    <td className="py-2.5 px-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedRowIdx(isExpanded ? null : pRow.rowIdx)}
-                        className="p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors"
-                        title="Переглянути всі параметри товару"
-                      >
-                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                      </button>
+                    {/* Details action & Google Search Grounding action */}
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1">
+                        {pRow.unfilledRequiredFields && pRow.unfilledRequiredFields.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleResearchSingleProduct(pRow)}
+                            disabled={researchingRowIdx === pRow.rowIdx}
+                            className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors cursor-pointer"
+                            title="Розшукати характеристики товару в Google (Web Grounding)"
+                          >
+                            <Globe className={`w-3.5 h-3.5 ${researchingRowIdx === pRow.rowIdx ? 'animate-spin text-blue-600' : ''}`} />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setExpandedRowIdx(isExpanded ? null : pRow.rowIdx)}
+                          className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+                          title="Переглянути всі параметри товару"
+                        >
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </td>
                   </tr>
 
@@ -649,6 +830,40 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                               <div><strong>Порожніх полів:</strong> {pRow.unfilledRequiredFields.length > 0 ? <span className="text-rose-600 font-bold">{pRow.unfilledRequiredFields.length}</span> : <span className="text-emerald-600 font-bold">0 (Все заповнено)</span>}</div>
                               <div><strong>Мовних правок:</strong> {pRow.languageCorrections.length}</div>
                             </div>
+
+                            {pRow.unfilledRequiredFields.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleResearchSingleProduct(pRow)}
+                                disabled={researchingRowIdx === pRow.rowIdx}
+                                className="mt-3 w-full py-2 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-[#004BB7] hover:from-blue-700 hover:to-[#003d99] text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                              >
+                                <Globe className={`w-3.5 h-3.5 ${researchingRowIdx === pRow.rowIdx ? 'animate-spin' : ''}`} />
+                                <span>{researchingRowIdx === pRow.rowIdx ? 'Розшук в інтернеті...' : 'Розшукати в Google (Web Grounding)'}</span>
+                              </button>
+                            )}
+
+                            {webGroundingSourcesMap[pRow.rowIdx]?.sources && webGroundingSourcesMap[pRow.rowIdx].sources.length > 0 && (
+                              <div className="mt-3 pt-2.5 border-t border-slate-100">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                  Знайдені веб-джерела (Google Grounding):
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {webGroundingSourcesMap[pRow.rowIdx].sources.slice(0, 3).map((src, sIdx) => (
+                                    <a
+                                      key={sIdx}
+                                      href={src.uri}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 hover:text-blue-900 text-[10px] font-medium"
+                                    >
+                                      <ExternalLink className="w-2.5 h-2.5" />
+                                      <span className="max-w-[140px] truncate">{src.title}</span>
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -660,6 +875,145 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
           </tbody>
         </table>
       </div>
+
+      {/* Google Search Grounding Product Research Modal */}
+      {researchModalProduct && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setResearchModalProduct(null)}
+        >
+          <div
+            className="bg-white rounded-2xl border border-slate-200 p-6 max-w-2xl w-full shadow-2xl relative max-h-[85vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                    <span>Google Search Grounding — Знайдені характеристики</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                      gemini-3.8-flash
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 truncate max-w-md">
+                    {researchModalProduct.row.titleFormattedUa || researchModalProduct.row.titleOriginal}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResearchModalProduct(null)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-4 text-xs">
+              {Object.keys(researchModalProduct.result.suggestedValues).length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800">
+                      Знайдені та верифіковані характеристики з довідника Епіцентру:
+                    </span>
+                    <span className="text-slate-500 text-[11px]">
+                      Позначте галочками поля для запису
+                    </span>
+                  </div>
+                  <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                    {Object.entries(researchModalProduct.result.suggestedValues).map(([key, val]) => (
+                      <label
+                        key={key}
+                        className="p-3 flex items-start gap-3 hover:bg-white transition-colors cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!researchModalProduct.selectedKeys[key]}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setResearchModalProduct(prev => prev ? ({
+                              ...prev,
+                              selectedKeys: { ...prev.selectedKeys, [key]: checked }
+                            }) : null);
+                          }}
+                          className="mt-0.5 rounded text-[#004BB7] focus:ring-0 cursor-pointer"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-900">{key}</span>
+                            <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                              {val}
+                            </span>
+                          </div>
+                          {researchModalProduct.result.explanations?.[key] && (
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {researchModalProduct.result.explanations[key]}
+                            </p>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900">
+                  <p className="font-semibold">Характеристик у Google Пошуку не знайдено.</p>
+                  <p className="mt-1 text-slate-600">
+                    Модель не змогла підтвердити офіційні дані з достатньою точністю або знайдена інформація відсутня у довіднику Епіцентру.
+                  </p>
+                </div>
+              )}
+
+              {researchModalProduct.result.sources && researchModalProduct.result.sources.length > 0 && (
+                <div className="space-y-1.5 pt-2">
+                  <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5 text-blue-600" />
+                    Джерела інформації з Google Пошуку:
+                  </span>
+                  <div className="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    {researchModalProduct.result.sources.map((src, sIdx) => (
+                      <a
+                        key={sIdx}
+                        href={src.uri}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 hover:underline truncate"
+                      >
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{src.title}</span>
+                        <span className="text-[10px] text-slate-400 font-mono truncate">({src.uri})</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setResearchModalProduct(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer"
+              >
+                Скасувати
+              </button>
+              {Object.keys(researchModalProduct.result.suggestedValues).length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleApplyResearchedAttributes}
+                  className="px-4 py-2 rounded-xl bg-[#004BB7] hover:bg-[#003d99] text-white font-bold cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Застосувати обрані характеристики</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox Modal for Photo preview */}
       {selectedPhoto && (

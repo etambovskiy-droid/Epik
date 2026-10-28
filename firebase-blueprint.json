@@ -1,0 +1,100 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated Epicentr Marketplace seller profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email", "description": "Verified user email" },
+        "name": { "type": "string", "description": "Display name of the seller" },
+        "shopName": { "type": "string", "description": "Merchant store title" },
+        "sellerCode": { "type": "string", "description": "Epicentr seller code" },
+        "role": { "type": "string", "enum": ["seller", "manager", "admin"], "description": "User role" },
+        "avatarUrl": { "type": "string", "description": "Optional avatar URL" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
+      },
+      "required": ["uid", "email", "name", "shopName", "sellerCode", "role", "createdAt", "updatedAt"]
+    },
+    "CatalogSession": {
+      "title": "CatalogSession",
+      "description": "Saved batch processing history session for a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Session document ID" },
+        "uid": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "workspaceId": { "type": "string", "description": "Workspace shop ID" },
+        "filename": { "type": "string", "description": "Processed Excel template filename" },
+        "categoryTitle": { "type": "string", "description": "Category or store name" },
+        "productsCount": { "type": "number", "description": "Number of products processed" },
+        "mandatoryColumnsCount": { "type": "number", "description": "Count of mandatory columns" },
+        "newlyFilledCount": { "type": "number", "description": "Count of newly filled cells" },
+        "fillRatePercentage": { "type": "number", "description": "Completion percentage (0-100)" },
+        "unfilledMandatoryCount": { "type": "number", "description": "Remaining empty mandatory cells" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": [
+        "id",
+        "uid",
+        "workspaceId",
+        "filename",
+        "categoryTitle",
+        "productsCount",
+        "mandatoryColumnsCount",
+        "newlyFilledCount",
+        "fillRatePercentage",
+        "unfilledMandatoryCount",
+        "createdAt"
+      ]
+    },
+    "GeneratedImage": {
+      "title": "GeneratedImage",
+      "description": "AI-generated or edited product image metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Image document ID" },
+        "uid": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "prompt": { "type": "string", "description": "Text prompt used for generation/editing" },
+        "aspectRatio": { "type": "string", "description": "Image aspect ratio (e.g. 1:1, 4:3, 16:9)" },
+        "imageSize": { "type": "string", "description": "Resolution size (1K, 2K)" },
+        "imageUrl": { "type": "string", "description": "Data URL or HTTPS URL of the image" },
+        "productTitle": { "type": "string", "description": "Associated product title" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "uid", "prompt", "aspectRatio", "imageSize", "imageUrl", "productTitle", "createdAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Message in a user's Gemini assistant conversation thread",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Message document ID" },
+        "uid": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "role": { "type": "string", "enum": ["user", "model"], "description": "Sender role" },
+        "text": { "type": "string", "description": "Message content" },
+        "model": { "type": "string", "description": "Gemini model used for this turn" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "uid", "role", "text", "model", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile document owned by userId"
+    },
+    "/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/CatalogSession" },
+      "description": "Catalog batch processing sessions owned by uid"
+    },
+    "/images/{imageId}": {
+      "schema": { "$ref": "#/entities/GeneratedImage" },
+      "description": "Generated/edited product images owned by uid"
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Chatbot messages owned by uid"
+    }
+  }
+}

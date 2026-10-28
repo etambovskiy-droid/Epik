@@ -24,7 +24,10 @@ import {
   Moon,
   Monitor,
   Globe,
-  Check
+  Check,
+  Image as ImageIcon,
+  Search,
+  MessageSquare
 } from 'lucide-react';
 import { ShopWorkspace } from '../../services/workspaceStorage';
 import { UserProfile } from '../../services/authService';
@@ -55,6 +58,9 @@ interface EpicentrNavbarProps {
   onManualSave?: () => void;
   onOpenXmlConverter?: () => void;
   isXmlConverterActive?: boolean;
+  onOpenImageStudio?: () => void;
+  onOpenSearchGrounding?: () => void;
+  onOpenChatbot?: () => void;
 }
 
 export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
@@ -81,7 +87,10 @@ export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
   hasPendingChanges,
   onManualSave,
   onOpenXmlConverter,
-  isXmlConverterActive
+  isXmlConverterActive,
+  onOpenImageStudio,
+  onOpenSearchGrounding,
+  onOpenChatbot
 }) => {
   const [shopMenuOpen, setShopMenuOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
@@ -261,6 +270,45 @@ export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
               </span>
             )}
           </button>
+
+          {/* AI Image Studio (gemini-nano-banana-2.1) */}
+          {onOpenImageStudio && (
+            <button
+              type="button"
+              onClick={onOpenImageStudio}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-orange-500/10 hover:bg-orange-500/20 text-[#FF7A00] border border-orange-500/30 transition-colors cursor-pointer"
+              title="ШІ-Фотостудія: Створення та редагування фото товарів (gemini-nano-banana-2.1)"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">ШІ-Фото</span>
+            </button>
+          )}
+
+          {/* Google Search Grounding (gemini-3.8-flash) */}
+          {onOpenSearchGrounding && (
+            <button
+              type="button"
+              onClick={onOpenSearchGrounding}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-500/10 hover:bg-blue-500/20 text-[#004BB7] dark:text-blue-400 border border-blue-500/30 transition-colors cursor-pointer"
+              title="Пошук актуальних характеристик у Google Search (gemini-3.8-flash)"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Google Пошук</span>
+            </button>
+          )}
+
+          {/* Multi-turn Gemini Chatbot */}
+          {onOpenChatbot && (
+            <button
+              type="button"
+              onClick={onOpenChatbot}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-[#004BB7] to-blue-600 hover:from-blue-700 hover:to-blue-600 text-white shadow-2xs transition-all cursor-pointer"
+              title="Відкрити багатоходовий ШІ-чат (gemini-4-argon / gemini-3.8-flash / gemini-3.1-flash-lite)"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">ШІ-Консультант</span>
+            </button>
+          )}
         </div>
 
         {/* Right: Auto-Save, Theme, Language & User Profile */}

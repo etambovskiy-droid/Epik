@@ -55,7 +55,15 @@ import { EpicentrXmlConverterView } from './components/epicentr/EpicentrXmlConve
 import { EpicentrTokenModal } from './components/epicentr/EpicentrTokenModal';
 import { AuthModal } from './components/epicentr/AuthModal';
 import { UserProfileDrawer } from './components/epicentr/UserProfileDrawer';
+import { ImageStudioModal } from './components/epicentr/ImageStudioModal';
+import { SearchGroundingModal } from './components/epicentr/SearchGroundingModal';
+import { GeminiChatbotDrawer } from './components/epicentr/GeminiChatbotDrawer';
 import { authService, UserProfile } from './services/authService';
+import {
+  auth,
+  saveCatalogSessionToFirestore,
+  subscribeUserSessions
+} from './firebase';
 import { getCurrentAppVersion } from './services/userStoryEngine';
 import { EngineErrorEvent } from './types/epicentr';
 import { getStoredApiKey } from './services/aiApiKeyService';
@@ -78,6 +86,7 @@ import {
   KeyRound,
   Sparkles,
   FileCode,
+  MessageSquare,
   X as CloseIcon
 } from 'lucide-react';
 
@@ -157,7 +166,9 @@ export function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
-
+  const [isImageStudioOpen, setIsImageStudioOpen] = useState(false);
+  const [isSearchGroundingOpen, setIsSearchGroundingOpen] = useState(false);
+  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
   useEffect(() => {
     const unsub = authService.subscribe((u) => {
@@ -165,6 +176,38 @@ export function App() {
     });
     return () => unsub();
   }, []);
+
+  // Subscribe to Firestore catalog sessions when authenticated via Firebase
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid || !currentUser?.isFirebaseUser) return;
+    const unsub = subscribeUserSessions(uid, (firestoreSessions) => {
+      if (firestoreSessions.length > 0) {
+        setHistory((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id));
+          const merged = [...prev];
+          for (const fs of firestoreSessions) {
+            if (!existingIds.has(fs.id)) {
+              merged.push({
+                id: fs.id,
+                workspaceId: fs.workspaceId,
+                filename: fs.filename,
+                categoryTitle: fs.categoryTitle,
+                productsCount: fs.productsCount,
+                mandatoryColumnsCount: fs.mandatoryColumnsCount,
+                newlyFilledCount: fs.newlyFilledCount,
+                fillRatePercentage: fs.fillRatePercentage,
+                unfilledMandatoryCount: fs.unfilledMandatoryCount,
+                timestamp: fs.createdAt
+              });
+            }
+          }
+          return merged.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        });
+      }
+    });
+    return () => unsub();
+  }, [currentUser?.id, currentUser?.isFirebaseUser]);
 
   // Admin Approval via URL query (?approval_token=...) or modal trigger
   const [approvalToken, setApprovalToken] = useState<string | null>(() => {
@@ -286,9 +329,12 @@ export function App() {
                 attributeCode: `ATTR_${idx + 100}`,
                 attributeType: col.type,
                 isRequired: col.isRequired
-              })
-            }
+              }),
+              hidden: true,
+              visible: false
+            } as any
           ];
+          (ws[cellRef].c as any).hidden = true;
         }
       });
       XLSX.utils.book_append_sheet(wb, ws, 'Навушники_Шаблон');
@@ -436,9 +482,12 @@ export function App() {
               attributeCode: `ATTR_${idx + 100}`,
               attributeType: col.type,
               isRequired: col.isRequired
-            })
-          }
+            }),
+            hidden: true,
+            visible: false
+          } as any
         ];
+        (ws[cellRef].c as any).hidden = true;
       }
     });
     XLSX.utils.book_append_sheet(wb, ws, 'Навушники_Шаблон');
@@ -521,6 +570,19 @@ export function App() {
 
     if (saved) {
       setHistory(getBatchHistory());
+      if (auth.currentUser) {
+        saveCatalogSessionToFirestore({
+          id: saved.id,
+          workspaceId: saved.workspaceId,
+          filename: saved.filename,
+          categoryTitle: saved.categoryTitle,
+          productsCount: saved.productsCount,
+          mandatoryColumnsCount: saved.mandatoryColumnsCount,
+          newlyFilledCount: saved.newlyFilledCount,
+          fillRatePercentage: saved.fillRatePercentage,
+          unfilledMandatoryCount: saved.unfilledMandatoryCount
+        }).catch(() => {});
+      }
     }
   };
 
@@ -533,12 +595,37 @@ export function App() {
     let targetProcessedRows = batch.processedRows;
     let targetColumns = batch.columns;
     let targetRawRows = batch.rawRows;
-    let targetErrors = (batch.engineErrors || (batch.report?.errors || [])).filter(
-      err => err.phase !== 'photo_parsing' || !err.message.toLowerCase().includes('відсутнє фото')
-    );
+    const cleanStaleErrors = (list: EngineErrorEvent[]) =>
+      list.filter(
+        err =>
+          !err.id?.startsWith('err-col-id-') &&
+          !err.message.includes('Відсутня обов\'язкова колонка ID') &&
+          (err.phase !== 'photo_parsing' || !err.message.toLowerCase().includes('відсутнє фото'))
+      );
 
-    // If batch was saved prior or is the initial sample record without full snapshot, dynamically reconstruct it
-    if (!targetReport || !targetProcessedRows || targetProcessedRows.length === 0) {
+    let targetErrors = cleanStaleErrors(batch.engineErrors || (batch.report?.errors || []));
+
+    const availableRawRows =
+      targetRawRows && targetRawRows.length > 0
+        ? targetRawRows
+        : batch.filename === templateFileName && rawRows.length > 0
+        ? rawRows
+        : null;
+
+    if (availableRawRows && availableRawRows.length > 0) {
+      const analyzedCols = analyzeEpicentrColumns(Object.keys(availableRawRows[0]));
+      const res = runEpicentrFillingEngine(
+        availableRawRows,
+        analyzedCols,
+        dictionaryIndex,
+        batch.settings || settings
+      );
+      targetReport = res.report;
+      targetProcessedRows = res.processedRows;
+      targetColumns = analyzedCols;
+      targetRawRows = availableRawRows;
+      targetErrors = cleanStaleErrors(res.report.errors || []);
+    } else if (!targetReport || !targetProcessedRows || targetProcessedRows.length === 0) {
       const matchedCat = SAMPLE_CATEGORIES.find(c =>
         batch.workspaceId.includes(c.id) ||
         batch.categoryTitle.toLowerCase().includes(c.title.toLowerCase()) ||
@@ -553,9 +640,11 @@ export function App() {
       targetProcessedRows = res.processedRows;
       targetColumns = catCols;
       targetRawRows = matchedCat.defaultData;
-      targetErrors = (res.report.errors || []).filter(
-        err => err.phase !== 'photo_parsing' || !err.message.toLowerCase().includes('відсутнє фото')
-      );
+      targetErrors = cleanStaleErrors(res.report.errors || []);
+    }
+
+    if (targetReport) {
+      targetReport = { ...targetReport, errors: targetErrors };
     }
 
     setReport(targetReport);
@@ -669,6 +758,9 @@ export function App() {
         currentUser={currentUser}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onOpenProfileDrawer={() => setIsProfileDrawerOpen(true)}
+        onOpenImageStudio={() => setIsImageStudioOpen(true)}
+        onOpenSearchGrounding={() => setIsSearchGroundingOpen(true)}
+        onOpenChatbot={() => setIsChatbotOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -892,8 +984,17 @@ export function App() {
                 </button>
               </div>
 
-              <div className="flex items-center gap-3 text-xs">
+              <div className="flex items-center gap-2 text-xs">
                 <button
+                  type="button"
+                  onClick={handleProcessingComplete}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors cursor-pointer shadow-xs"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Перезапустити заповнення</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setIsShareOpen(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FF6B00]/15 hover:bg-[#FF6B00]/25 border border-[#FF6B00]/30 text-[#FF7A00] font-semibold transition-colors cursor-pointer"
                 >
@@ -1125,6 +1226,47 @@ export function App() {
           setIsProfileDrawerOpen(false);
         }}
       />
+
+      {/* AI Image Studio Modal (gemini-nano-banana-2.1) */}
+      <ImageStudioModal
+        isOpen={isImageStudioOpen}
+        onClose={() => setIsImageStudioOpen(false)}
+        uploadedPhotos={uploadedPhotos}
+        onAddPhotoToCatalog={(newPhoto) => {
+          setUploadedPhotos((prev) => [newPhoto, ...prev]);
+        }}
+      />
+
+      {/* Google Search Grounding Modal (gemini-3.8-flash) */}
+      <SearchGroundingModal
+        isOpen={isSearchGroundingOpen}
+        onClose={() => setIsSearchGroundingOpen(false)}
+        rawRows={rawRows}
+      />
+
+      {/* Multi-turn Gemini Chatbot Drawer (gemini-4-argon, gemini-3.8-flash, gemini-3.1-flash-lite) */}
+      <GeminiChatbotDrawer
+        isOpen={isChatbotOpen}
+        onClose={() => setIsChatbotOpen(false)}
+        catalogSummary={`Магазин: ${currentShop.name} (${currentShop.sellerCode}). Файл шаблону: ${
+          templateFileName || 'не вибрано'
+        }. Кількість товарів: ${rawRows.length}. Колонок: ${columns.length} (обов'язкових: ${
+          columns.filter((c) => c.isRequired).length
+        }).`}
+      />
+
+      {/* Floating Quick-Launch Chatbot Button */}
+      {!isChatbotOpen && (
+        <button
+          type="button"
+          onClick={() => setIsChatbotOpen(true)}
+          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 px-4 py-3 rounded-2xl bg-gradient-to-r from-[#004BB7] to-[#FF6B00] hover:from-blue-700 hover:to-[#e66000] text-white font-extrabold text-xs shadow-xl border border-white/20 transition-transform hover:scale-105 cursor-pointer"
+          title="Відкрити ШІ-Консультанта Епіцентру"
+        >
+          <MessageSquare className="w-4 h-4" />
+          <span>ШІ-Консультант Gemini</span>
+        </button>
+      )}
     </div>
   );
 }

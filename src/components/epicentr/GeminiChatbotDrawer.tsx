@@ -23,6 +23,7 @@ import {
   clearUserChatMessagesFromFirestore,
   subscribeUserChatMessages
 } from '../../firebase';
+import { callGeminiDirect } from '../../services/geminiClientDirect';
 
 interface GeminiChatbotDrawerProps {
   isOpen: boolean;
@@ -117,21 +118,21 @@ export const GeminiChatbotDrawer: React.FC<GeminiChatbotDrawerProps> = ({
           text: m.text
         }));
 
-      const response = await fetch('/api/gemini/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: apiMessages,
-          model: selectedModel,
-          useSearchGrounding,
-          catalogSummary
-        })
+      const systemInstruction = `Ти — розумний PIM-асистент селера маркетплейсу Епіцентр.
+Допомагай продавцям із заповненням характеристик, регламентом назв, категоріями, перекладами, вимогами до фото та модерацією.
+Контекст каталогу: ${catalogSummary || 'Не завантажено'}`;
+
+      const conversationText = apiMessages
+        .map((m) => `${m.role === 'user' ? 'Користувач' : 'Асистент'}: ${m.text}`)
+        .join('\n\n');
+
+      const aiRes = await callGeminiDirect(conversationText, {
+        systemInstruction,
+        tools: useSearchGrounding ? [{ googleSearch: {} }] : undefined,
+        maxOutputTokens: 600
       });
 
-      const data = await response.json();
-      const replyText = response.ok
-        ? data.text || 'Відповідь порожня.'
-        : `Помилка: ${data.error || 'Не вдалося отримати відповідь від моделі'}`;
+      const replyText = aiRes.text || (aiRes.error ? `Помилка: ${aiRes.error}` : 'Відповідь порожня.');
 
       const modelMsg: LocalChatMessage = {
         id: `msg_m_${Date.now()}`,
@@ -140,12 +141,12 @@ export const GeminiChatbotDrawer: React.FC<GeminiChatbotDrawerProps> = ({
         text: replyText,
         model: selectedModel,
         createdAt: new Date().toISOString(),
-        sources: Array.isArray(data.sources) ? data.sources : []
+        sources: aiRes.sources || []
       };
 
       setMessages((prev) => [...prev, modelMsg]);
 
-      if (auth.currentUser && response.ok) {
+      if (auth.currentUser && !aiRes.error) {
         saveChatMessageToFirestore({
           id: modelMsg.id,
           role: modelMsg.role,

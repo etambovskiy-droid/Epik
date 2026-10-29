@@ -15,6 +15,7 @@ import {
   Copy,
   Check
 } from 'lucide-react';
+import { callGeminiDirect } from '../../services/geminiClientDirect';
 
 interface SearchGroundingModalProps {
   isOpen: boolean;
@@ -80,25 +81,27 @@ export const SearchGroundingModal: React.FC<SearchGroundingModalProps> = ({
 
     try {
       const productContext = selectedRowIdx >= 0 ? rawRows[selectedRowIdx] : undefined;
-      const response = await fetch('/api/gemini/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: query.trim(),
-          productContext
-        })
+      const fullPrompt = `Ти — експерт каталогу та PIM-спеціаліст маркетплейсу Епіцентр.
+Знайди актуальну та перевірену інформацію в Google Search за запитом користувача і сформуй структуровану відповідь українською мовою.
+Якщо запит стосується конкретного товару, бренду, моделі чи артикулу — наведи точні характеристики (матеріал, країна бренду/виробництва, розміри, комплектація, технічні параметри), придатні для заповнення картки товару Епіцентру.
+
+Запит: ${query.trim()}
+${productContext ? `\nКонтекст товару з таблиці:\n${JSON.stringify(productContext, null, 2)}` : ''}`;
+
+      const aiRes = await callGeminiDirect(fullPrompt, {
+        tools: [{ googleSearch: {} }],
+        maxOutputTokens: 350
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        setErrorMsg(data.error || 'Помилка виконання пошукового запиту');
+      if (aiRes.error) {
+        setErrorMsg(aiRes.error);
         return;
       }
 
-      setResultText(data.text || 'Не знайдено результатів');
-      setSources(Array.isArray(data.sources) ? data.sources : []);
+      setResultText(aiRes.text || 'Не знайдено результатів');
+      setSources(Array.isArray(aiRes.sources) ? aiRes.sources : []);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Помилка з’єднання з сервером');
+      setErrorMsg(err?.message || 'Помилка виконання пошуку через Google');
     } finally {
       setIsSearching(false);
     }

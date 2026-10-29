@@ -25,12 +25,19 @@ import {
   FolderArchive,
   X,
   FileCheck,
-  KeyRound
+  KeyRound,
+  Loader2,
+  Database
 } from 'lucide-react';
 import { SAMPLE_CATEGORIES } from '../../data/sampleEpicentrCategories';
-import { EpicentrColumn } from '../../types/epicentr';
+import { EpicentrColumn, EpicentrDictionaryAttribute } from '../../types/epicentr';
 import { epicentrMerchantApi } from '../../services/epicentrMerchantApiService';
-import { analyzeEpicentrColumns, buildDictionaryIndex } from '../../services/epicentrEngine';
+import { analyzeEpicentrColumns, buildDictionaryIndex, buildDictionaryIndexAsync } from '../../services/epicentrEngine';
+import {
+  generateDictionaryCacheKey,
+  getCachedDictionary,
+  saveCachedDictionary
+} from '../../services/dictionaryCacheService';
 
 export interface UploadedPhotoItem {
   id: string;
@@ -46,7 +53,11 @@ interface FileUploadSectionProps {
     rawWorkbook: XLSX.WorkBook | null,
     filename: string
   ) => void;
-  onLoadDictionary: (rawDict: Record<string, string[]>, filename: string) => void;
+  onLoadDictionary: (
+    rawDict: Record<string, string[]>,
+    filename: string,
+    prebuiltIndex?: Record<string, EpicentrDictionaryAttribute>
+  ) => void;
   onLoadXml?: (xmlString: string, filename: string) => void;
   onLoadPhotos?: (photos: UploadedPhotoItem[]) => void;
   templateFileName: string | null;
@@ -82,6 +93,11 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   const [dragActiveDict, setDragActiveDict] = useState(false);
   const [dragActiveXml, setDragActiveXml] = useState(false);
   const [selectedSampleId, setSelectedSampleId] = useState<string>('headphones');
+  const [dictProgress, setDictProgress] = useState<{
+    percent: number;
+    message: string;
+    fromCache?: boolean;
+  } | null>(null);
 
   const templateInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
@@ -143,6 +159,101 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     });
 
     return dict;
+  };
+
+  /**
+   * Asynchronous chunked parser for massive attribute sets (50k-90k+ rows)
+   * Yields control every 2,500 rows to keep the UI silky smooth
+   */
+  const extractDictionaryFromSheetsAsync = async (
+    wb: XLSX.WorkBook,
+    sheetNames: string[],
+    onProgress?: (progress: { current: number; total: number; percent: number }) => void
+  ): Promise<{ dict: Record<string, string[]>; rowCount: number }> => {
+    const dict: Record<string, string[]> = {};
+    let totalProcessedRows = 0;
+    const CHUNK_SIZE = 2500;
+
+    for (const sName of sheetNames) {
+      const ws = wb.Sheets[sName];
+      if (!ws) continue;
+      const rawMatrix = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
+      if (!rawMatrix || rawMatrix.length < 2) continue;
+
+      const firstRow = rawMatrix[0] as any[];
+      if (!Array.isArray(firstRow)) continue;
+
+      const nonEmptyHeaders = firstRow.filter(h => h !== undefined && h !== null && String(h).trim() !== '');
+      const h0 = String(firstRow[0] || '').toLowerCase().trim();
+      const h1 = String(firstRow[1] || '').toLowerCase().trim();
+
+      const isKeyValuePairSheet =
+        nonEmptyHeaders.length === 2 &&
+        (h0.includes('характерист') || h0.includes('атрибут') || h0.includes('назва') || h0.includes('attribute')) &&
+        (h1.includes('значен') || h1.includes('опці') || h1.includes('value'));
+
+      const totalRows = rawMatrix.length - 1;
+
+      if (isKeyValuePairSheet) {
+        for (let r = 1; r < rawMatrix.length; r++) {
+          const row = rawMatrix[r];
+          if (Array.isArray(row)) {
+            const attrKey = String(row[0] || '').trim();
+            const attrVal = String(row[1] || '').trim();
+            if (attrKey && attrVal) {
+              if (!dict[attrKey]) dict[attrKey] = [];
+              dict[attrKey].push(attrVal);
+            }
+          }
+          totalProcessedRows++;
+          if (totalProcessedRows % CHUNK_SIZE === 0) {
+            if (onProgress) {
+              onProgress({
+                current: totalProcessedRows,
+                total: totalRows,
+                percent: Math.min(99, Math.round((r / totalRows) * 100))
+              });
+            }
+            await new Promise(res => setTimeout(res, 0));
+          }
+        }
+      } else {
+        for (let r = 1; r < rawMatrix.length; r++) {
+          const row = rawMatrix[r] as any[];
+          if (Array.isArray(row)) {
+            firstRow.forEach((colHeader, cIdx) => {
+              if (colHeader && typeof colHeader === 'string' && colHeader.trim()) {
+                const val = row[cIdx];
+                if (val !== undefined && val !== null && String(val).trim() !== '') {
+                  const s = String(val).trim();
+                  const key = colHeader.trim();
+                  if (!dict[key]) dict[key] = [];
+                  dict[key].push(s);
+                }
+              }
+            });
+          }
+          totalProcessedRows++;
+          if (totalProcessedRows % CHUNK_SIZE === 0) {
+            if (onProgress) {
+              onProgress({
+                current: totalProcessedRows,
+                total: totalRows,
+                percent: Math.min(99, Math.round((r / totalRows) * 100))
+              });
+            }
+            await new Promise(res => setTimeout(res, 0));
+          }
+        }
+      }
+    }
+
+    // Deduplicate lists
+    for (const [k, v] of Object.entries(dict)) {
+      dict[k] = Array.from(new Set(v));
+    }
+
+    return { dict, rowCount: totalProcessedRows };
   };
 
   // Handle template file upload
@@ -235,23 +346,93 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     }
   };
 
-  // Handle dictionary file upload
-  const handleDictFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const buffer = e.target?.result;
-        const wb = XLSX.read(buffer, { type: 'array' });
-        const dict = extractDictionaryFromSheets(wb, wb.SheetNames);
+  // Handle dictionary file upload with IndexedDB caching and chunked async execution
+  const handleDictFile = async (file: File) => {
+    try {
+      const cacheKey = generateDictionaryCacheKey(file);
 
-        if (Object.keys(dict).length > 0) {
-          onLoadDictionary(dict, file.name);
+      // Step 1: Check IndexedDB Cache first
+      setDictProgress({ percent: 10, message: 'Перевірка локального кешу IndexedDB...' });
+      const cached = await getCachedDictionary(cacheKey);
+      if (cached && cached.dictionaryIndex) {
+        setDictProgress({
+          percent: 100,
+          message: `Завантажено з кешу (${cached.meta.attrCount} характеристик, ${cached.meta.rowCount.toLocaleString()} значень)`,
+          fromCache: true
+        });
+        const rawMap: Record<string, string[]> = {};
+        for (const [k, attr] of Object.entries(cached.dictionaryIndex)) {
+          rawMap[attr.cleanAttributeName || k] = attr.allowedValues;
         }
-      } catch (err) {
-        console.error('Error reading dictionary Excel:', err);
+        onLoadDictionary(rawMap, file.name, cached.dictionaryIndex);
+        setTimeout(() => setDictProgress(null), 3000);
+        return;
       }
-    };
-    reader.readAsArrayBuffer(file);
+
+      setDictProgress({ percent: 15, message: 'Зчитування файлу Excel...' });
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const buffer = e.target?.result;
+          setDictProgress({ percent: 25, message: 'Розпакування структури книги Excel...' });
+          await new Promise(r => setTimeout(r, 0));
+
+          // Memory & read optimization in XLSX.read: dense: true, ignore cell styles/HTML/formulas
+          const wb = XLSX.read(buffer, {
+            type: 'array',
+            dense: true,
+            cellStyles: false,
+            cellHTML: false,
+            cellFormula: false
+          });
+
+          setDictProgress({ percent: 35, message: 'Обробка таблиць характеристик...' });
+          const { dict, rowCount } = await extractDictionaryFromSheetsAsync(wb, wb.SheetNames, p => {
+            setDictProgress({
+              percent: Math.min(50, 30 + Math.round(p.percent * 0.2)),
+              message: `Зчитування рядків: ${p.current.toLocaleString()}...`
+            });
+          });
+
+          if (Object.keys(dict).length === 0) {
+            setDictProgress(null);
+            return;
+          }
+
+          setDictProgress({ percent: 55, message: `Індексація ${rowCount.toLocaleString()} значень...` });
+          const dictIndex = await buildDictionaryIndexAsync(dict, p => {
+            const currentPct = 50 + Math.round(p.percent * 0.45);
+            setDictProgress({
+              percent: currentPct,
+              message: `Обробка довідника: ${currentPct}% (${p.current.toLocaleString()} з ${p.total.toLocaleString()} значень)`
+            });
+          });
+
+          setDictProgress({ percent: 98, message: 'Збереження в локальний кеш IndexedDB...' });
+          await saveCachedDictionary(cacheKey, dictIndex, {
+            fileName: file.name,
+            rowCount,
+            attrCount: Object.keys(dictIndex).length
+          });
+
+          setDictProgress({
+            percent: 100,
+            message: `Готово: ${Object.keys(dictIndex).length} характеристик, ${rowCount.toLocaleString()} значень`
+          });
+
+          onLoadDictionary(dict, file.name, dictIndex);
+          setTimeout(() => setDictProgress(null), 3500);
+        } catch (err: any) {
+          console.error('Error processing dictionary Excel:', err);
+          setDictProgress({ percent: 0, message: `Помилка: ${err?.message || 'Не вдалося обробити файл'}` });
+          setTimeout(() => setDictProgress(null), 4000);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err: any) {
+      console.error('Error reading dictionary file:', err);
+      setDictProgress(null);
+    }
   };
 
   // Load sample category with 1 click
@@ -564,18 +745,40 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               <span className="text-[#FF7A00] font-black">*</span>
             </div>
 
-            <div className="mt-1.5 text-xs text-slate-600 max-w-[210px]">
-              {dictionaryFileName ? (
-                <div className="font-semibold text-emerald-700 flex items-center justify-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="truncate max-w-[170px]">{dictionaryFileName}</span>
+            {dictProgress ? (
+              <div className="w-full px-2 space-y-2 mt-2">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-800">
+                  <span className="flex items-center gap-1.5 truncate">
+                    {dictProgress.fromCache ? (
+                      <Database className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    ) : (
+                      <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin shrink-0" />
+                    )}
+                    <span className="truncate">{dictProgress.message}</span>
+                  </span>
+                  <span className="font-bold shrink-0">{dictProgress.percent}%</span>
                 </div>
-              ) : (
-                <span className="text-slate-500">
-                  Допустимі значення списків та характеристик
-                </span>
-              )}
-            </div>
+                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden shadow-inner">
+                  <div
+                    className="bg-emerald-600 h-2 rounded-full transition-all duration-200"
+                    style={{ width: `${dictProgress.percent}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="mt-1.5 text-xs text-slate-600 max-w-[210px]">
+                {dictionaryFileName ? (
+                  <div className="font-semibold text-emerald-700 flex items-center justify-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="truncate max-w-[170px]">{dictionaryFileName}</span>
+                  </div>
+                ) : (
+                  <span className="text-slate-500">
+                    Допустимі значення списків та характеристик
+                  </span>
+                )}
+              </div>
+            )}
 
             <span className="mt-3 text-[10px] px-2 py-0.5 rounded font-semibold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
               Обов'язковий файл

@@ -158,6 +158,15 @@ class AuthModalErrorBoundary extends React.Component<
   }
 }
 
+export function cleanStaleErrors(list: EngineErrorEvent[]): EngineErrorEvent[] {
+  return (list || []).filter(
+    err =>
+      !err.id?.startsWith('err-col-id-') &&
+      !err.message.includes("Відсутня обов'язкова колонка ID") &&
+      (err.phase !== 'photo_parsing' || !err.message.toLowerCase().includes('відсутнє фото'))
+  );
+}
+
 export function App() {
   // User Authentication & Profile Drawer
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
@@ -628,12 +637,13 @@ export function App() {
     setWorkflowState('upload');
   };
 
-  // Handle uploaded dictionary
+  // Handle uploaded dictionary (accepts prebuiltIndex from async chunked/cached parser)
   const handleLoadDictionary = (
     rawDict: Record<string, string[]>,
-    filename: string
+    filename: string,
+    prebuiltIndex?: Record<string, EpicentrDictionaryAttribute>
   ) => {
-    const idx = buildDictionaryIndex(rawDict);
+    const idx = prebuiltIndex || buildDictionaryIndex(rawDict);
     setDictionaryIndex(idx);
     setDictionaryFileName(filename);
   };
@@ -764,9 +774,13 @@ export function App() {
   // When animation finishes, run engine
   const handleProcessingComplete = () => {
     const result = runEpicentrFillingEngine(rawRows, columns, dictionaryIndex, settings);
+    const sanitizedErrors = cleanStaleErrors(result.report.errors || []);
     setProcessedRows(result.processedRows);
-    setReport(result.report);
-    setEngineErrors(result.report.errors || []);
+    setReport({
+      ...result.report,
+      errors: sanitizedErrors
+    });
+    setEngineErrors(sanitizedErrors);
     setWorkflowState('completed');
     setActiveTab('report');
 

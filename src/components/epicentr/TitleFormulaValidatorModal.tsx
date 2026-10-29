@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { formatEpicentrTitle } from '../../services/epicentrEngine';
 import { EPICENTR_SYSTEM_PROMPT } from '../../constants/epicentrPrompt';
+import { callGeminiDirect } from '../../services/geminiClientDirect';
 
 interface TitleFormulaValidatorModalProps {
   isOpen: boolean;
@@ -57,14 +58,7 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
   const handleAiGenerateTitle = async () => {
     setIsAiGenerating(true);
     try {
-      const response = await fetch('/api/gemini/title', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'gemini-3.1-flash-lite',
-          systemInstruction: EPICENTR_SYSTEM_PROMPT,
-          rawTitle: testTitle,
-          prompt: `Ти — головний редактор контенту маркетплейсу Епіцентр.
+      const prompt = `Ти — головний редактор контенту маркетплейсу Епіцентр.
 Перетвори та нормалізуй наступну назву товару за офіційною формулою Епіцентру:
 <Тип товару> <Особливість> <Бренд> <Модель> <Ключова характеристика/Розмір> <Колір> (<Артикул>)
 Правила:
@@ -74,16 +68,17 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
 - Довжина до 150 символів. Артикул у дужках наприкінці.
 - Відповідай ТІЛЬКИ фінальною назвою без коментарів.
 
-Поточна назва: ${testTitle}`
-        })
+Поточна назва: ${testTitle}`;
+
+      const aiRes = await callGeminiDirect(prompt, {
+        systemInstruction: EPICENTR_SYSTEM_PROMPT,
+        maxOutputTokens: 120
       });
-      if (response.ok) {
-        const data = await response.json();
-        const generated = data?.text?.trim().replace(/^["']|["']$/g, '');
-        if (generated) {
-          setTestTitle(generated);
-          return;
-        }
+
+      const generated = aiRes.text?.trim().replace(/^["']|["']$/g, '');
+      if (generated) {
+        setTestTitle(generated);
+        return;
       }
       handleAutoFix();
     } catch (e: any) {

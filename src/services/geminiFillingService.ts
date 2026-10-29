@@ -20,6 +20,7 @@ import {
   normalizeForDictionaryComparison,
   stripHtmlToCleanText
 } from './epicentrEngine';
+import { callGeminiDirect } from './geminiClientDirect';
 
 export const MISSING_API_KEY_EVENT = 'epic_ai_missing_key_warning';
 
@@ -334,29 +335,18 @@ export async function generateAiEpicentrTitle(
 Дані товару:
 ${JSON.stringify(productRow, null, 2)}`;
 
-    const response = await fetch('/api/gemini/title', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gemini-3.1-flash-lite',
-        prompt,
-        systemInstruction: EPICENTR_SYSTEM_PROMPT,
-        rawTitle,
-        sku,
-        brand
-      })
+    const aiRes = await callGeminiDirect(prompt, {
+      systemInstruction: EPICENTR_SYSTEM_PROMPT,
+      maxOutputTokens: 120
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      const text = data?.text?.trim();
-      if (text) {
-        const cleanTitle = text.replace(/^["']|["']$/g, '').trim();
-        return {
-          title: cleanTitle,
-          isFallback: data.isFallback || false
-        };
-      }
+    const text = aiRes.text?.trim();
+    if (text) {
+      const cleanTitle = text.replace(/^["']|["']$/g, '').trim();
+      return {
+        title: cleanTitle,
+        isFallback: false
+      };
     }
   } catch (err: any) {
     console.warn('Gemini AI title generation notice, switching to rule-based fallback:', err);
@@ -828,50 +818,98 @@ export async function researchProductAttributesWithWebGrounding(
   });
 
   try {
-    const response = await fetch('/api/gemini/grounded-attribute-research', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        searchQuery,
-        productTitle: cleanProductTitleNoise(productTitle, brand, vendorCode),
-        brand,
-        vendorCode,
-        missingAttributes: missingAttributesPayload,
-        systemInstruction: OFFICIAL_CATALOG_SYSTEM_INSTRUCTION,
-        responseMimeType: 'application/json',
-        maxOutputTokens: 350
-      })
+    const cleanTitle = cleanProductTitleNoise(productTitle, brand, vendorCode);
+    const researchPrompt = `${OFFICIAL_CATALOG_SYSTEM_INSTRUCTION}
+
+Знайди характеристики товару через Google Search у перевірених джерелах.
+Пошуковий запит: ${searchQuery}
+Назва товару: ${cleanTitle}
+Бренд: ${brand || 'Не вказано'}
+Артикул / Модель: ${vendorCode || 'Не вказано'}
+
+Потрібно заповнити такі характеристики товару:
+${missingAttributesPayload
+  .map(
+    a =>
+      `- "${a.originalName}" (${a.type})${
+        a.allowedValues ? ` [Дозволені значення: ${a.allowedValues.slice(0, 30).join(', ')}]` : ''
+      }`
+  )
+  .join('\n')}
+
+Поверни результат строго у форматі JSON:
+{
+  "attributes": {
+    "Точна назва колонки": "Знайдене значення"
+  },
+  "explanations": {
+    "Точна назва колонки": "Коротке джерело або обґрунтування"
+  }
+}`;
+
+    const aiRes = await callGeminiDirect(researchPrompt, {
+      systemInstruction: OFFICIAL_CATALOG_SYSTEM_INSTRUCTION,
+      tools: [{ googleSearch: {} }],
+      responseMimeType: 'application/json',
+      maxOutputTokens: 350
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      result.sources = Array.isArray(data.sources) ? data.sources : result.sources;
-      result.searchEntryPoint = data.searchEntryPoint || null;
-      result.explanations = {
-        ...(result.explanations || {}),
-        ...(data.explanations || {})
-      };
+    if (aiRes.sources && aiRes.sources.length > 0) {
+      result.sources = aiRes.sources;
+    }
+    if (aiRes.searchEntryPoint) {
+      result.searchEntryPoint = aiRes.searchEntryPoint;
+    }
 
-      if (data.attributes && typeof data.attributes === 'object') {
-        const mappedFromWeb = mapAttributesToColumns(data.attributes, remainingEmptyCols, dictionaryIndex);
+    if (aiRes.text) {
+      let rawData: any = null;
+      const cleanedText = aiRes.text
+        .replace(/^[\s\S]*?```(?:json)?\s*/i, '')
+        .replace(/\s*```[\s\S]*$/, '')
+        .trim();
+      try {
+        rawData = JSON.parse(cleanedText);
+      } catch {
+        const pairRegex = /"((?:[^"\\]|\\.)+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+        let m: RegExpExecArray | null;
+        const attrObj: Record<string, string> = {};
+        while ((m = pairRegex.exec(cleanedText)) !== null) {
+          const k = m[1].replace(/\\"/g, '"').trim();
+          const v = m[2].replace(/\\"/g, '"').trim();
+          if (k && k !== 'attributes' && k !== 'explanations') {
+            attrObj[k] = v;
+          }
+        }
+        if (Object.keys(attrObj).length > 0) {
+          rawData = { attributes: attrObj };
+        }
+      }
+
+      if (rawData && rawData.attributes && typeof rawData.attributes === 'object') {
+        const mappedFromWeb = mapAttributesToColumns(rawData.attributes, remainingEmptyCols, dictionaryIndex);
         result.suggestedValues = {
           ...result.suggestedValues,
           ...mappedFromWeb
         };
 
-        // Save found characteristics to localStorage under "[Бренд]_[Артикул/Модель]"
+        if (rawData.explanations && typeof rawData.explanations === 'object') {
+          result.explanations = {
+            ...(result.explanations || {}),
+            ...rawData.explanations
+          };
+        }
+
         if (Object.keys(mappedFromWeb).length > 0) {
           saveCachedSearchResult(cacheKey, {
             attributes: mappedFromWeb,
-            explanations: data.explanations || {},
+            explanations: result.explanations || {},
             sources: result.sources || [],
             timestamp: Date.now()
           });
         }
       }
-    } else {
-      const errData = await response.json().catch(() => ({}));
-      result.error = errData.error || 'Помилка виконання пошукового розшуку';
+    } else if (aiRes.error) {
+      result.error = aiRes.error;
     }
   } catch (err: any) {
     console.warn('Failed to execute Google Search grounded attribute research:', err);
@@ -1009,22 +1047,14 @@ ${JSON.stringify(productRow, null, 2)}
   }
 }`;
 
-      const response = await fetch('/api/gemini/enrich-attributes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'gemini-3.1-flash-lite',
-          prompt,
-          systemInstruction: UNIVERSAL_PIM_SYSTEM_PROMPT,
-          responseMimeType: 'application/json',
-          maxOutputTokens: 350
-        })
+      const aiRes = await callGeminiDirect(prompt, {
+        systemInstruction: UNIVERSAL_PIM_SYSTEM_PROMPT,
+        responseMimeType: 'application/json',
+        maxOutputTokens: 350
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const text = data?.text;
-        if (text && typeof text === 'string') {
+      const text = aiRes.text;
+      if (text && typeof text === 'string') {
           let rawSuggested: Record<string, string> = {};
           const cleanedText = text
             .replace(/^[\s\S]*?```(?:json)?\s*/i, '')
@@ -1052,7 +1082,6 @@ ${JSON.stringify(productRow, null, 2)}
             finalSuggested = { ...finalSuggested, ...mappedAi };
           }
         }
-      }
     } catch (err) {
       console.warn('Gemini AI call failed, using local PIM heuristic extraction:', err);
     }

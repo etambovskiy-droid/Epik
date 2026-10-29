@@ -4,6 +4,7 @@
  */
 
 import { SourceProduct } from './xmlFeedParserService';
+import { callGeminiDirect } from './geminiClientDirect';
 
 export interface EnrichmentProgress {
   current: number;
@@ -99,18 +100,13 @@ export class GeminiFeedEnrichmentService {
   "description_ua": "Зрозумілий, грамотний опис товару українською мовою з ключовими перевагами"
 }`;
 
-      const response = await fetch('/api/gemini/enrich-feed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'gemini-3.5-flash-lite',
-          prompt
-        })
+      const aiRes = await callGeminiDirect(prompt, {
+        responseMimeType: 'application/json',
+        maxOutputTokens: 350
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const rawText = data?.text?.trim() || '{}';
+      if (aiRes.text) {
+        const rawText = aiRes.text.trim();
         const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
         const parsed = JSON.parse(cleaned);
 

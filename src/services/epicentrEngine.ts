@@ -521,6 +521,107 @@ export function buildDictionaryIndex(
 }
 
 /**
+ * Chunked Asynchronous Dictionary Indexer:
+ * Processes massive Epicentr attribute dictionaries (50k-90k+ rows) in batches of 2500 items
+ * yielding to the browser event loop via setTimeout(..., 0) to prevent UI freezing and "Page unresponsive" dialogs.
+ */
+export async function buildDictionaryIndexAsync(
+  rawDict: Record<string, string[]>,
+  onProgress?: (progress: { current: number; total: number; percent: number }) => void
+): Promise<Record<string, EpicentrDictionaryAttribute>> {
+  const result: Record<string, EpicentrDictionaryAttribute> = {};
+  const entries = Object.entries(rawDict);
+
+  let totalItems = 0;
+  for (const [, list] of entries) {
+    totalItems += list.length;
+  }
+  totalItems = Math.max(totalItems, 1);
+
+  let processedCount = 0;
+  let batchCounter = 0;
+  const CHUNK_SIZE = 2500;
+
+  for (const [attrName, allowedList] of entries) {
+    const cleanAttrName = normalizeAttributeKey(attrName, false);
+    const strippedUnitAttrName = normalizeAttributeKey(attrName, true);
+    const decodedMap: Record<string, string> = {};
+    const synonyms: Record<string, string> = {};
+    const sanitizedAllowedList: string[] = [];
+
+    for (const item of allowedList) {
+      if (!item) continue;
+      const rawVal = String(item).replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
+      if (!rawVal) continue;
+      sanitizedAllowedList.push(rawVal);
+
+      const lowerRaw = rawVal.toLowerCase().trim();
+      const exactNorm = normalizeForDictionaryComparison(rawVal, 'exact');
+      const relaxedNorm = normalizeForDictionaryComparison(rawVal, 'relaxed');
+      const encodedNorm = encodeHtmlEntities(rawVal).toLowerCase().trim();
+
+      decodedMap[lowerRaw] = rawVal;
+      decodedMap[exactNorm] = rawVal;
+      if (relaxedNorm) {
+        decodedMap[relaxedNorm] = rawVal;
+      }
+      if (encodedNorm) {
+        decodedMap[encodedNorm] = rawVal;
+      }
+
+      const compact = exactNorm.replace(/\s+/g, '');
+      if (compact && !decodedMap[compact]) {
+        decodedMap[compact] = rawVal;
+      }
+
+      const parenMatch = exactNorm.match(/^([^()]+)\(([^()]+)\)$/);
+      if (parenMatch) {
+        const beforeParen = parenMatch[1].trim();
+        const insideParen = parenMatch[2].trim();
+        if (beforeParen.length >= 3 && !decodedMap[beforeParen]) {
+          decodedMap[beforeParen] = rawVal;
+        }
+        if (insideParen.length >= 3 && !decodedMap[insideParen]) {
+          decodedMap[insideParen] = rawVal;
+        }
+      }
+
+      processedCount++;
+      batchCounter++;
+
+      if (batchCounter >= CHUNK_SIZE) {
+        batchCounter = 0;
+        if (onProgress) {
+          const percent = Math.min(99, Math.round((processedCount / totalItems) * 100));
+          onProgress({ current: processedCount, total: totalItems, percent });
+        }
+        // Yield to browser event loop
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+
+    const entry: EpicentrDictionaryAttribute = {
+      attributeName: attrName,
+      cleanAttributeName: cleanAttrName,
+      allowedValues: sanitizedAllowedList,
+      decodedValuesMap: decodedMap,
+      synonymsMap: synonyms
+    };
+
+    result[cleanAttrName] = entry;
+    if (strippedUnitAttrName && !result[strippedUnitAttrName]) {
+      result[strippedUnitAttrName] = entry;
+    }
+  }
+
+  if (onProgress) {
+    onProgress({ current: totalItems, total: totalItems, percent: 100 });
+  }
+
+  return result;
+}
+
+/**
  * Lookup dictionary attribute by column name (supports multiline headers and unit stripping)
  */
 export function findDictionaryAttr(

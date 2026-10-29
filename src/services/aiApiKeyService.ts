@@ -140,27 +140,8 @@ export function validateApiKeyFormat(_key: string): {
   return { isValid: true };
 }
 
-export async function testApiKeyConnection(_key: string): Promise<{ success: boolean; message: string }> {
-  try {
-    const response = await fetch('/api/gemini/title', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gemini-3.1-flash-lite',
-        prompt: 'Ping test. Reply OK.'
-      })
-    });
-    if (!response.ok) {
-      return { success: false, message: 'Серверний маршрут Gemini повернув помилку' };
-    }
-    return {
-      success: true,
-      message: "З'єднання з серверним Gemini API успішно підтверджено!"
-    };
-  } catch (error: any) {
-    return {
-      success: false,
-      message: `Помилка мережі: ${error.message}`
-    };
-  }
+import { testGeminiApiKeyDirect } from './geminiClientDirect';
+
+export async function testApiKeyConnection(key: string): Promise<{ success: boolean; message: string }> {
+  return testGeminiApiKeyDirect(key);
 }

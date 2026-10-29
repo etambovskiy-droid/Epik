@@ -24,6 +24,7 @@ import {
   deleteGeneratedImageFromFirestore,
   subscribeUserImages
 } from '../../firebase';
+import { generateImageDirect } from '../../services/geminiClientDirect';
 import { UploadedPhotoItem } from './FileUploadSection';
 
 interface ImageStudioModalProps {
@@ -96,20 +97,15 @@ export const ImageStudioModal: React.FC<ImageStudioModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const response = await fetch('/api/gemini/image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: prompt.trim(),
-          aspectRatio,
-          imageSize,
-          sourceImageBase64,
-          sourceImageMimeType
-        })
+      const data = await generateImageDirect({
+        prompt: prompt.trim(),
+        aspectRatio,
+        imageSize,
+        sourceImageBase64,
+        sourceImageMimeType
       });
 
-      const data = await response.json();
-      if (!response.ok || !data.imageUrl) {
+      if (data.error || !data.imageUrl) {
         setErrorMsg(data.error || 'Не вдалося згенерувати зображення');
         return;
       }

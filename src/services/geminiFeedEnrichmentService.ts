@@ -101,6 +101,7 @@ export class GeminiFeedEnrichmentService {
 }`;
 
       const aiRes = await callGeminiDirect(prompt, {
+        model: 'gemini-3.5-flash-lite',
         responseMimeType: 'application/json',
         maxOutputTokens: 350
       });

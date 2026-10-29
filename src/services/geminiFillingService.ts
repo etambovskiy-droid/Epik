@@ -336,6 +336,7 @@ export async function generateAiEpicentrTitle(
 ${JSON.stringify(productRow, null, 2)}`;
 
     const aiRes = await callGeminiDirect(prompt, {
+      model: 'gemini-3.5-flash-lite',
       systemInstruction: EPICENTR_SYSTEM_PROMPT,
       maxOutputTokens: 120
     });
@@ -848,6 +849,7 @@ ${missingAttributesPayload
 }`;
 
     const aiRes = await callGeminiDirect(researchPrompt, {
+      model: 'gemini-3.5-flash-lite',
       systemInstruction: OFFICIAL_CATALOG_SYSTEM_INSTRUCTION,
       tools: [{ googleSearch: {} }],
       responseMimeType: 'application/json',
@@ -1048,6 +1050,7 @@ ${JSON.stringify(productRow, null, 2)}
 }`;
 
       const aiRes = await callGeminiDirect(prompt, {
+        model: 'gemini-3.5-flash-lite',
         systemInstruction: UNIVERSAL_PIM_SYSTEM_PROMPT,
         responseMimeType: 'application/json',
         maxOutputTokens: 350

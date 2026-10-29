@@ -5,7 +5,7 @@
 
 import { getStoredApiKey } from './aiApiKeyService';
 
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
 
 /**
  * Returns effective Gemini API key from store/localStorage or environment variables
@@ -70,7 +70,7 @@ export async function testGeminiApiKeyDirect(
     if (response.ok) {
       return {
         success: true,
-        message: `З'єднання з Google AI Studio (${model}) успішно підтверджено!`,
+        message: "З'єднання успішно підтверджено! Модель gemini-3.5-flash-lite працює.",
         modelUsed: model
       };
     }

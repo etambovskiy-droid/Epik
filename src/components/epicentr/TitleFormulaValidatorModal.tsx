@@ -71,6 +71,7 @@ export const TitleFormulaValidatorModal: React.FC<TitleFormulaValidatorModalProp
 Поточна назва: ${testTitle}`;
 
       const aiRes = await callGeminiDirect(prompt, {
+        model: 'gemini-3.5-flash-lite',
         systemInstruction: EPICENTR_SYSTEM_PROMPT,
         maxOutputTokens: 120
       });

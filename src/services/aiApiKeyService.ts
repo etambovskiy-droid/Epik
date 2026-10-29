@@ -140,8 +140,78 @@ export function validateApiKeyFormat(_key: string): {
   return { isValid: true };
 }
 
-import { testGeminiApiKeyDirect } from './geminiClientDirect';
-
 export async function testApiKeyConnection(key: string): Promise<{ success: boolean; message: string }> {
-  return testGeminiApiKeyDirect(key);
+  const trimmed = (key || '').trim();
+  if (!trimmed) {
+    return {
+      success: false,
+      message: 'Ключ API не вказано. Будь ласка, введіть валідний Google AI Studio API Key.'
+    };
+  }
+
+  const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': trimmed
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: 'Ping test. Reply with OK.' }]
+          }
+        ],
+        generationConfig: {
+          maxOutputTokens: 10,
+          temperature: 0.1
+        }
+      })
+    });
+
+    if (response.ok) {
+      return {
+        success: true,
+        message: "З'єднання успішно підтверджено! Модель gemini-3.5-flash-lite працює."
+      };
+    }
+
+    let errorDetail = '';
+    try {
+      const errJson = await response.json();
+      errorDetail = errJson?.error?.message || '';
+    } catch {
+      // ignore
+    }
+
+    if (response.status === 400 || response.status === 403) {
+      return {
+        success: false,
+        message: `Недійсний API Key або доступ заблоковано Google AI Studio (${response.status})${
+          errorDetail ? `: ${errorDetail}` : ''
+        }`
+      };
+    }
+
+    if (response.status === 429) {
+      return {
+        success: false,
+        message: `Перевищено ліміт запитів Gemini API (429 Rate limit / Quota exceeded)${
+          errorDetail ? `: ${errorDetail}` : ''
+        }`
+      };
+    }
+
+    return {
+      success: false,
+      message: `Google API повернув помилку HTTP ${response.status}${errorDetail ? `: ${errorDetail}` : ''}`
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: `Помилка мережевого з'єднання з Google Generative Language API: ${error?.message || error}`
+    };
+  }
 }

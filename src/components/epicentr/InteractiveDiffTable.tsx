@@ -55,6 +55,12 @@ interface InteractiveDiffTableProps {
   dictionaryIndex?: Record<string, EpicentrDictionaryAttribute>;
   onOpenApiKeySettings?: () => void;
   onUpdateCellValue?: (rowIdx: number, columnName: string, newValue: string) => void;
+  onUpdateRowValues?: (
+    rowIdx: number,
+    updates: Record<string, string>,
+    sources?: { uri: string; title: string }[],
+    explanations?: Record<string, string>
+  ) => void;
 }
 
 export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
@@ -64,7 +70,8 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   originalFileName = null,
   dictionaryIndex,
   onOpenApiKeySettings,
-  onUpdateCellValue
+  onUpdateCellValue,
+  onUpdateRowValues
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<
@@ -94,12 +101,15 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
 
   // Filter rows based on search and selected pill
   const filteredRows = rows.filter(r => {
+    if (!r) return false;
     // Search query
+    const sQuery = (searchQuery || '').toLowerCase().trim();
     const matchSearch =
-      r.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.titleOriginal.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (r.vendorCode && r.vendorCode.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (r.brand && r.brand.toLowerCase().includes(searchQuery.toLowerCase()));
+      !sQuery ||
+      String(r.id || '').toLowerCase().includes(sQuery) ||
+      String(r.titleOriginal || '').toLowerCase().includes(sQuery) ||
+      String(r.vendorCode || '').toLowerCase().includes(sQuery) ||
+      String(r.brand || '').toLowerCase().includes(sQuery);
 
     if (!matchSearch) return false;
 
@@ -108,19 +118,19 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
       return true;
     }
     if (filterMode === 'unfilled') {
-      return r.unfilledRequiredFields && r.unfilledRequiredFields.length > 0;
+      return Array.isArray(r.unfilledRequiredFields) && r.unfilledRequiredFields.length > 0;
     }
     if (filterMode === 'agent_filled') {
-      return Object.values(r.diffs).some(d => d.source !== 'already_filled' && d.newValue);
+      return Object.values(r.diffs || {}).some(d => d && d.source !== 'already_filled' && d.newValue);
     }
     if (filterMode === 'photo_filled') {
-      return Object.values(r.diffs).some(d => d.source === 'photo');
+      return Object.values(r.diffs || {}).some(d => d && d.source === 'photo');
     }
     if (filterMode === 'lang_fixes') {
-      return r.languageCorrections && r.languageCorrections.length > 0;
+      return Array.isArray(r.languageCorrections) && r.languageCorrections.length > 0;
     }
     if (filterMode === 'brand_other') {
-      return r.isBrandOther;
+      return Boolean(r.isBrandOther);
     }
     return true;
   });
@@ -301,7 +311,9 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
           setAiProgressMessage(msg);
         },
         onItemEnriched: (item, result) => {
-          if (result.suggestedValues && Object.keys(result.suggestedValues).length > 0) {
+          if (onUpdateRowValues && result.suggestedValues && Object.keys(result.suggestedValues).length > 0) {
+            onUpdateRowValues(item.idx, result.suggestedValues, result.sources, result.explanations);
+          } else if (result.suggestedValues && Object.keys(result.suggestedValues).length > 0) {
             for (const [colName, val] of Object.entries(result.suggestedValues)) {
               if (val && onUpdateCellValue) {
                 onUpdateCellValue(item.idx, colName, String(val));
@@ -599,7 +611,7 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            Заповнені агентом ({rows.filter(r => Object.values(r.diffs).some(d => d.source !== 'already_filled' && d.newValue)).length})
+            Заповнені агентом ({rows.filter(r => Object.values(r.diffs || {}).some(d => d && d.source !== 'already_filled' && d.newValue)).length})
           </button>
 
           <button
@@ -611,7 +623,7 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            Визначені за фото ({rows.filter(r => Object.values(r.diffs).some(d => d.source === 'photo')).length})
+            Визначені за фото ({rows.filter(r => Object.values(r.diffs || {}).some(d => d && d.source === 'photo')).length})
           </button>
 
           <button
@@ -783,13 +795,13 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                     {displayCols
                       .filter(c => !c.cleanName.toLowerCase().includes('назва') && !c.cleanName.toLowerCase().includes('артикул') && !c.cleanName.toLowerCase().includes('id') && !c.cleanName.toLowerCase().includes('фото') && !c.cleanName.toLowerCase().includes('опис'))
                       .map(col => {
-                        const val = pRow.updatedRow[col.originalName];
-                        const diff = pRow.diffs[col.originalName];
+                        const val = pRow.updatedRow ? pRow.updatedRow[col.originalName] : undefined;
+                        const diff = pRow.diffs ? pRow.diffs[col.originalName] : undefined;
                         const isMandatory = col.isRequired;
-                        const isEmpty = !val || String(val).trim() === '';
+                        const isEmpty = val === undefined || val === null || String(val).trim() === '';
                         const groundingExplanation =
-                          webGroundingSourcesMap[pRow.rowIdx]?.explanations?.[col.originalName] ||
-                          webGroundingSourcesMap[pRow.rowIdx]?.explanations?.[col.cleanName];
+                          webGroundingSourcesMap?.[pRow.rowIdx]?.explanations?.[col.originalName] ||
+                          webGroundingSourcesMap?.[pRow.rowIdx]?.explanations?.[col.cleanName];
 
                         return (
                           <td key={col.originalName} className="py-2.5 px-3">
@@ -922,18 +934,21 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                                   Знайдені веб-джерела (Google Grounding):
                                 </span>
                                 <div className="flex flex-wrap gap-1.5">
-                                  {webGroundingSourcesMap[pRow.rowIdx].sources.slice(0, 3).map((src, sIdx) => (
-                                    <a
-                                      key={sIdx}
-                                      href={src.uri}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 hover:text-blue-900 text-[10px] font-medium"
-                                    >
-                                      <ExternalLink className="w-2.5 h-2.5" />
-                                      <span className="max-w-[140px] truncate">{src.title}</span>
-                                    </a>
-                                  ))}
+                                  {webGroundingSourcesMap[pRow.rowIdx].sources
+                                    .filter(src => src && src.uri)
+                                    .slice(0, 3)
+                                    .map((src, sIdx) => (
+                                      <a
+                                        key={sIdx}
+                                        href={src.uri}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700 hover:text-blue-900 text-[10px] font-medium"
+                                      >
+                                        <ExternalLink className="w-2.5 h-2.5" />
+                                        <span className="max-w-[140px] truncate">{src.title || src.uri}</span>
+                                      </a>
+                                    ))}
                                 </div>
                               </div>
                             )}

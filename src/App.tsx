@@ -914,6 +914,86 @@ export function App() {
     });
   };
 
+  // Atomic batch update for all attributes of a single product (used by AI enrichment)
+  const handleUpdateRowValues = (
+    rowIdx: number,
+    updates: Record<string, string>,
+    sources?: { uri: string; title: string }[],
+    explanations?: Record<string, string>
+  ) => {
+    if (!updates || Object.keys(updates).length === 0) return;
+
+    // Normalize values with dictionary
+    const sanitizedUpdates: Record<string, string> = {};
+    for (const [colName, rawVal] of Object.entries(updates)) {
+      if (!rawVal) continue;
+      const col = columns.find(c => c.originalName === colName || c.cleanName === colName);
+      let finalVal = String(rawVal).trim();
+      if (col && (col.type === 'select' || col.type === 'multiselect') && finalVal !== '') {
+        const dictAttr = findDictionaryAttr(dictionaryIndex, col.originalName || col.cleanName);
+        if (dictAttr && dictAttr.allowedValues.length > 0) {
+          const enforced = enforceDictionaryValue(finalVal, col.type, dictAttr);
+          finalVal = enforced !== null ? enforced : '';
+        }
+      }
+      if (finalVal) {
+        sanitizedUpdates[colName] = finalVal;
+        if (col && col.originalName !== colName) {
+          sanitizedUpdates[col.originalName] = finalVal;
+        }
+      }
+    }
+
+    if (Object.keys(sanitizedUpdates).length === 0) return;
+
+    setProcessedRows(prev => {
+      const updated = [...prev];
+      if (updated[rowIdx]) {
+        const curRow = updated[rowIdx];
+        const newUpdatedRow = { ...(curRow.updatedRow || {}), ...sanitizedUpdates };
+        const newDiffs = { ...(curRow.diffs || {}) };
+
+        for (const [colName, val] of Object.entries(sanitizedUpdates)) {
+          const col = columns.find(c => c.originalName === colName);
+          newDiffs[colName] = {
+            colIndex: col?.colIndex ?? 0,
+            columnName: colName,
+            isRequired: col?.isRequired ?? false,
+            type: col?.type ?? 'string',
+            oldValue: String(curRow.updatedRow?.[colName] || ''),
+            newValue: val,
+            source: sources && sources.length > 0 ? 'internet_search' : 'already_filled',
+            confidence: 0.95,
+            note: explanations?.[colName] || 'AI-дозаповнення'
+          };
+        }
+
+        const remainingUnfilled = (curRow.unfilledRequiredFields || []).filter(
+          f => !sanitizedUpdates[f]
+        );
+
+        updated[rowIdx] = {
+          ...curRow,
+          updatedRow: newUpdatedRow,
+          diffs: newDiffs,
+          unfilledRequiredFields: remainingUnfilled
+        };
+      }
+      return updated;
+    });
+
+    setRawRows(prev => {
+      const updated = [...prev];
+      if (updated[rowIdx]) {
+        updated[rowIdx] = {
+          ...updated[rowIdx],
+          ...sanitizedUpdates
+        };
+      }
+      return updated;
+    });
+  };
+
   // Reset to start over
   const handleReset = () => {
     setWorkflowState('upload');
@@ -1232,6 +1312,7 @@ export function App() {
                     setIsApiKeyModalOpen(true);
                   }}
                   onUpdateCellValue={handleUpdateCellValue}
+                  onUpdateRowValues={handleUpdateRowValues}
                 />
               </ErrorBoundary>
             )}

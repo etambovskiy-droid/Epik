@@ -849,10 +849,9 @@ ${missingAttributesPayload
 }`;
 
     const aiRes = await callGeminiDirect(researchPrompt, {
-      model: 'gemini-3.5-flash-lite',
+      model: 'gemini-3.8-flash',
       systemInstruction: OFFICIAL_CATALOG_SYSTEM_INSTRUCTION,
       tools: [{ googleSearch: {} }],
-      responseMimeType: 'application/json',
       maxOutputTokens: 350
     });
 

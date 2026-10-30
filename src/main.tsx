@@ -40,17 +40,39 @@ if (typeof Node !== 'undefined' && Node.prototype) {
 // Prevents unhandled background promises or runtime errors from crashing the page into a white screen.
 window.addEventListener('error', (event) => {
   const msg = String(event?.message || '').toLowerCase();
+  const filename = String(event?.filename || '').toLowerCase();
   if (
     msg.includes('resizeobserver loop') ||
     msg.includes('script error') ||
-    msg.includes('extension context invalidated')
+    msg.includes('extension context invalidated') ||
+    msg.includes('websocket') ||
+    msg.includes('closed without opened') ||
+    filename.includes('@vite/client') ||
+    filename.includes('vite/client')
   ) {
+    event.preventDefault();
     return;
   }
   console.error('[Global App Error Intercepted]:', event.error || event.message);
 });
 
 window.addEventListener('unhandledrejection', (event) => {
+  const reason = event?.reason;
+  const reasonMsg = String(reason?.message || reason || '').toLowerCase();
+  const stack = String(reason?.stack || '').toLowerCase();
+
+  // Per environment constraints: HMR is disabled in AI Studio - ignore Vite HMR WebSocket rejections
+  if (
+    reasonMsg.includes('websocket') ||
+    reasonMsg.includes('closed without opened') ||
+    reasonMsg.includes('signal is aborted') ||
+    stack.includes('@vite/client') ||
+    stack.includes('vite/client')
+  ) {
+    event.preventDefault();
+    return;
+  }
+
   console.error('[Global Unhandled Rejection Intercepted]:', event.reason);
   // Prevent browser default crash behavior
   event.preventDefault();

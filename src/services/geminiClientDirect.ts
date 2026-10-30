@@ -143,32 +143,36 @@ export async function callGeminiDirect(
   const key = options?.apiKey || getEffectiveApiKey(options?.storeId);
   const model = options?.model || DEFAULT_GEMINI_MODEL;
 
-  // If no direct key is configured, fallback to local backend if running in dev mode
+  // If no direct key is configured, fallback to backend proxy (/api/gemini/...)
   if (!key) {
-    // Check if we are running in local development environment
-    const isLocalhost =
-      typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-
-    if (isLocalhost) {
-      try {
-        const localRes = await fetch('/api/gemini/title', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+    try {
+      const isSearchTool = options?.tools && options.tools.some((t: any) => t.googleSearch);
+      const proxyEndpoint = isSearchTool ? '/api/gemini/search' : '/api/gemini/title';
+      const proxyBody = isSearchTool
+        ? { query: prompt, maxOutputTokens: options?.maxOutputTokens || 350 }
+        : {
             model,
             prompt,
             systemInstruction: options?.systemInstruction,
             maxOutputTokens: options?.maxOutputTokens || 350
-          })
-        });
-        if (localRes.ok) {
-          const data = await localRes.json();
-          return { text: data.text || '' };
-        }
-      } catch {
-        // Fall through to missing key error
+          };
+
+      const localRes = await fetch(proxyEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(proxyBody)
+      });
+
+      if (localRes.ok) {
+        const data = await localRes.json();
+        return {
+          text: data.text || '',
+          sources: data.sources || [],
+          searchEntryPoint: data.searchEntryPoint || null
+        };
       }
+    } catch {
+      // Fall through to missing key error
     }
 
     return {
@@ -177,7 +181,10 @@ export async function callGeminiDirect(
     };
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  // Google Search Grounding requires gemini-3.8-flash for best stability
+  const hasTools = Boolean(options?.tools && options.tools.length > 0);
+  const effectiveModel = hasTools && model === 'gemini-3.5-flash-lite' ? 'gemini-3.8-flash' : model;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${effectiveModel}:generateContent`;
 
   const payload: any = {
     contents: [
@@ -191,7 +198,8 @@ export async function callGeminiDirect(
     }
   };
 
-  if (options?.responseMimeType) {
+  // Google API throws 400 if responseMimeType is application/json together with tools (e.g. googleSearch)
+  if (options?.responseMimeType && !hasTools) {
     payload.generationConfig.responseMimeType = options.responseMimeType;
   }
 
@@ -201,8 +209,8 @@ export async function callGeminiDirect(
     };
   }
 
-  if (options?.tools && options.tools.length > 0) {
-    payload.tools = options.tools;
+  if (hasTools) {
+    payload.tools = options?.tools;
   }
 
   try {

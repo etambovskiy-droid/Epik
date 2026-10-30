@@ -24,17 +24,22 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
-// Suppress benign WebChannel / fetch AbortError notifications during stream resets or unmounts
+// Suppress benign WebChannel / fetch AbortError notifications and Vite HMR WebSocket errors
 if (typeof window !== 'undefined') {
   window.addEventListener(
     'unhandledrejection',
     (event) => {
       const reason = event?.reason;
-      const msg = String(reason?.message || reason || '');
+      const msg = String(reason?.message || reason || '').toLowerCase();
+      const stack = String(reason?.stack || '').toLowerCase();
       if (
         reason?.name === 'AbortError' ||
         msg.includes('signal is aborted without reason') ||
-        msg.includes('The user aborted a request')
+        msg.includes('the user aborted a request') ||
+        msg.includes('websocket') ||
+        msg.includes('closed without opened') ||
+        stack.includes('@vite/client') ||
+        stack.includes('vite/client')
       ) {
         event.preventDefault();
         event.stopPropagation();

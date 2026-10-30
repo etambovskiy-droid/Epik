@@ -52,11 +52,14 @@ export const ErrorTrackingMonitor: React.FC<ErrorTrackingMonitorProps> = ({
 
   // Filtered list
   const filteredErrors = errors.filter(err => {
+    if (!err) return false;
+    const q = (searchQuery || '').toLowerCase().trim();
     const matchSearch =
-      err.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (err.productId && err.productId.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (err.columnName && err.columnName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (err.technicalDetails && err.technicalDetails.toLowerCase().includes(searchQuery.toLowerCase()));
+      !q ||
+      String(err.message || '').toLowerCase().includes(q) ||
+      String(err.productId || '').toLowerCase().includes(q) ||
+      String(err.columnName || '').toLowerCase().includes(q) ||
+      String(err.technicalDetails || '').toLowerCase().includes(q);
 
     if (!matchSearch) return false;
 

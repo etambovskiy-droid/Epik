@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -23,7 +24,8 @@ function getAiClient(): GoogleGenAI {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
+  const httpServer = http.createServer(app);
 
   // Allow larger payloads for base64 image editing & catalog data
   app.use(express.json({ limit: '25mb' }));
@@ -724,7 +726,10 @@ ${attributesPromptSection}
   // Vite middleware for development, static serving for production
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === 'true' ? false : { server: httpServer }
+      },
       appType: 'spa'
     });
     app.use(vite.middlewares);
@@ -736,7 +741,15 @@ ${attributesPromptSection}
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.on('error', (err: any) => {
+    if (err?.code === 'EADDRINUSE') {
+      console.warn(`[Server] Port ${PORT} already in use. Retrying or awaiting release...`);
+    } else {
+      console.error('[Server error]:', err);
+    }
+  });
+
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }

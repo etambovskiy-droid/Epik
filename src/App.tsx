@@ -91,72 +91,7 @@ import {
   MessageSquare,
   X as CloseIcon
 } from 'lucide-react';
-
-interface ErrorBoundaryState {
-  hasError: boolean;
-  errorMessage: string | null;
-}
-
-class AuthModalErrorBoundary extends React.Component<
-  { children: React.ReactNode; onClose: () => void },
-  ErrorBoundaryState
-> {
-  public state: ErrorBoundaryState = {
-    hasError: false,
-    errorMessage: null
-  };
-
-  public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return {
-      hasError: true,
-      errorMessage: error?.message || 'Непередбачена помилка рендерингу вікна авторизації'
-    };
-  }
-
-  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    console.warn('AuthModal ErrorBoundary caught an error:', error, errorInfo);
-  }
-
-  public render(): React.ReactNode {
-    if (this.state.hasError) {
-      return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-rose-200 p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-rose-700 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-600" />
-                <span>Відновлення вікна авторизації</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => {
-                  this.setState({ hasError: false, errorMessage: null });
-                  this.props.onClose();
-                }}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-              >
-                <CloseIcon className="w-4 h-4" />
-              </button>
-            </div>
-            <p className="text-xs text-slate-600">
-              {this.state.errorMessage || 'Сталася тимчасова помилка відображення.'}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => this.setState({ hasError: false, errorMessage: null })}
-                className="px-3.5 py-2 rounded-xl bg-[#004BB7] hover:bg-blue-700 text-white text-xs font-bold cursor-pointer"
-              >
-                Спробувати знову
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export function cleanStaleErrors(list: EngineErrorEvent[]): EngineErrorEvent[] {
   return (list || []).filter(
@@ -377,11 +312,24 @@ export function App() {
       setIsApiKeyModalOpen(true);
     };
 
+    const handleNavigateHome = () => {
+      setActiveTab('report');
+      setWorkflowState('upload');
+      setIsClarificationOpen(false);
+      setIsAuthModalOpen(false);
+      setIsApiKeyModalOpen(false);
+      setIsImageStudioOpen(false);
+      setIsSearchGroundingOpen(false);
+      setIsChatbotOpen(false);
+    };
+
     window.addEventListener('epic_ai_key_changed', handleKeyChange);
     window.addEventListener(MISSING_API_KEY_EVENT, handleMissingKey);
+    window.addEventListener('epic_navigate_home', handleNavigateHome);
     return () => {
       window.removeEventListener('epic_ai_key_changed', handleKeyChange);
       window.removeEventListener(MISSING_API_KEY_EVENT, handleMissingKey);
+      window.removeEventListener('epic_navigate_home', handleNavigateHome);
     };
   }, []);
 
@@ -1152,13 +1100,17 @@ export function App() {
                 ← Повернутися до обробки Excel
               </button>
             </div>
-            <EpicentrXmlConverterView onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)} />
+            <ErrorBoundary name="Конвертер XML / YML Епіцентр" level="section">
+              <EpicentrXmlConverterView onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)} />
+            </ErrorBoundary>
           </div>
         ) : workflowState === 'processing' ? (
-          <ProcessingProgressView
-            onComplete={handleProcessingComplete}
-            productsCount={rawRows.length}
-          />
+          <ErrorBoundary name="Прогрес обробки товарів" level="section">
+            <ProcessingProgressView
+              onComplete={handleProcessingComplete}
+              productsCount={rawRows.length}
+            />
+          </ErrorBoundary>
         ) : workflowState === 'completed' && report ? (
           <div className="space-y-6">
             {/* View Tabs */}
@@ -1253,77 +1205,87 @@ export function App() {
 
             {/* Tab Views */}
             {activeTab === 'report' && (
-              <SummaryReportView
-                report={report}
-                processedRows={processedRows}
-                columns={columns}
-                rawWorkbook={rawWorkbook}
-                originalFileName={templateFileName}
-                dictionaryIndex={dictionaryIndex}
-                onViewTable={() => setActiveTab('table')}
-                onViewErrors={() => setActiveTab('monitor')}
-              />
+              <ErrorBoundary name="Підсумок та звіт" level="section">
+                <SummaryReportView
+                  report={report}
+                  processedRows={processedRows}
+                  columns={columns}
+                  rawWorkbook={rawWorkbook}
+                  originalFileName={templateFileName}
+                  dictionaryIndex={dictionaryIndex}
+                  onViewTable={() => setActiveTab('table')}
+                  onViewErrors={() => setActiveTab('monitor')}
+                />
+              </ErrorBoundary>
             )}
 
             {activeTab === 'table' && (
-              <InteractiveDiffTable
-                columns={columns}
-                rows={processedRows}
-                rawWorkbook={rawWorkbook}
-                originalFileName={templateFileName}
-                dictionaryIndex={dictionaryIndex}
-                onOpenApiKeySettings={() => {
-                  setMissingKeyWarning(null);
-                  setIsApiKeyModalOpen(true);
-                }}
-                onUpdateCellValue={handleUpdateCellValue}
-              />
+              <ErrorBoundary name="Таблиця характеристик (Diff Table)" level="section">
+                <InteractiveDiffTable
+                  columns={columns}
+                  rows={processedRows}
+                  rawWorkbook={rawWorkbook}
+                  originalFileName={templateFileName}
+                  dictionaryIndex={dictionaryIndex}
+                  onOpenApiKeySettings={() => {
+                    setMissingKeyWarning(null);
+                    setIsApiKeyModalOpen(true);
+                  }}
+                  onUpdateCellValue={handleUpdateCellValue}
+                />
+              </ErrorBoundary>
             )}
 
             {activeTab === 'monitor' && (
-              <ErrorTrackingMonitor
-                errors={engineErrors}
-                onSimulateError={(ev) => setEngineErrors(prev => [ev, ...prev])}
-                onClearErrors={() => setEngineErrors([])}
-              />
+              <ErrorBoundary name="Монітор помилок" level="section">
+                <ErrorTrackingMonitor
+                  errors={engineErrors}
+                  onSimulateError={(ev) => setEngineErrors(prev => [ev, ...prev])}
+                  onClearErrors={() => setEngineErrors([])}
+                />
+              </ErrorBoundary>
             )}
 
             {activeTab === 'upload' && (
-              <FileUploadSection
-                onLoadTemplate={handleLoadTemplate}
-                onLoadDictionary={handleLoadDictionary}
-                onLoadXml={(xmlStr, fName) => setXmlFileName(fName)}
-                onLoadPhotos={(photos) => setUploadedPhotos(photos)}
-                templateFileName={templateFileName}
-                dictionaryFileName={dictionaryFileName}
-                xmlFileName={xmlFileName}
-                uploadedPhotos={uploadedPhotos}
-                columns={columns}
-                rowCount={rawRows.length}
-                onProceedToClarification={() => setIsClarificationOpen(true)}
-                onOpenShare={() => setIsShareOpen(true)}
-                onOpenXmlConverter={() => setActiveTab('converter')}
-                onOpenEpicentrTokenModal={() => setIsEpicentrTokenModalOpen(true)}
-              />
+              <ErrorBoundary name="Завантаження файлів" level="section">
+                <FileUploadSection
+                  onLoadTemplate={handleLoadTemplate}
+                  onLoadDictionary={handleLoadDictionary}
+                  onLoadXml={(xmlStr, fName) => setXmlFileName(fName)}
+                  onLoadPhotos={(photos) => setUploadedPhotos(photos)}
+                  templateFileName={templateFileName}
+                  dictionaryFileName={dictionaryFileName}
+                  xmlFileName={xmlFileName}
+                  uploadedPhotos={uploadedPhotos}
+                  columns={columns}
+                  rowCount={rawRows.length}
+                  onProceedToClarification={() => setIsClarificationOpen(true)}
+                  onOpenShare={() => setIsShareOpen(true)}
+                  onOpenXmlConverter={() => setActiveTab('converter')}
+                  onOpenEpicentrTokenModal={() => setIsEpicentrTokenModalOpen(true)}
+                />
+              </ErrorBoundary>
             )}
           </div>
         ) : (
-          <FileUploadSection
-            onLoadTemplate={handleLoadTemplate}
-            onLoadDictionary={handleLoadDictionary}
-            onLoadXml={(xmlStr, fName) => setXmlFileName(fName)}
-            onLoadPhotos={(photos) => setUploadedPhotos(photos)}
-            templateFileName={templateFileName}
-            dictionaryFileName={dictionaryFileName}
-            xmlFileName={xmlFileName}
-            uploadedPhotos={uploadedPhotos}
-            columns={columns}
-            rowCount={rawRows.length}
-            onProceedToClarification={() => setIsClarificationOpen(true)}
-            onOpenShare={() => setIsShareOpen(true)}
-            onOpenXmlConverter={() => setActiveTab('converter')}
-            onOpenEpicentrTokenModal={() => setIsEpicentrTokenModalOpen(true)}
-          />
+          <ErrorBoundary name="Завантаження та налаштування файлів" level="section">
+            <FileUploadSection
+              onLoadTemplate={handleLoadTemplate}
+              onLoadDictionary={handleLoadDictionary}
+              onLoadXml={(xmlStr, fName) => setXmlFileName(fName)}
+              onLoadPhotos={(photos) => setUploadedPhotos(photos)}
+              templateFileName={templateFileName}
+              dictionaryFileName={dictionaryFileName}
+              xmlFileName={xmlFileName}
+              uploadedPhotos={uploadedPhotos}
+              columns={columns}
+              rowCount={rawRows.length}
+              onProceedToClarification={() => setIsClarificationOpen(true)}
+              onOpenShare={() => setIsShareOpen(true)}
+              onOpenXmlConverter={() => setActiveTab('converter')}
+              onOpenEpicentrTokenModal={() => setIsEpicentrTokenModalOpen(true)}
+            />
+          </ErrorBoundary>
         )}
       </main>
 
@@ -1436,17 +1398,28 @@ export function App() {
       />
 
       {/* Google AI Studio API Key Settings Modal */}
-      <ApiKeySettingsModal
-        isOpen={isApiKeyModalOpen}
-        onClose={() => {
-          setIsApiKeyModalOpen(false);
-          setMissingKeyWarning(null);
-        }}
-        onKeySaved={(newKey) => {
-          setHasCustomApiKey(!!newKey);
-        }}
-        initialWarningMessage={missingKeyWarning}
-      />
+      {isApiKeyModalOpen && (
+        <ErrorBoundary
+          level="modal"
+          name="Налаштування API ключів"
+          onClose={() => {
+            setIsApiKeyModalOpen(false);
+            setMissingKeyWarning(null);
+          }}
+        >
+          <ApiKeySettingsModal
+            isOpen={isApiKeyModalOpen}
+            onClose={() => {
+              setIsApiKeyModalOpen(false);
+              setMissingKeyWarning(null);
+            }}
+            onKeySaved={(newKey) => {
+              setHasCustomApiKey(!!newKey);
+            }}
+            initialWarningMessage={missingKeyWarning}
+          />
+        </ErrorBoundary>
+      )}
 
       {/* Epicentr Merchant API Token Modal */}
       <EpicentrTokenModal
@@ -1455,28 +1428,34 @@ export function App() {
       />
 
       {/* Seller Authentication Modal wrapped in ErrorBoundary for White Screen Protection */}
-      <AuthModalErrorBoundary onClose={() => setIsAuthModalOpen(false)}>
-        <AuthModal
-          isOpen={isAuthModalOpen}
+      {isAuthModalOpen && (
+        <ErrorBoundary
+          level="modal"
+          name="Вхід до кабінету селера"
           onClose={() => setIsAuthModalOpen(false)}
-          onSuccess={(u) => {
-            setCurrentUser(u);
-            if (u?.stores && u.stores.length > 0) {
-              const activeSt = u.stores.find(s => s.id === u.activeStoreId) || u.stores[0];
-              if (activeSt) {
-                handleSelectShop({
-                  id: activeSt.id,
-                  name: activeSt.name,
-                  sellerCode: activeSt.sellerCode,
-                  defaultCategory: 'headphones',
-                  createdAt: activeSt.createdAt
-                });
+        >
+          <AuthModal
+            isOpen={isAuthModalOpen}
+            onClose={() => setIsAuthModalOpen(false)}
+            onSuccess={(u) => {
+              setCurrentUser(u);
+              if (u?.stores && u.stores.length > 0) {
+                const activeSt = u.stores.find(s => s.id === u.activeStoreId) || u.stores[0];
+                if (activeSt) {
+                  handleSelectShop({
+                    id: activeSt.id,
+                    name: activeSt.name,
+                    sellerCode: activeSt.sellerCode,
+                    defaultCategory: 'headphones',
+                    createdAt: activeSt.createdAt
+                  });
+                }
               }
-            }
-            setIsAuthModalOpen(false);
-          }}
-        />
-      </AuthModalErrorBoundary>
+              setIsAuthModalOpen(false);
+            }}
+          />
+        </ErrorBoundary>
+      )}
 
       {/* Seller Profile & Settings Slide-over Drawer */}
       <UserProfileDrawer

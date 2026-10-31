@@ -15,6 +15,8 @@ import {
   extractWeightGramsFromText,
   findDictionaryAttr,
   formatEpicentrTitle,
+  isAiDisclaimerOrServiceText,
+  isInternalHexOrHashId,
   matchDictionaryValue,
   normalizeApostrophes,
   normalizeForDictionaryComparison,
@@ -24,7 +26,12 @@ import { callGeminiDirect } from './geminiClientDirect';
 
 export const MISSING_API_KEY_EVENT = 'epic_ai_missing_key_warning';
 
-export const UNIVERSAL_PIM_SYSTEM_PROMPT = `Ти — універсальний PIM-агент маркетплейсу Епіцентр. Для будь-якої категорії товарів обирай значення для полів select/multiselect СУВОРО з наданого масиву allowedValues відповідної колонки. Якщо інформації немає або значення відсутнє в allowedValues — повертай порожній рядок. Вигадувати значення поза довідником суворо заборонено.`;
+export const UNIVERSAL_PIM_SYSTEM_PROMPT = `Ти — універсальний PIM-агент маркетплейсу Епіцентр. Для будь-якої категорії товарів обирай значення для полів select/multiselect СУВОРО з наданого масиву allowedValues (з колонки "Назва опції" довідника).
+ПРАВИЛА ВАЛІДАЦІЇ:
+1. Заборонено повертати внутрішні хеш-коди та ідентифікатори (наприклад: "a8xqzwivcojproo", "cfd9340c...").
+2. Заборонено писати будь-які пояснення, вибачення чи мета-текст (наприклад: "відсутнє в довіднику", "немає у відкритому доступі", "Джерело:", "постановою кабінету міністрів", "allowedValues"). Якщо значення немає в allowedValues або воно невідоме — повертай виключно порожній рядок ("").
+3. Для полів типу multiselect розділяй обрані значення через крапку з комою з пробілом ("; "). Кожен окремий елемент повинен бути присутнім в allowedValues.
+4. Будь-яке вигадане або недопустиме значення поза довідником суворо заборонено.`;
 
 /**
  * Normalizes column/attribute name by removing Epicentr technical suffixes
@@ -656,7 +663,7 @@ function mapAttributesToColumns(
   for (const [colName, rawVal] of Object.entries(rawAttributes)) {
     if (!rawVal || typeof rawVal !== 'string') continue;
     const cleanVal = rawVal.replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
-    if (!cleanVal) continue;
+    if (!cleanVal || isInternalHexOrHashId(cleanVal) || isAiDisclaimerOrServiceText(cleanVal)) continue;
 
     const matchedCol = targetCols.find(
       c =>

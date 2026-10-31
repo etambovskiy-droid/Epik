@@ -32,7 +32,13 @@ import {
 import { SAMPLE_CATEGORIES } from '../../data/sampleEpicentrCategories';
 import { EpicentrColumn, EpicentrDictionaryAttribute } from '../../types/epicentr';
 import { epicentrMerchantApi } from '../../services/epicentrMerchantApiService';
-import { analyzeEpicentrColumns, buildDictionaryIndex, buildDictionaryIndexAsync } from '../../services/epicentrEngine';
+import {
+  analyzeEpicentrColumns,
+  buildDictionaryIndex,
+  buildDictionaryIndexAsync,
+  parseDictionaryWorkbook,
+  parseDictionaryWorkbookAsync
+} from '../../services/epicentrEngine';
 import {
   generateDictionaryCacheKey,
   getCachedDictionary,
@@ -104,156 +110,21 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   const dictInputRef = useRef<HTMLInputElement>(null);
   const xmlInputRef = useRef<HTMLInputElement>(null);
 
-  // Helper to parse dictionary sheets (supports both column-header lists and 2-column attribute->value pairs)
+  // Helper to parse dictionary sheets (supports export-attribute-set, 2-column, and horizontal tables)
   const extractDictionaryFromSheets = (wb: XLSX.WorkBook, sheetNames: string[]): Record<string, string[]> => {
-    const dict: Record<string, string[]> = {};
-
-    sheetNames.forEach(sName => {
-      const ws = wb.Sheets[sName];
-      if (!ws) return;
-      const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 });
-      if (!rows || rows.length < 2) return;
-
-      const firstRow = rows[0] as any[];
-      if (!Array.isArray(firstRow)) return;
-
-      const nonEmptyHeaders = firstRow.filter(h => h !== undefined && h !== null && String(h).trim() !== '');
-
-      // Check if it's a 2-column key->value table (e.g. ["Характеристика", "Значення"] or ["Атрибут", "Опція"])
-      const h0 = String(firstRow[0] || '').toLowerCase().trim();
-      const h1 = String(firstRow[1] || '').toLowerCase().trim();
-      const isKeyValuePairSheet =
-        nonEmptyHeaders.length === 2 &&
-        (h0.includes('характерист') || h0.includes('атрибут') || h0.includes('назва') || h0.includes('attribute')) &&
-        (h1.includes('значен') || h1.includes('опці') || h1.includes('value'));
-
-      if (isKeyValuePairSheet) {
-        for (let r = 1; r < rows.length; r++) {
-          const row = rows[r];
-          if (!Array.isArray(row)) continue;
-          const attrKey = String(row[0] || '').trim();
-          const attrVal = String(row[1] || '').trim();
-          if (attrKey && attrVal) {
-            if (!dict[attrKey]) dict[attrKey] = [];
-            if (!dict[attrKey].includes(attrVal)) dict[attrKey].push(attrVal);
-          }
-        }
-      } else {
-        // Standard column-based dictionary (each column is an attribute, rows 1..N are allowed values)
-        firstRow.forEach((colHeader, cIdx) => {
-          if (colHeader && typeof colHeader === 'string' && colHeader.trim()) {
-            const values: string[] = [];
-            for (let r = 1; r < rows.length; r++) {
-              const row = rows[r] as any[];
-              if (row && row[cIdx] !== undefined && row[cIdx] !== null && String(row[cIdx]).trim() !== '') {
-                const v = String(row[cIdx]).trim();
-                if (!values.includes(v)) values.push(v);
-              }
-            }
-            if (values.length > 0) {
-              dict[colHeader.trim()] = values;
-            }
-          }
-        });
-      }
-    });
-
-    return dict;
+    return parseDictionaryWorkbook(wb, sheetNames);
   };
 
   /**
    * Asynchronous chunked parser for massive attribute sets (50k-90k+ rows)
-   * Yields control every 2,500 rows to keep the UI silky smooth
+   * Uses robust PIM column parser and yields every 2,500 rows
    */
   const extractDictionaryFromSheetsAsync = async (
     wb: XLSX.WorkBook,
     sheetNames: string[],
     onProgress?: (progress: { current: number; total: number; percent: number }) => void
   ): Promise<{ dict: Record<string, string[]>; rowCount: number }> => {
-    const dict: Record<string, string[]> = {};
-    let totalProcessedRows = 0;
-    const CHUNK_SIZE = 2500;
-
-    for (const sName of sheetNames) {
-      const ws = wb.Sheets[sName];
-      if (!ws) continue;
-      const rawMatrix = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
-      if (!rawMatrix || rawMatrix.length < 2) continue;
-
-      const firstRow = rawMatrix[0] as any[];
-      if (!Array.isArray(firstRow)) continue;
-
-      const nonEmptyHeaders = firstRow.filter(h => h !== undefined && h !== null && String(h).trim() !== '');
-      const h0 = String(firstRow[0] || '').toLowerCase().trim();
-      const h1 = String(firstRow[1] || '').toLowerCase().trim();
-
-      const isKeyValuePairSheet =
-        nonEmptyHeaders.length === 2 &&
-        (h0.includes('характерист') || h0.includes('атрибут') || h0.includes('назва') || h0.includes('attribute')) &&
-        (h1.includes('значен') || h1.includes('опці') || h1.includes('value'));
-
-      const totalRows = rawMatrix.length - 1;
-
-      if (isKeyValuePairSheet) {
-        for (let r = 1; r < rawMatrix.length; r++) {
-          const row = rawMatrix[r];
-          if (Array.isArray(row)) {
-            const attrKey = String(row[0] || '').trim();
-            const attrVal = String(row[1] || '').trim();
-            if (attrKey && attrVal) {
-              if (!dict[attrKey]) dict[attrKey] = [];
-              dict[attrKey].push(attrVal);
-            }
-          }
-          totalProcessedRows++;
-          if (totalProcessedRows % CHUNK_SIZE === 0) {
-            if (onProgress) {
-              onProgress({
-                current: totalProcessedRows,
-                total: totalRows,
-                percent: Math.min(99, Math.round((r / totalRows) * 100))
-              });
-            }
-            await new Promise(res => setTimeout(res, 0));
-          }
-        }
-      } else {
-        for (let r = 1; r < rawMatrix.length; r++) {
-          const row = rawMatrix[r] as any[];
-          if (Array.isArray(row)) {
-            firstRow.forEach((colHeader, cIdx) => {
-              if (colHeader && typeof colHeader === 'string' && colHeader.trim()) {
-                const val = row[cIdx];
-                if (val !== undefined && val !== null && String(val).trim() !== '') {
-                  const s = String(val).trim();
-                  const key = colHeader.trim();
-                  if (!dict[key]) dict[key] = [];
-                  dict[key].push(s);
-                }
-              }
-            });
-          }
-          totalProcessedRows++;
-          if (totalProcessedRows % CHUNK_SIZE === 0) {
-            if (onProgress) {
-              onProgress({
-                current: totalProcessedRows,
-                total: totalRows,
-                percent: Math.min(99, Math.round((r / totalRows) * 100))
-              });
-            }
-            await new Promise(res => setTimeout(res, 0));
-          }
-        }
-      }
-    }
-
-    // Deduplicate lists
-    for (const [k, v] of Object.entries(dict)) {
-      dict[k] = Array.from(new Set(v));
-    }
-
-    return { dict, rowCount: totalProcessedRows };
+    return parseDictionaryWorkbookAsync(wb, sheetNames, onProgress);
   };
 
   // Handle template file upload

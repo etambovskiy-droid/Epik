@@ -34,9 +34,10 @@ import {
   KeyRound,
   RefreshCw,
   Globe,
+  Pencil,
   X
 } from 'lucide-react';
-import { generateEpicentrExportWorkbook } from '../../services/epicentrEngine';
+import { generateEpicentrExportWorkbook, findDictionaryAttr } from '../../services/epicentrEngine';
 import { EpicentrDictionaryAttribute } from '../../types/epicentr';
 import {
   notifyMissingApiKey,
@@ -85,6 +86,120 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiProgressMessage, setAiProgressMessage] = useState<string | null>(null);
   const [googleSheetExportOpen, setGoogleSheetExportOpen] = useState(false);
+
+  // Manual Cell Editing and "Apply to All" state
+  const [editingCell, setEditingCell] = useState<{
+    rowIdx: number;
+    colName: string;
+    value: string;
+  } | null>(null);
+
+  // Track columns where values were manually entered or edited
+  const [manuallyEditedCols, setManuallyEditedCols] = useState<
+    Record<string, { lastValue: string; lastRowIdx: number }>
+  >({});
+
+  // Prompt banner for quick 1-click propagation to all empty rows
+  const [applyToAllPrompt, setApplyToAllPrompt] = useState<{
+    colName: string;
+    cleanColName: string;
+    value: string;
+    emptyCount: number;
+  } | null>(null);
+
+  // Success / info toast notification
+  const [notificationToast, setNotificationToast] = useState<{
+    message: string;
+    type: 'success' | 'info';
+  } | null>(null);
+
+  // Propagates a value to ALL empty cells in the specified column
+  const handleApplyToAllEmpty = (colName: string, valueToApply: string) => {
+    if (!valueToApply || valueToApply.trim() === '') return;
+    const col = columns.find(c => c.originalName === colName || c.cleanName === colName);
+    const targetColName = col ? col.originalName : colName;
+    const cleanName = col ? col.cleanName : colName;
+
+    // Find all rows where target column is currently empty
+    const emptyRows = rows.filter(r => {
+      const cur = r.updatedRow ? r.updatedRow[targetColName] : undefined;
+      return (
+        cur === undefined ||
+        cur === null ||
+        String(cur).trim() === '' ||
+        String(cur).toLowerCase() === 'nan'
+      );
+    });
+
+    if (emptyRows.length === 0) {
+      setNotificationToast({
+        message: `Усі клітинки в колонці "${cleanName}" вже заповнені!`,
+        type: 'info'
+      });
+      setTimeout(() => setNotificationToast(null), 3000);
+      return;
+    }
+
+    if (onUpdateCellValue) {
+      emptyRows.forEach(r => {
+        onUpdateCellValue(r.rowIdx, targetColName, valueToApply);
+      });
+    }
+
+    // Record as manually applied column
+    setManuallyEditedCols(prev => ({
+      ...prev,
+      [targetColName]: { lastValue: valueToApply, lastRowIdx: emptyRows[0].rowIdx }
+    }));
+
+    setApplyToAllPrompt(null);
+    setNotificationToast({
+      message: `Значення "${valueToApply}" успішно застосовано до ${emptyRows.length} порожніх товарів у колонці "${cleanName}"!`,
+      type: 'success'
+    });
+    setTimeout(() => setNotificationToast(null), 4500);
+  };
+
+  // Saves a manually edited cell and offers the "Apply to All" action
+  const handleSaveCell = (rowIdx: number, colName: string, newValue: string) => {
+    const trimmed = newValue.trim();
+    if (onUpdateCellValue) {
+      onUpdateCellValue(rowIdx, colName, trimmed);
+    }
+
+    const col = columns.find(c => c.originalName === colName || c.cleanName === colName);
+    const cleanName = col ? col.cleanName : colName;
+
+    if (trimmed) {
+      setManuallyEditedCols(prev => ({
+        ...prev,
+        [colName]: { lastValue: trimmed, lastRowIdx: rowIdx }
+      }));
+
+      // Count remaining empty rows in this column
+      const emptyCount = rows.filter(r => {
+        if (r.rowIdx === rowIdx) return false;
+        const cur = r.updatedRow ? r.updatedRow[colName] : undefined;
+        return (
+          cur === undefined ||
+          cur === null ||
+          String(cur).trim() === '' ||
+          String(cur).toLowerCase() === 'nan'
+        );
+      }).length;
+
+      if (emptyCount > 0) {
+        setApplyToAllPrompt({
+          colName,
+          cleanColName: cleanName,
+          value: trimmed,
+          emptyCount
+        });
+      }
+    }
+
+    setEditingCell(null);
+  };
 
   // Mandatory columns only for high-density display
   const mandatoryCols = columns.filter(c => c.isRequired);
@@ -575,6 +690,54 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
         </div>
       )}
 
+      {/* Toast Notification */}
+      {notificationToast && (
+        <div className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 shadow-md animate-fadeIn ${
+          notificationToast.type === 'success' ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-blue-50 border-blue-300 text-blue-900'
+        }`}>
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-bold">{notificationToast.message}</span>
+          </div>
+          <button type="button" onClick={() => setNotificationToast(null)} className="p-1 text-slate-400 hover:text-slate-700">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Apply to All Prompt Banner */}
+      {applyToAllPrompt && (
+        <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-[#FF7A00] text-white rounded-xl p-3.5 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+              <Sparkles className="w-4 h-4 text-white animate-pulse" />
+            </div>
+            <div>
+              <span className="font-extrabold text-sm">Застосувати значення до всіх порожніх?</span>
+              <p className="text-white/90 text-[11px] mt-0.5">
+                Ви ввели <strong className="underline">"{applyToAllPrompt.value}"</strong> у колонці <strong className="underline">"{applyToAllPrompt.cleanColName}"</strong>. Бажаєте автоматично поширити його на всі <strong className="underline">{applyToAllPrompt.emptyCount}</strong> порожніх товарів?
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleApplyToAllEmpty(applyToAllPrompt.colName, applyToAllPrompt.value)}
+              className="px-4 py-2 rounded-lg bg-white text-orange-700 font-bold hover:bg-orange-50 transition-colors shadow-sm cursor-pointer"
+            >
+              Застосувати до всіх ({applyToAllPrompt.emptyCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setApplyToAllPrompt(null)}
+              className="px-2.5 py-1.5 text-white/80 hover:text-white font-medium cursor-pointer"
+            >
+              Пропустити
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Filter Pills Bar: Filtered fields for filling */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pt-1">
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -720,15 +883,38 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
               {/* Dynamic Columns */}
               {displayCols
                 .filter(c => !c.cleanName.toLowerCase().includes('назва') && !c.cleanName.toLowerCase().includes('артикул') && !c.cleanName.toLowerCase().includes('id') && !c.cleanName.toLowerCase().includes('фото') && !c.cleanName.toLowerCase().includes('опис'))
-                .map(col => (
-                  <th key={col.originalName} className="py-3 px-3 min-w-[160px] whitespace-nowrap">
-                    <div className="flex items-center gap-1">
-                      <span className="text-slate-800">{col.cleanName}</span>
-                      {col.isRequired && <span className="text-[#FF7A00] font-black">*</span>}
-                      <span className="text-[10px] text-slate-500 font-mono">({col.type})</span>
-                    </div>
-                  </th>
-                ))}
+                .map(col => {
+                  const dictAttr = dictionaryIndex ? findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName) : undefined;
+                  const hasManualValue = manuallyEditedCols[col.originalName];
+                  const emptyCountForCol = rows.filter(r => {
+                    const cur = r.updatedRow ? r.updatedRow[col.originalName] : undefined;
+                    return cur === undefined || cur === null || String(cur).trim() === '' || String(cur).toLowerCase() === 'nan';
+                  }).length;
+
+                  return (
+                    <th key={col.originalName} className="py-3 px-3 min-w-[180px] whitespace-nowrap">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1">
+                            <span className="text-slate-800 font-bold">{col.cleanName}</span>
+                            {col.isRequired && <span className="text-[#FF7A00] font-black">*</span>}
+                            <span className="text-[10px] text-slate-500 font-mono">({col.type})</span>
+                          </div>
+                        </div>
+                        {hasManualValue && emptyCountForCol > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleApplyToAllEmpty(col.originalName, hasManualValue.lastValue)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold shadow-2xs transition-colors cursor-pointer w-full justify-center"
+                            title={`Поширити значення "${hasManualValue.lastValue}" на всі ${emptyCountForCol} порожніх комірок`}
+                          >
+                            <span>Застосувати до всіх ({emptyCountForCol})</span>
+                          </button>
+                        )}
+                      </div>
+                    </th>
+                  );
+                })}
               <th className="py-3 px-3 w-20 text-center">Дії</th>
             </tr>
           </thead>
@@ -791,7 +977,7 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                       {pRow.vendorCode || (skuCol ? pRow.updatedRow[skuCol.originalName] : undefined) || '-'}
                     </td>
 
-                    {/* Dynamic Columns values */}
+                    {/* Dynamic Columns values with inline editing */}
                     {displayCols
                       .filter(c => !c.cleanName.toLowerCase().includes('назва') && !c.cleanName.toLowerCase().includes('артикул') && !c.cleanName.toLowerCase().includes('id') && !c.cleanName.toLowerCase().includes('фото') && !c.cleanName.toLowerCase().includes('опис'))
                       .map(col => {
@@ -799,39 +985,92 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                         const diff = pRow.diffs ? pRow.diffs[col.originalName] : undefined;
                         const isMandatory = col.isRequired;
                         const isEmpty = val === undefined || val === null || String(val).trim() === '';
+                        const isEditing = editingCell?.rowIdx === pRow.rowIdx && editingCell?.colName === col.originalName;
+                        const dictAttr = dictionaryIndex ? findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName) : undefined;
                         const groundingExplanation =
                           webGroundingSourcesMap?.[pRow.rowIdx]?.explanations?.[col.originalName] ||
                           webGroundingSourcesMap?.[pRow.rowIdx]?.explanations?.[col.cleanName];
 
                         return (
-                          <td key={col.originalName} className="py-2.5 px-3">
-                            {isEmpty && isMandatory ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-50 border border-rose-200 text-rose-700">
-                                <AlertTriangle className="w-3 h-3 text-rose-500" />
-                                Порожнє (*)
-                              </span>
-                            ) : groundingExplanation && val ? (
-                              <span
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 border border-blue-200 text-blue-900"
-                                title={`Google Grounding: ${groundingExplanation}`}
-                              >
-                                <Globe className="w-3 h-3 text-[#004BB7]" />
-                                <span>{String(val)}</span>
-                              </span>
-                            ) : diff && diff.source === 'photo' ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 border border-amber-200 text-amber-900">
-                                <Camera className="w-3 h-3 text-[#FF7A00]" />
-                                <span>{String(val)}</span>
-                              </span>
-                            ) : diff && diff.source !== 'already_filled' ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                <span>{String(val)}</span>
-                              </span>
+                          <td key={col.originalName} className="py-2.5 px-3 relative group">
+                            {isEditing ? (
+                              <div className="flex items-center gap-1">
+                                {dictAttr && dictAttr.allowedValues.length > 0 ? (
+                                  <select
+                                    autoFocus
+                                    className="w-full px-2 py-1 text-xs border border-blue-500 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-200"
+                                    value={editingCell.value}
+                                    onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
+                                    onBlur={() => handleSaveCell(pRow.rowIdx, col.originalName, editingCell.value)}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') {
+                                        handleSaveCell(pRow.rowIdx, col.originalName, editingCell.value);
+                                      } else if (e.key === 'Escape') {
+                                        setEditingCell(null);
+                                      }
+                                    }}
+                                  >
+                                    <option value="">-- Виберіть з довідника --</option>
+                                    {dictAttr.allowedValues.map(opt => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    autoFocus
+                                    type="text"
+                                    className="w-full px-2 py-1 text-xs border border-blue-500 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-200"
+                                    value={editingCell.value}
+                                    onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
+                                    onBlur={() => handleSaveCell(pRow.rowIdx, col.originalName, editingCell.value)}
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') {
+                                        handleSaveCell(pRow.rowIdx, col.originalName, editingCell.value);
+                                      } else if (e.key === 'Escape') {
+                                        setEditingCell(null);
+                                      }
+                                    }}
+                                  />
+                                )}
+                              </div>
                             ) : (
-                              <span className="text-slate-700">
-                                {val ? String(val) : <span className="text-slate-300">-</span>}
-                              </span>
+                              <div
+                                onClick={() => setEditingCell({ rowIdx: pRow.rowIdx, colName: col.originalName, value: val ? String(val) : '' })}
+                                className="flex items-center justify-between gap-1 cursor-pointer py-1 px-1.5 rounded hover:bg-slate-100 transition-colors group/cell"
+                                title="Клікніть для редагування значення"
+                              >
+                                <div className="truncate">
+                                  {isEmpty && isMandatory ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-50 border border-rose-200 text-rose-700">
+                                      <AlertTriangle className="w-3 h-3 text-rose-500" />
+                                      Порожнє (*)
+                                    </span>
+                                  ) : groundingExplanation && val ? (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 border border-blue-200 text-blue-900"
+                                      title={`Google Grounding: ${groundingExplanation}`}
+                                    >
+                                      <Globe className="w-3 h-3 text-[#004BB7]" />
+                                      <span>{String(val)}</span>
+                                    </span>
+                                  ) : diff && diff.source === 'photo' ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 border border-amber-200 text-amber-900">
+                                      <Camera className="w-3 h-3 text-[#FF7A00]" />
+                                      <span>{String(val)}</span>
+                                    </span>
+                                  ) : diff && diff.source !== 'already_filled' ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                      <span>{String(val)}</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-700">
+                                      {val ? String(val) : <span className="text-slate-300">-</span>}
+                                    </span>
+                                  )}
+                                </div>
+                                <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover/cell:opacity-100 shrink-0 transition-opacity" />
+                              </div>
                             )}
                           </td>
                         );

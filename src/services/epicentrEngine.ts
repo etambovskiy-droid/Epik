@@ -89,6 +89,243 @@ export function normalizeForDictionaryComparison(
 }
 
 /**
+ * Detects whether a string is an internal hex code, base36 hash, UUID, or system identifier
+ * (e.g. "cfd9340c", "a8xqzwivcojproo", "opt_123456", "UUID") that must NEVER be treated
+ * as an allowed option or written into the final Epicentr Excel sheet.
+ */
+export function isInternalHexOrHashId(val: any): boolean {
+  if (val === undefined || val === null) return false;
+  const s = String(val).trim();
+  if (!s || s.length < 4) return false;
+
+  // Real option values in Epicentr have Ukrainian/Cyrillic letters or spaces
+  if (/[а-яіїєґА-ЯІЇЄҐ]/i.test(s)) return false;
+
+  // Real option values with spaces (e.g. "black and white") are not internal hashes
+  if (/\s/.test(s)) return false;
+
+  // Explicitly allow short standard alphanumeric specs/units like "18+", "100%", "5.0", "USB-C", "2.4G", "2.4GHz", "XL", "XXL"
+  if (/^(\d+\+|[\d.]+(%|g|ghz|v|w|a|mah|mm|cm|m|kg|г|кг)?|[xsml]{1,4}|\d{2}(?:-\d{2})?)$/i.test(s)) {
+    return false;
+  }
+
+  // UUID format (e.g. 12345678-1234-1234-1234-123456789abc)
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+    return true;
+  }
+
+  // Pure hex hashes >= 8 characters (e.g. cfd9340c, cfd9340cf7d5)
+  if (/^[0-9a-f]{8,}$/i.test(s) && /\d/.test(s) && /[a-f]/i.test(s)) {
+    return true;
+  }
+
+  // Alphanumeric hashes / option codes >= 10 characters without spaces (e.g. "a8xqzwivcojproo", "opt_cfd9340c")
+  if (/^(opt_|attr_|val_|code_)?[a-z0-9_-]{10,}$/i.test(s) && /\d/.test(s) && /[a-z]/i.test(s)) {
+    return true;
+  }
+
+  // Specifically check known random alphanumeric hash identifiers like "a8xqzwivcojproo" (base36 hashes)
+  if (/^[a-z0-9]{12,}$/i.test(s) && !/^(bluetooth|wireless|rechargeable|waterproof)/i.test(s)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Detects whether a string is an AI apology, disclaimer, explanation, or meta-service text
+ * (e.g. "відсутнє в довіднику", "немає у відкритому доступі", "Джерело:", "allowedValues",
+ * "постановою кабінету міністрів", "не підлягає поверненню відповідно до") that must be
+ * automatically stripped and replaced with an empty string.
+ */
+export function isAiDisclaimerOrServiceText(val: any): boolean {
+  if (val === undefined || val === null) return false;
+  const s = String(val).trim().toLowerCase();
+  if (!s) return false;
+
+  const disclaimerPatterns = [
+    /відсутн(є|ьо|я|ій|ого)/i,
+    /немає\s+(в|у)?\s*(довідник|відкритому|каталог|доступі|наявності)/i,
+    /немає\s+у\s+відкритому/i,
+    /не\s+знайдено\s+(в|у)?\s*(довідник|відкритому|інтернет)/i,
+    /немає\s+інформації/i,
+    /інформація\s+відсутня/i,
+    /дані\s+відсутні/i,
+    /значення\s+відсутнє/i,
+    /не\s+вказано/i,
+    /невідомо/i,
+    /\b(н\/д|n\/a|null|undefined|nan)\b/i,
+    /джерело\s*:/i,
+    /\bsource\s*:/i,
+    /allowedvalues/i,
+    /allowed\s*values/i,
+    /наданому\s+довіднику/i,
+    /згідно\s+(з\s+)?довідник/i,
+    /в\s+довіднику\s+відсутн/i,
+    /постанова\s+(кабінету\s+міністрів|кму)/i,
+    /кабінет(у)?\s+міністрів/i,
+    /закон(ом|у)?\s+україни/i,
+    /згідно\s+з\s+законодавством/i,
+    /перелік\s+товарів.*не\s+підляга/i,
+    /на\s+жаль/i,
+    /к\s+сожалению/i,
+    /як\s+штучний\s+інтелект/i,
+    /не\s+вдалося\s+знайти/i,
+    /потрібно\s+уточнити/i,
+    /уточніть\s+у\s+виробника/i,
+    /https?:\/\//i,
+    /\[.*\]\(https?:/i
+  ];
+
+  return disclaimerPatterns.some(pattern => pattern.test(s));
+}
+
+/**
+ * Universal canonical mapper across ANY product category:
+ * - Gender & number forms ('Жіноча'/'жіночий' -> 'жіночі', 'чоловіча'/'чоловічий' -> 'чоловічі', 'дитячий' -> 'дитячі', 'унісекс')
+ * - Generalized categorical phrases ('Усі типи волосся' / 'Для всіх типів' -> 'усі типи', 'для всіх типів шкіри' -> 'для всіх типів')
+ * - Legal/return disclaimers ('обміну та поверненню не підлягає', 'постанова кабміну' -> 'поверненню не підлягає')
+ * - Option extraction from descriptive / noisy strings (e.g. '18+' from 'Makeup.ua (18+)', 'з 18 років')
+ * - Symmetric HTML entity and apostrophe resolution
+ */
+export function canonicalMapCandidate(candidate: string, allowedValues: string[]): string | null {
+  if (!candidate || !allowedValues || allowedValues.length === 0) return null;
+  const rawClean = decodeHtmlEntities(candidate).trim();
+  if (!rawClean) return null;
+  const lower = rawClean.toLowerCase();
+
+  const findAllowed = (targetNormalized: string): string | null => {
+    const targetNorm = normalizeForDictionaryComparison(targetNormalized, 'exact');
+    for (const val of allowedValues) {
+      if (normalizeForDictionaryComparison(val, 'exact') === targetNorm) {
+        return val;
+      }
+    }
+    return null;
+  };
+
+  // 1. Bracket extraction: e.g. "Makeup.ua (18+)" -> "18+", "Крісло (штучна шкіра)" -> "штучна шкіра"
+  const bracketMatch = rawClean.match(/\(([^)]+)\)/);
+  if (bracketMatch) {
+    const inside = bracketMatch[1].trim();
+    if (inside) {
+      const matchInside = findAllowed(inside);
+      if (matchInside) return matchInside;
+    }
+    const outside = rawClean.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+    if (outside) {
+      const matchOutside = findAllowed(outside);
+      if (matchOutside) return matchOutside;
+    }
+  }
+
+  // 2. Gender & Number forms
+  // Women
+  if (/^(жіноч(а|ий|е|і)|женск(ая|ий|ое|ие)|для\s+жінок)$/i.test(lower) || lower === 'жіноча' || lower === 'жіночий') {
+    const res = findAllowed('жіночі') || findAllowed('жіноча') || findAllowed('жіночий') || findAllowed('для жінок');
+    if (res) return res;
+  }
+  // Men
+  if (/^(чоловіч(а|ий|е|і)|мужск(ая|ий|ое|ие)|для\s+чоловіків)$/i.test(lower) || lower === 'чоловіча' || lower === 'чоловічий') {
+    const res = findAllowed('чоловічі') || findAllowed('чоловічий') || findAllowed('чоловіча') || findAllowed('для чоловіків');
+    if (res) return res;
+  }
+  // Children
+  if (/^(дитяч(ий|а|е|і)|детск(ий|ая|ое|ие)|для\s+дітей)$/i.test(lower) || lower === 'дитячий' || lower === 'дитяча') {
+    const res = findAllowed('дитячі') || findAllowed('дитячий') || findAllowed('дитяча') || findAllowed('для дітей');
+    if (res) return res;
+  }
+  // Teens
+  if (/^(підлітковий|підліткова|підліткові|подростковый|подростковые)$/i.test(lower)) {
+    const res = findAllowed('підліткові') || findAllowed('підлітковий');
+    if (res) return res;
+  }
+  // Unisex
+  if (/^(унісекс|унисекс|unisex|для\s+чоловіків\s+та\s+жінок|для\s+жінок\s+і\s+чоловіків)$/i.test(lower)) {
+    const res = findAllowed('унісекс') || findAllowed('unisex');
+    if (res) return res;
+  }
+  // Girls / Boys
+  if (/^(для\s+дівчаток|для\s+дівчинки|дівчинка|дівчатка)$/i.test(lower)) {
+    const res = findAllowed('для дівчаток') || findAllowed('дівчата') || findAllowed('жіночі');
+    if (res) return res;
+  }
+  if (/^(для\s+хлопчиків|для\s+хлопчика|хлопчик|хлопчики)$/i.test(lower)) {
+    const res = findAllowed('для хлопчиків') || findAllowed('хлопці') || findAllowed('чоловічі');
+    if (res) return res;
+  }
+
+  // 3. Generalized categorical phrases (Hair, Skin, All Types across cosmetics & home care)
+  if (
+    /(усі|всі|для всіх|для будь-якого)\s+тип/i.test(lower) ||
+    lower === 'усі типи' ||
+    lower === 'всі типи' ||
+    lower === 'для всіх типів' ||
+    lower === 'універсальний' ||
+    lower === 'універсальна' ||
+    lower === 'універсальне'
+  ) {
+    const res =
+      findAllowed('усі типи') ||
+      findAllowed('для всіх типів') ||
+      findAllowed('всі типи') ||
+      findAllowed('усі типи волосся') ||
+      findAllowed('для всіх типів волосся') ||
+      findAllowed('усі типи шкіри') ||
+      findAllowed('для всіх типів шкіри') ||
+      findAllowed('універсальний') ||
+      findAllowed('універсальна');
+    if (res) return res;
+  }
+
+  // 4. Legal / Return Statements
+  if (/повернен/i.test(lower) || /постанов.*кабінет.*міністр/i.test(lower) || /закон.*прав.*споживач/i.test(lower)) {
+    if (/не\s+підляга/i.test(lower) || /поверненню\s+не\s+підлягає/i.test(lower) || /не\s+підлягає\s+поверненню/i.test(lower)) {
+      const res =
+        findAllowed('поверненню не підлягає') ||
+        findAllowed('не підлягає поверненню') ||
+        findAllowed('обміну та поверненню не підлягає') ||
+        findAllowed('обміну та поверненню не підлягає згідно постанови кму') ||
+        findAllowed('товар належної якості обміну та поверненню не підлягає');
+      if (res) return res;
+    }
+    if (/14\s+дн/i.test(lower)) {
+      const res = findAllowed('14 днів') || findAllowed('обмін та повернення протягом 14 днів');
+      if (res) return res;
+    }
+  }
+
+  // 5. Age extractions (18+, 16+, 12+, 6+, 3+, 0+)
+  const ageMatch = lower.match(/\b(18|16|12|6|3|0)\s*\+/);
+  if (ageMatch) {
+    const ageTag = `${ageMatch[1]}+`;
+    const res = findAllowed(ageTag) || findAllowed(`від ${ageMatch[1]} років`);
+    if (res) return res;
+  }
+  const fromAgeMatch = lower.match(/\bвід\s+(\d+)\s*(?:років|року|р\.)/i);
+  if (fromAgeMatch) {
+    const num = fromAgeMatch[1];
+    const res = findAllowed(`${num}+`) || findAllowed(`від ${num} років`) || findAllowed(`від ${num} року`);
+    if (res) return res;
+  }
+
+  // 6. Check if any allowed option is contained as an exact standalone word/token in the candidate
+  for (const allowedVal of allowedValues) {
+    if (!allowedVal || isInternalHexOrHashId(allowedVal)) continue;
+    const allowedNorm = normalizeForDictionaryComparison(allowedVal, 'exact');
+    if (allowedNorm.length >= 3) {
+      const escaped = allowedNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const reg = new RegExp(`(?<![а-яіїєґa-z0-9])${escaped}(?![а-яіїєґa-z0-9])`, 'i');
+      if (reg.test(lower)) {
+        return allowedVal;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Common Ukrainian <-> Russian vocabulary and dictionary mappings
  */
 const RU_TO_UA_WORDS: Record<string, string> = {
@@ -452,6 +689,352 @@ export function analyzeEpicentrColumns(headers: string[]): EpicentrColumn[] {
 }
 
 /**
+ * Universal Epicentr PIM Dictionary Workbook Parser:
+ * Supports ANY category and file structure:
+ * 1. PIM Attribute Set Export (`export-attribute-set...`):
+ *    - Columns: "Назва характеристики", "Код опції", "Назва опції", "Порядок сортування", etc.
+ *    - Strictly maps attribute name -> allowed values from "Назва опції" column!
+ *    - Strictly ignores and excludes internal hashes from "Код опції", "ID опції", "Код".
+ * 2. 2-column key-value tables: ["Характеристика", "Значення"] or ["Атрибут", "Назва опції"].
+ * 3. Horizontal column-based tables (each column header is an attribute, rows are allowed values).
+ *    - Strictly ignores system columns like "Код опції", "ID", "Позиція", etc.
+ * Filters out all internal hex/hash IDs and AI explanation texts from allowedValues.
+ */
+export function parseDictionaryWorkbook(
+  wb: XLSX.WorkBook,
+  sheetNames?: string[]
+): Record<string, string[]> {
+  const dict: Record<string, string[]> = {};
+  const targetSheets = sheetNames && sheetNames.length > 0 ? sheetNames : wb.SheetNames;
+
+  for (const sName of targetSheets) {
+    const ws = wb.Sheets[sName];
+    if (!ws) continue;
+    const rawMatrix = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
+    if (!rawMatrix || rawMatrix.length < 2) continue;
+
+    // Find the header row (first row with at least 2 non-empty cells)
+    let headerRowIdx = -1;
+    let headers: string[] = [];
+    for (let r = 0; r < Math.min(10, rawMatrix.length); r++) {
+      const row = rawMatrix[r];
+      if (Array.isArray(row)) {
+        const nonEmpty = row.map(c => String(c || '').trim()).filter(Boolean);
+        if (nonEmpty.length >= 2) {
+          headerRowIdx = r;
+          headers = row.map(c => String(c || '').trim());
+          break;
+        }
+      }
+    }
+
+    if (headerRowIdx === -1 || headers.length === 0) continue;
+
+    const lowerHeaders = headers.map(h => h.toLowerCase().trim());
+
+    // 1. Check for Epicentr PIM export-attribute-set table:
+    // Look for Attribute Name column and Option Name column
+    let attrColIdx = -1;
+    let optNameColIdx = -1;
+
+    lowerHeaders.forEach((h, idx) => {
+      if (
+        h === 'назва характеристики' ||
+        h === 'характеристика' ||
+        h === 'назва атрибута' ||
+        h === 'назва атрибуту' ||
+        h === 'атрибут' ||
+        h === 'attribute' ||
+        h === 'attribute name'
+      ) {
+        attrColIdx = idx;
+      } else if (
+        h === 'назва опції' ||
+        h === 'значення опції' ||
+        h === 'назва значення' ||
+        h === 'назва' ||
+        h === 'значення' ||
+        h === 'опція' ||
+        h === 'option name' ||
+        h === 'option' ||
+        h === 'value'
+      ) {
+        optNameColIdx = idx;
+      }
+    });
+
+    // Fallback if not exact match:
+    if (attrColIdx === -1) {
+      attrColIdx = lowerHeaders.findIndex(h => h.includes('характерист') || h.includes('атрибут'));
+    }
+    if (optNameColIdx === -1) {
+      optNameColIdx = lowerHeaders.findIndex(
+        (h, i) =>
+          i !== attrColIdx &&
+          (h.includes('назва опці') || h.includes('значен') || (h.includes('опці') && !h.includes('код') && !h.includes('id')))
+      );
+    }
+
+    const isAttributeSetTable = attrColIdx !== -1 && optNameColIdx !== -1 && attrColIdx !== optNameColIdx;
+
+    if (isAttributeSetTable) {
+      // Row-by-row attribute set export
+      for (let r = headerRowIdx + 1; r < rawMatrix.length; r++) {
+        const row = rawMatrix[r];
+        if (!Array.isArray(row)) continue;
+
+        const attrKey = String(row[attrColIdx] || '').trim();
+        const optVal = String(row[optNameColIdx] || '').trim();
+
+        if (!attrKey || !optVal) continue;
+        if (isInternalHexOrHashId(optVal)) continue;
+        if (isAiDisclaimerOrServiceText(optVal)) continue;
+
+        const cleanKey = normalizeAttributeKey(attrKey, false);
+        if (!dict[cleanKey]) dict[cleanKey] = [];
+        if (!dict[cleanKey].includes(optVal)) {
+          dict[cleanKey].push(optVal);
+        }
+
+        if (cleanKey !== attrKey) {
+          if (!dict[attrKey]) dict[attrKey] = [];
+          if (!dict[attrKey].includes(optVal)) {
+            dict[attrKey].push(optVal);
+          }
+        }
+      }
+    } else {
+      // Horizontal column-based dictionary table
+      headers.forEach((colHeader, cIdx) => {
+        if (!colHeader) return;
+        const lowerH = colHeader.toLowerCase().trim();
+
+        // Skip non-attribute technical columns
+        if (
+          lowerH === 'код опції' ||
+          lowerH === 'id опції' ||
+          lowerH === 'код характеристики' ||
+          lowerH === 'id характеристики' ||
+          lowerH === 'id' ||
+          lowerH === 'код' ||
+          lowerH === 'сортування' ||
+          lowerH === 'порядок сортування' ||
+          lowerH === 'позиція' ||
+          lowerH.includes('export-attribute-set')
+        ) {
+          return;
+        }
+
+        const cleanKey = normalizeAttributeKey(colHeader, false);
+        const values: string[] = [];
+
+        for (let r = headerRowIdx + 1; r < rawMatrix.length; r++) {
+          const row = rawMatrix[r] as any[];
+          if (!Array.isArray(row)) continue;
+          const cellVal = row[cIdx];
+          if (cellVal !== undefined && cellVal !== null && String(cellVal).trim() !== '') {
+            const v = String(cellVal).trim();
+            if (isInternalHexOrHashId(v)) continue;
+            if (isAiDisclaimerOrServiceText(v)) continue;
+            if (!values.includes(v)) {
+              values.push(v);
+            }
+          }
+        }
+
+        if (values.length > 0) {
+          dict[cleanKey] = values;
+          if (cleanKey !== colHeader.trim()) {
+            dict[colHeader.trim()] = values;
+          }
+        }
+      });
+    }
+  }
+
+  return dict;
+}
+
+/**
+ * Asynchronous Chunked Epicentr PIM Dictionary Workbook Parser:
+ * Processes massive attribute sets (50k-90k+ rows) in batches of 2500 items,
+ * yielding to the browser event loop to maintain silky smooth UI responsiveness.
+ */
+export async function parseDictionaryWorkbookAsync(
+  wb: XLSX.WorkBook,
+  sheetNames?: string[],
+  onProgress?: (progress: { current: number; total: number; percent: number }) => void
+): Promise<{ dict: Record<string, string[]>; rowCount: number }> {
+  const dict: Record<string, string[]> = {};
+  const targetSheets = sheetNames && sheetNames.length > 0 ? sheetNames : wb.SheetNames;
+  let totalProcessedRows = 0;
+  const CHUNK_SIZE = 2500;
+
+  let estimatedTotal = 0;
+  for (const sName of targetSheets) {
+    const ws = wb.Sheets[sName];
+    if (ws && ws['!ref']) {
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      estimatedTotal += Math.max(0, range.e.r - range.s.r);
+    }
+  }
+  estimatedTotal = Math.max(estimatedTotal, 1);
+
+  for (const sName of targetSheets) {
+    const ws = wb.Sheets[sName];
+    if (!ws) continue;
+    const rawMatrix = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
+    if (!rawMatrix || rawMatrix.length < 2) continue;
+
+    let headerRowIdx = -1;
+    let headers: string[] = [];
+    for (let r = 0; r < Math.min(10, rawMatrix.length); r++) {
+      const row = rawMatrix[r];
+      if (Array.isArray(row)) {
+        const nonEmpty = row.map(c => String(c || '').trim()).filter(Boolean);
+        if (nonEmpty.length >= 2) {
+          headerRowIdx = r;
+          headers = row.map(c => String(c || '').trim());
+          break;
+        }
+      }
+    }
+
+    if (headerRowIdx === -1 || headers.length === 0) continue;
+
+    const lowerHeaders = headers.map(h => h.toLowerCase().trim());
+    let attrColIdx = -1;
+    let optNameColIdx = -1;
+
+    lowerHeaders.forEach((h, idx) => {
+      if (
+        h === 'назва характеристики' ||
+        h === 'характеристика' ||
+        h === 'назва атрибута' ||
+        h === 'назва атрибуту' ||
+        h === 'атрибут' ||
+        h === 'attribute' ||
+        h === 'attribute name'
+      ) {
+        attrColIdx = idx;
+      } else if (
+        h === 'назва опції' ||
+        h === 'значення опції' ||
+        h === 'назва значення' ||
+        h === 'назва' ||
+        h === 'значення' ||
+        h === 'опція' ||
+        h === 'option name' ||
+        h === 'option' ||
+        h === 'value'
+      ) {
+        optNameColIdx = idx;
+      }
+    });
+
+    if (attrColIdx === -1) {
+      attrColIdx = lowerHeaders.findIndex(h => h.includes('характерист') || h.includes('атрибут'));
+    }
+    if (optNameColIdx === -1) {
+      optNameColIdx = lowerHeaders.findIndex(
+        (h, i) =>
+          i !== attrColIdx &&
+          (h.includes('назва опці') || h.includes('значен') || (h.includes('опці') && !h.includes('код') && !h.includes('id')))
+      );
+    }
+
+    const isAttributeSetTable = attrColIdx !== -1 && optNameColIdx !== -1 && attrColIdx !== optNameColIdx;
+
+    if (isAttributeSetTable) {
+      for (let r = headerRowIdx + 1; r < rawMatrix.length; r++) {
+        const row = rawMatrix[r];
+        if (Array.isArray(row)) {
+          const attrKey = String(row[attrColIdx] || '').trim();
+          const optVal = String(row[optNameColIdx] || '').trim();
+
+          if (attrKey && optVal && !isInternalHexOrHashId(optVal) && !isAiDisclaimerOrServiceText(optVal)) {
+            const cleanKey = normalizeAttributeKey(attrKey, false);
+            if (!dict[cleanKey]) dict[cleanKey] = [];
+            dict[cleanKey].push(optVal);
+
+            if (cleanKey !== attrKey) {
+              if (!dict[attrKey]) dict[attrKey] = [];
+              dict[attrKey].push(optVal);
+            }
+          }
+        }
+        totalProcessedRows++;
+        if (totalProcessedRows % CHUNK_SIZE === 0) {
+          if (onProgress) {
+            onProgress({
+              current: totalProcessedRows,
+              total: estimatedTotal,
+              percent: Math.min(99, Math.round((totalProcessedRows / estimatedTotal) * 100))
+            });
+          }
+          await new Promise(res => setTimeout(res, 0));
+        }
+      }
+    } else {
+      for (let r = headerRowIdx + 1; r < rawMatrix.length; r++) {
+        const row = rawMatrix[r] as any[];
+        if (Array.isArray(row)) {
+          headers.forEach((colHeader, cIdx) => {
+            if (!colHeader) return;
+            const lowerH = colHeader.toLowerCase().trim();
+            if (
+              lowerH === 'код опції' ||
+              lowerH === 'id опції' ||
+              lowerH === 'код характеристики' ||
+              lowerH === 'id характеристики' ||
+              lowerH === 'id' ||
+              lowerH === 'код' ||
+              lowerH === 'сортування' ||
+              lowerH === 'порядок сортування' ||
+              lowerH === 'позиція' ||
+              lowerH.includes('export-attribute-set')
+            ) {
+              return;
+            }
+            const val = row[cIdx];
+            if (val !== undefined && val !== null && String(val).trim() !== '') {
+              const s = String(val).trim();
+              if (!isInternalHexOrHashId(s) && !isAiDisclaimerOrServiceText(s)) {
+                const key = normalizeAttributeKey(colHeader, false);
+                if (!dict[key]) dict[key] = [];
+                dict[key].push(s);
+              }
+            }
+          });
+        }
+        totalProcessedRows++;
+        if (totalProcessedRows % CHUNK_SIZE === 0) {
+          if (onProgress) {
+            onProgress({
+              current: totalProcessedRows,
+              total: estimatedTotal,
+              percent: Math.min(99, Math.round((totalProcessedRows / estimatedTotal) * 100))
+            });
+          }
+          await new Promise(res => setTimeout(res, 0));
+        }
+      }
+    }
+  }
+
+  // Deduplicate entries
+  for (const k of Object.keys(dict)) {
+    dict[k] = Array.from(new Set(dict[k]));
+  }
+
+  if (onProgress) {
+    onProgress({ current: totalProcessedRows, total: totalProcessedRows, percent: 100 });
+  }
+
+  return { dict, rowCount: totalProcessedRows };
+}
+
+/**
  * Normalize and build index of dictionary values for fast lookup with symmetric HTML entity & apostrophe support
  */
 export function buildDictionaryIndex(
@@ -462,11 +1045,31 @@ export function buildDictionaryIndex(
   for (const [attrName, allowedList] of Object.entries(rawDict)) {
     const cleanAttrName = normalizeAttributeKey(attrName, false);
     const strippedUnitAttrName = normalizeAttributeKey(attrName, true);
+
+    // Skip non-attribute technical headers
+    const cleanAttrLower = cleanAttrName.toLowerCase();
+    if (
+      cleanAttrLower === 'код опції' ||
+      cleanAttrLower === 'id опції' ||
+      cleanAttrLower === 'код характеристики' ||
+      cleanAttrLower === 'id характеристики' ||
+      cleanAttrLower === 'id' ||
+      cleanAttrLower === 'код' ||
+      cleanAttrLower === 'сортування' ||
+      cleanAttrLower === 'порядок сортування' ||
+      cleanAttrLower === 'позиція' ||
+      cleanAttrLower.includes('export-attribute-set')
+    ) {
+      continue;
+    }
+
     const decodedMap: Record<string, string> = {};
     const synonyms: Record<string, string> = {};
     const sanitizedAllowedList = allowedList
       .map(v => String(v || '').replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim())
-      .filter(Boolean);
+      .filter(v => Boolean(v) && !isInternalHexOrHashId(v) && !isAiDisclaimerOrServiceText(v));
+
+    if (sanitizedAllowedList.length === 0) continue;
 
     for (const rawVal of sanitizedAllowedList) {
       const lowerRaw = rawVal.toLowerCase().trim();
@@ -545,6 +1148,23 @@ export async function buildDictionaryIndexAsync(
   for (const [attrName, allowedList] of entries) {
     const cleanAttrName = normalizeAttributeKey(attrName, false);
     const strippedUnitAttrName = normalizeAttributeKey(attrName, true);
+
+    const cleanAttrLower = cleanAttrName.toLowerCase();
+    if (
+      cleanAttrLower === 'код опції' ||
+      cleanAttrLower === 'id опції' ||
+      cleanAttrLower === 'код характеристики' ||
+      cleanAttrLower === 'id характеристики' ||
+      cleanAttrLower === 'id' ||
+      cleanAttrLower === 'код' ||
+      cleanAttrLower === 'сортування' ||
+      cleanAttrLower === 'порядок сортування' ||
+      cleanAttrLower === 'позиція' ||
+      cleanAttrLower.includes('export-attribute-set')
+    ) {
+      continue;
+    }
+
     const decodedMap: Record<string, string> = {};
     const synonyms: Record<string, string> = {};
     const sanitizedAllowedList: string[] = [];
@@ -552,7 +1172,7 @@ export async function buildDictionaryIndexAsync(
     for (const item of allowedList) {
       if (!item) continue;
       const rawVal = String(item).replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
-      if (!rawVal) continue;
+      if (!rawVal || isInternalHexOrHashId(rawVal) || isAiDisclaimerOrServiceText(rawVal)) continue;
       sanitizedAllowedList.push(rawVal);
 
       const lowerRaw = rawVal.toLowerCase().trim();
@@ -599,6 +1219,8 @@ export async function buildDictionaryIndexAsync(
         await new Promise(resolve => setTimeout(resolve, 0));
       }
     }
+
+    if (sanitizedAllowedList.length === 0) continue;
 
     const entry: EpicentrDictionaryAttribute = {
       attributeName: attrName,
@@ -720,6 +1342,19 @@ export function matchDictionaryValue(
   const rawTrimmed = String(candidateValue).replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
   if (!rawTrimmed || rawTrimmed.toLowerCase() === 'nan') return null;
 
+  // Strict check: Forbid internal hex/hash IDs
+  if (isInternalHexOrHashId(rawTrimmed)) return null;
+
+  // Check AI disclaimers / explanations / apologies
+  if (isAiDisclaimerOrServiceText(rawTrimmed)) {
+    // If the text contains return disclaimer keywords, try to map to official return option
+    if (/повернен/i.test(rawTrimmed)) {
+      const legalMapped = canonicalMapCandidate(rawTrimmed, dictAttr.allowedValues);
+      if (legalMapped) return legalMapped;
+    }
+    return null;
+  }
+
   // 0. Exact raw match in allowedValues
   const exactAllowed = dictAttr.allowedValues.find(v => v === rawTrimmed);
   if (exactAllowed) return exactAllowed;
@@ -737,7 +1372,7 @@ export function matchDictionaryValue(
     if (compactNorm && dictAttr.decodedValuesMap[compactNorm]) return dictAttr.decodedValuesMap[compactNorm];
   }
 
-  // Direct scan across allowedValues with exact/relaxed normalization (handles dynamically constructed dictionaries)
+  // Direct scan across allowedValues with exact/relaxed normalization
   for (const allowedVal of dictAttr.allowedValues) {
     const allowedExact = normalizeForDictionaryComparison(allowedVal, 'exact');
     if (allowedExact === exactNorm || allowedExact.replace(/\s+/g, '') === compactNorm) {
@@ -748,7 +1383,13 @@ export function matchDictionaryValue(
     }
   }
 
-  // 2. Check universal synonyms & RU->UA word map
+  // 2. Universal canonical mapper (Gender/number, all types, legal return, bracket extraction like 18+ from Makeup.ua (18+))
+  const canonicalMatched = canonicalMapCandidate(rawTrimmed, dictAttr.allowedValues);
+  if (canonicalMatched) {
+    return canonicalMatched;
+  }
+
+  // 3. Universal synonyms & RU->UA word map
   const synonymCandidate =
     COMMON_SYNONYMS[exactNorm] ||
     COMMON_SYNONYMS[relaxedNorm] ||
@@ -771,7 +1412,7 @@ export function matchDictionaryValue(
     }
   }
 
-  // 3. Closest equivalent in allowedValues: morphological stem match (e.g. "розважальна" <-> "розважальні", "чоловічі" <-> "чоловічий")
+  // 4. Closest equivalent in allowedValues: morphological stem match (e.g. "розважальна" <-> "розважальні")
   if (exactNorm.length >= 4) {
     const stem = exactNorm.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою|ому|ям|ях|ів)$/i, '');
     if (stem.length >= 4) {
@@ -785,7 +1426,7 @@ export function matchDictionaryValue(
     }
   }
 
-  // 4. Unambiguous substring / token match in allowedValues (e.g. "дихаюча сітка" -> "сітка", "однотонний" -> "без візерунка (однотонний)")
+  // 5. Unambiguous substring / token match in allowedValues (e.g. "дихаюча сітка" -> "сітка")
   if (exactNorm.length >= 3) {
     let bestMatch: string | null = null;
     let bestScore = 0;
@@ -816,11 +1457,12 @@ export function matchDictionaryValue(
 /**
  * Category-Agnostic Dictionary Enforcer:
  * Strictly validates and normalizes values for ANY column across ANY category:
- * - For `multiselect`: splits input by `;` or `,`, validates EACH element individually against `allowedValues`,
+ * - For `multiselect`: splits input by `;` (or `,`), validates EACH element individually against `allowedValues`,
  *   keeps ONLY valid elements, and joins them back via `; `. If no valid elements remain, returns `null` (deletes value).
  * - For `select`: strictly matches value against `allowedValues` (with universal normalization).
  *   If not found in `allowedValues`, returns `null` (deletes value).
- * - Never permits arbitrary text in `select`/`multiselect` columns that have `allowedValues`.
+ * - Categorically forbids writing internal hex/hash IDs or AI meta-explanations.
+ * - Leaves cell completely empty `""` if no valid allowed option matches.
  */
 export function enforceDictionaryValue(
   rawValue: string | null | undefined,
@@ -831,31 +1473,57 @@ export function enforceDictionaryValue(
   const cleaned = String(rawValue).replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
   if (!cleaned || cleaned.toLowerCase() === 'nan') return null;
 
+  // Filter internal hex/hash codes immediately
+  if (isInternalHexOrHashId(cleaned)) return null;
+
+  // Filter AI disclaimers / apologetic phrases immediately
+  if (isAiDisclaimerOrServiceText(cleaned)) {
+    if (dictAttr && /повернен/i.test(cleaned)) {
+      const legalMatch = matchDictionaryValue(dictAttr, cleaned);
+      if (legalMatch) return legalMatch;
+    }
+    return null;
+  }
+
   const hasDictionary = Boolean(dictAttr && Array.isArray(dictAttr.allowedValues) && dictAttr.allowedValues.length > 0);
 
-  // 1. MULTISELECT: Element-by-element validation
+  // 1. MULTISELECT: Strict element-by-element validation
   if (colType === 'multiselect') {
-    const rawElements = cleaned
-      .split(/[;,]+/)
-      .map(item => item.trim())
-      .filter(Boolean);
+    const rawElements = cleaned.includes(';')
+      ? cleaned.split(';').map(item => item.trim())
+      : cleaned.split(/[,\n]+/).map(item => item.trim());
 
     if (rawElements.length === 0) return null;
 
-    if (hasDictionary && dictAttr) {
-      const validElements: string[] = [];
-      for (const element of rawElements) {
+    const validElements: string[] = [];
+    for (const element of rawElements) {
+      if (!element) continue;
+      if (isInternalHexOrHashId(element)) continue;
+      if (isAiDisclaimerOrServiceText(element)) {
+        if (dictAttr && /повернен/i.test(element)) {
+          const lm = matchDictionaryValue(dictAttr, element);
+          if (lm && !validElements.includes(lm)) validElements.push(lm);
+        }
+        continue;
+      }
+
+      if (hasDictionary && dictAttr) {
         const matched = matchDictionaryValue(dictAttr, element);
         if (matched && !validElements.includes(matched)) {
           validElements.push(matched);
         }
+      } else {
+        if (!validElements.includes(element)) {
+          validElements.push(element);
+        }
       }
+    }
+
+    if (hasDictionary) {
       return validElements.length > 0 ? validElements.join('; ') : null;
     }
 
-    // Even if no dictionary was loaded for this multiselect column, normalize delimiter to "; "
-    const uniqueElements = Array.from(new Set(rawElements));
-    return uniqueElements.join('; ');
+    return validElements.length > 0 ? validElements.join('; ') : null;
   }
 
   // 2. SELECT: Strict single-option validation against allowedValues
@@ -864,19 +1532,17 @@ export function enforceDictionaryValue(
       const directMatch = matchDictionaryValue(dictAttr, cleaned);
       if (directMatch) return directMatch;
 
-      // If input contains multiple tokens separated by ; or , take the first valid option from allowedValues
+      // If input contains multiple tokens separated by ; or ,, try each
       if (/[;,]/.test(cleaned)) {
-        const parts = cleaned
-          .split(/[;,]+/)
-          .map(p => p.trim())
-          .filter(Boolean);
+        const parts = cleaned.split(/[;,]+/).map(p => p.trim()).filter(Boolean);
         for (const part of parts) {
+          if (isInternalHexOrHashId(part) || isAiDisclaimerOrServiceText(part)) continue;
           const matchedPart = matchDictionaryValue(dictAttr, part);
           if (matchedPart) return matchedPart;
         }
       }
 
-      // Strictly forbid any value outside allowedValues
+      // Guarantee zero import errors: if not in allowedValues, return null (empty cell)
       return null;
     }
 
@@ -885,20 +1551,19 @@ export function enforceDictionaryValue(
 
   // 3. ARRAY: Normalize delimiter to "; " and match against dictionary if available
   if (colType === 'array') {
-    const parts = cleaned
-      .split(/[;,]+/)
-      .map(p => p.trim())
-      .filter(Boolean);
+    const parts = cleaned.split(/[;,]+/).map(p => p.trim()).filter(Boolean);
     if (parts.length === 0) return null;
     if (hasDictionary && dictAttr) {
       const validParts: string[] = [];
       for (const part of parts) {
+        if (isInternalHexOrHashId(part) || isAiDisclaimerOrServiceText(part)) continue;
         const m = matchDictionaryValue(dictAttr, part);
         if (m && !validParts.includes(m)) validParts.push(m);
       }
       return validParts.length > 0 ? validParts.join('; ') : null;
     }
-    return Array.from(new Set(parts)).join('; ');
+    const cleanParts = parts.filter(p => !isInternalHexOrHashId(p) && !isAiDisclaimerOrServiceText(p));
+    return cleanParts.length > 0 ? Array.from(new Set(cleanParts)).join('; ') : null;
   }
 
   // 4. FLOAT: Ensure numeric format
@@ -2134,16 +2799,31 @@ export function generateEpicentrExportWorkbook(
       return '';
     }
 
+    const candStr = String(candidateVal).trim();
+
+    // STRICT REQUIREMENT 1 & 2: Categorically forbid writing hex codes, IDs, or AI disclaimers to output Excel
+    if (isInternalHexOrHashId(candStr) || isAiDisclaimerOrServiceText(candStr)) {
+      return '';
+    }
+
     if ((col.type === 'select' || col.type === 'multiselect') && dictionaryIndex) {
       const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
       if (dictAttr && dictAttr.allowedValues.length > 0) {
-        const enforced = enforceDictionaryValue(String(candidateVal), col.type, dictAttr);
+        const enforced = enforceDictionaryValue(candStr, col.type, dictAttr);
         return enforced ?? '';
       }
     }
 
     if (col.type === 'multiselect') {
-      return enforceDictionaryValue(String(candidateVal), 'multiselect') ?? '';
+      const enforced = enforceDictionaryValue(candStr, 'multiselect');
+      return enforced ?? '';
+    }
+
+    if (col.type === 'select' && dictionaryIndex) {
+      const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
+      if (dictAttr && dictAttr.allowedValues.length > 0) {
+        return '';
+      }
     }
 
     return candidateVal;

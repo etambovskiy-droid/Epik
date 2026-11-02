@@ -16,6 +16,24 @@ import {
 } from '../types/epicentr';
 
 /**
+ * Normalizes Excel column header names:
+ * Strips all carriage returns \r and XML escape sequences like _x000d_ / _x000D_,
+ * converting them into canonical clean Unix linebreaks (\n),
+ * and trims outer whitespace while preserving the canonical clean linebreak \n.
+ * (e.g. "Назва товару*\r\n[ua]" or "Назва товару*_x000d_\n[ua]" -> "Назва товару*\n[ua]")
+ */
+export function normalizeEpicentrHeaderName(name: string): string {
+  if (!name) return '';
+  return String(name)
+    .replace(/_x000[dD]_\n?/g, '\n')
+    .replace(/_x000[dD]_/gi, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n+/g, '\n')
+    .trim();
+}
+
+/**
  * Unifies all apostrophe variants (' ’ ʻ ʼ ‘ ` ´ &#039; &#39; &apos;) into standard ASCII apostrophe "'"
  * and removes zero-width characters (\u200b, \u200c, \u200d, \ufeff).
  */
@@ -1485,7 +1503,8 @@ export function resolveMandatoryFallback(
  */
 export function normalizeAttributeKey(rawName: string, stripUnits = false): string {
   if (!rawName) return '';
-  let cleaned = rawName
+  let cleaned = String(rawName)
+    .replace(/_x000[dD]_/gi, ' ')
     .replace(/\(select\)/gi, ' ')
     .replace(/\(multiselect\)/gi, ' ')
     .replace(/\(text\)/gi, ' ')
@@ -1638,15 +1657,17 @@ export function analyzeEpicentrColumns(
         commentByColIdx.set(c, commentText);
         if (cell.v !== undefined && cell.v !== null) {
           const rawV = String(cell.v);
+          const normV = normalizeEpicentrHeaderName(rawV);
           commentByHeaderName.set(rawV, commentText);
-          commentByHeaderName.set(rawV.replace(/\r\n/g, '\n').trim(), commentText);
+          commentByHeaderName.set(normV, commentText);
         }
       }
     }
   }
 
   return headers.map((rawHeader, colIndex) => {
-    const lower = rawHeader.toLowerCase();
+    const cleanOrigName = normalizeEpicentrHeaderName(rawHeader);
+    const lower = cleanOrigName.toLowerCase();
 
     // Check if it is a photo / image column (фото не є обов'язковим)
     const isPhoto =
@@ -1657,7 +1678,7 @@ export function analyzeEpicentrColumns(
       lower.includes('picture');
 
     // Clean human-friendly name (collapse newlines and extra spaces!)
-    const cleanName = rawHeader
+    const cleanName = cleanOrigName
       .replace(/\(select\)/gi, '')
       .replace(/\(multiselect\)/gi, '')
       .replace(/\(text\)/gi, '')
@@ -1675,8 +1696,8 @@ export function analyzeEpicentrColumns(
       .trim();
 
     // Фото та ID НЕ є обов'язковими для перезапису характеристиками
-    const isId = isExplicitIdColumnName(cleanName) || isExplicitIdColumnName(rawHeader);
-    const isRequired = isPhoto || isId ? false : rawHeader.includes('*');
+    const isId = isExplicitIdColumnName(cleanName) || isExplicitIdColumnName(cleanOrigName);
+    const isRequired = isPhoto || isId ? false : cleanOrigName.includes('*');
 
     // Type detection from column header like (select), (multiselect), (float), (text), (array), (string)
     let type: EpicentrColumnType = 'string';
@@ -1694,7 +1715,7 @@ export function analyzeEpicentrColumns(
 
     // Unit detection like (м), (г), (кг), (мм)
     let unit: string | undefined;
-    const unitMatch = rawHeader.match(/\((мм|см|м|г|кг|шт|л|мл|вт|v|w)\)/i);
+    const unitMatch = cleanOrigName.match(/\((мм|см|м|г|кг|шт|л|мл|вт|v|w)\)/i);
     if (unitMatch) {
       unit = unitMatch[1].toLowerCase();
     }
@@ -1704,16 +1725,17 @@ export function analyzeEpicentrColumns(
     if (Array.isArray(worksheetOrComments)) {
       rawComment = worksheetOrComments[colIndex];
     } else if (worksheetOrComments) {
-      const normHeader = rawHeader.replace(/\r\n/g, '\n').trim();
+      const normHeader = normalizeEpicentrHeaderName(cleanOrigName);
       rawComment =
-        commentByHeaderName.get(rawHeader) ||
+        commentByHeaderName.get(cleanOrigName) ||
         commentByHeaderName.get(normHeader) ||
+        commentByHeaderName.get(rawHeader) ||
         commentByColIdx.get(colIndex);
     }
 
     return {
       colIndex,
-      originalName: rawHeader,
+      originalName: cleanOrigName,
       cleanName,
       type,
       isRequired,
@@ -1728,6 +1750,7 @@ export function analyzeEpicentrColumns(
  * Fully parses an uploaded Epicentr Excel template workbook:
  * - Detects true header row index (handling merged category titles if present)
  * - Preserves exact original column names with newlines (\n)
+ * - Cleans headers of carriage returns \r and _x000d_
  * - Preserves exact original header cell comments (JSON metadata)
  * - Returns clean rows and columns with rawComment preserved
  */
@@ -1751,7 +1774,7 @@ export function parseEpicentrTemplateWorkbook(wb: XLSX.WorkBook): {
     const row = rawMatrix[r];
     if (Array.isArray(row)) {
       const isHeaderRow = row.some(cell => {
-        const s = String(cell || '').toLowerCase().trim();
+        const s = normalizeEpicentrHeaderName(String(cell || '')).toLowerCase().trim();
         return (
           s === 'id' ||
           s.startsWith('id ') ||
@@ -1769,6 +1792,15 @@ export function parseEpicentrTemplateWorkbook(wb: XLSX.WorkBook): {
     }
   }
 
+  // Clean all header cells in ws from \r and _x000d_ into canonical \n
+  for (let c = 0; c < 200; c++) {
+    const cellRef = XLSX.utils.encode_cell({ r: headerRowIdx, c });
+    const cell = ws[cellRef];
+    if (cell && cell.v !== undefined && cell.v !== null) {
+      cell.v = normalizeEpicentrHeaderName(String(cell.v));
+    }
+  }
+
   // Read data starting from headerRowIdx
   const rawJson = XLSX.utils.sheet_to_json<Record<string, any>>(ws, {
     defval: '',
@@ -1779,22 +1811,31 @@ export function parseEpicentrTemplateWorkbook(wb: XLSX.WorkBook): {
   const headerRow = rawMatrix[headerRowIdx] || [];
   const rawHeaders: string[] = [];
   headerRow.forEach((cellVal: any) => {
-    const s = cellVal !== undefined && cellVal !== null ? String(cellVal) : '';
+    const s = cellVal !== undefined && cellVal !== null ? normalizeEpicentrHeaderName(String(cellVal)) : '';
     if (s && !s.startsWith('__EMPTY')) {
       rawHeaders.push(s);
     }
   });
 
+  // Normalize row keys in rawJson so that row[col.originalName] matches 100% cleanly!
+  const normalizedJson = rawJson.map(row => {
+    const cleanRow: Record<string, any> = {};
+    for (const [k, v] of Object.entries(row)) {
+      cleanRow[normalizeEpicentrHeaderName(k)] = v;
+    }
+    return cleanRow;
+  });
+
   // Fallback to json keys if headerRow was sparse
   const effectiveHeaders = rawHeaders.length > 0
     ? rawHeaders
-    : (rawJson.length > 0 ? Object.keys(rawJson[0]).filter(k => !k.startsWith('__EMPTY')) : []);
+    : (normalizedJson.length > 0 ? Object.keys(normalizedJson[0]).filter(k => !k.startsWith('__EMPTY')) : []);
 
   const columns = analyzeEpicentrColumns(effectiveHeaders, ws, headerRowIdx);
 
   return {
     sheetName,
-    jsonData: rawJson,
+    jsonData: normalizedJson,
     columns,
     headerRowIdx
   };
@@ -3322,8 +3363,14 @@ export function runEpicentrFillingEngine(
         const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
 
         // If the cell already has a value in the template, validate/normalize it if it's a select/multiselect with a dictionary
+        // CRITICAL RULE: Existing non-empty cells MUST NEVER BE CLEARED OR OVERWRITTEN!
         if (hasExistingVal) {
           const rawExisting = String(existingVal).trim();
+          let finalExisting = rawExisting;
+          let note = col.isRequired
+            ? 'Вже заповнено у шаблоні — захищено від змін'
+            : 'Необов\'язкове поле — заповнено користувачем';
+
           if (
             dictAttr &&
             dictAttr.allowedValues.length > 0 &&
@@ -3331,50 +3378,29 @@ export function runEpicentrFillingEngine(
           ) {
             const enforcedExisting = enforceDictionaryValue(rawExisting, col.type, dictAttr);
             if (enforcedExisting) {
-              updatedRow[col.originalName] = enforcedExisting;
-              if (col.isRequired) {
-                alreadyFilledCount++;
-              }
-              diffs[col.originalName] = {
-                colIndex: col.colIndex,
-                columnName: col.originalName,
-                isRequired: col.isRequired,
-                type: col.type,
-                oldValue: rawExisting,
-                newValue: enforcedExisting,
-                source: 'already_filled',
-                confidence: 1.0,
-                note:
-                  enforcedExisting !== rawExisting
-                    ? 'Нормалізовано за офіційним довідником Епіцентру'
-                    : col.isRequired
-                    ? 'Вже заповнено у шаблоні — валідне за довідником'
-                    : 'Необов\'язкове поле — валідне за довідником'
-              };
-              return;
-            } else {
-              // Existing value is NOT in allowedValues and cannot be normalized -> DELETE invalid value!
-              updatedRow[col.originalName] = '';
+              finalExisting = enforcedExisting;
+              note = enforcedExisting !== rawExisting
+                ? 'Нормалізовано за офіційним довідником Епіцентру'
+                : 'Вже заповнено у шаблоні — валідне за довідником';
             }
-          } else {
-            if (col.isRequired) {
-              alreadyFilledCount++;
-            }
-            diffs[col.originalName] = {
-              colIndex: col.colIndex,
-              columnName: col.originalName,
-              isRequired: col.isRequired,
-              type: col.type,
-              oldValue: rawExisting,
-              newValue: rawExisting,
-              source: 'already_filled',
-              confidence: 1.0,
-              note: col.isRequired
-                ? 'Вже заповнено у шаблоні — захищено від змін'
-                : 'Необов\'язкове поле — заповнено користувачем'
-            };
-            return;
           }
+
+          updatedRow[col.originalName] = finalExisting;
+          if (col.isRequired) {
+            alreadyFilledCount++;
+          }
+          diffs[col.originalName] = {
+            colIndex: col.colIndex,
+            columnName: col.originalName,
+            isRequired: col.isRequired,
+            type: col.type,
+            oldValue: rawExisting,
+            newValue: finalExisting,
+            source: 'already_filled',
+            confidence: 1.0,
+            note
+          };
+          return;
         }
 
         // Skip primary system text/price fields if they are not characteristics
@@ -3863,11 +3889,54 @@ export function generateEpicentrExportWorkbook(
       return ruVal;
     }
 
+    // 1. Photo column: 1:1 mirror CDN URLs (e.g. https://cdn.27.ua/...)
+    const cleanColLower = (col.cleanName || col.originalName).toLowerCase();
+    const isPhotoCol =
+      cleanColLower.includes('фото') ||
+      cleanColLower.includes('зображення') ||
+      cleanColLower.includes('photo') ||
+      cleanColLower.includes('image');
+
+    const origVal =
+      pRow.originalRow && pRow.originalRow[col.originalName] !== undefined
+        ? pRow.originalRow[col.originalName]
+        : (pRow.originalRow ? pRow.originalRow[col.cleanName] : undefined);
+
+    const hasOriginalNonEmpty =
+      origVal !== undefined &&
+      origVal !== null &&
+      String(origVal).trim() !== '' &&
+      String(origVal).toLowerCase() !== 'nan';
+
+    if (isPhotoCol) {
+      if (hasOriginalNonEmpty) {
+        return origVal;
+      }
+      return pRow.updatedRow[col.originalName] || '';
+    }
+
+    // 2. Existing Non-Empty Cells Inviolability (CRITICAL RULE #1 & #3)
+    // If originalRow already contains data in the uploaded Excel, it MUST NOT be cleared or overwritten.
+    if (hasOriginalNonEmpty) {
+      const updatedVal = pRow.updatedRow[col.originalName];
+      if (updatedVal !== undefined && updatedVal !== null && String(updatedVal).trim() !== '' && String(updatedVal).toLowerCase() !== 'nan') {
+        const updatedStr = String(updatedVal).trim();
+        if ((col.type === 'select' || col.type === 'multiselect') && dictionaryIndex) {
+          const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
+          if (dictAttr && dictAttr.allowedValues.length > 0) {
+            const sanitized = sanitizeValueAgainstDictionary(updatedStr, dictAttr.allowedValues, col.type === 'multiselect');
+            if (sanitized) return sanitized;
+          }
+        }
+        return updatedVal;
+      }
+      return origVal;
+    }
+
+    // 3. For cells that were originally EMPTY in the input Excel:
     const hasExplicitUpdatedKey = Object.prototype.hasOwnProperty.call(pRow.updatedRow, col.originalName);
     const candidateVal = hasExplicitUpdatedKey
       ? pRow.updatedRow[col.originalName]
-      : pRow.originalRow
-      ? pRow.originalRow[col.originalName]
       : '';
 
     if (candidateVal === undefined || candidateVal === null || String(candidateVal).trim() === '') {
@@ -3938,7 +4007,7 @@ export function generateEpicentrExportWorkbook(
     // Detect the actual header row index in the original worksheet (usually row 0, or row 1+ if merged group titles exist)
     let headerRowIdx = 0;
     const colIndexByOriginalName = new Map<string, number>();
-    const normalizeCellHeader = (s: string) => String(s || '').replace(/\r\n/g, '\n').trim();
+    const normalizeCellHeader = (s: string) => normalizeEpicentrHeaderName(s);
 
     for (let r = 0; r < 10; r++) {
       let matchCount = 0;
@@ -3965,11 +4034,12 @@ export function generateEpicentrExportWorkbook(
       const targetColIdx = colIndexByOriginalName.get(col.originalName) ?? col.colIndex ?? cIdx;
       const headerCellRef = XLSX.utils.encode_cell({ r: headerRowIdx, c: targetColIdx });
 
-      // Guarantee exact original name preserving \n
+      // Guarantee exact clean original name preserving \n without \r or _x000d_
+      const cleanHeader = normalizeEpicentrHeaderName(col.originalName);
       if (!ws[headerCellRef]) {
-        ws[headerCellRef] = { t: 's', v: col.originalName };
+        ws[headerCellRef] = { t: 's', v: cleanHeader };
       } else {
-        ws[headerCellRef].v = col.originalName;
+        ws[headerCellRef].v = cleanHeader;
         ws[headerCellRef].t = 's';
       }
 
@@ -4020,7 +4090,7 @@ export function generateEpicentrExportWorkbook(
   } else {
     // Generate new valid workbook if no file was uploaded, preserving exact sheetName 'Worksheet'
     wb = XLSX.utils.book_new();
-    const headers = columns.map(c => c.originalName);
+    const headers = columns.map(c => normalizeEpicentrHeaderName(c.originalName));
     const dataRows = processedRows.map(p => {
       return columns.map(c => resolveExportCellValue(p, c));
     });
@@ -4031,7 +4101,7 @@ export function generateEpicentrExportWorkbook(
     columns.forEach((col, cIdx) => {
       const cellRef = XLSX.utils.encode_cell({ r: 0, c: cIdx });
       if (ws[cellRef]) {
-        ws[cellRef].v = col.originalName;
+        ws[cellRef].v = normalizeEpicentrHeaderName(col.originalName);
         ws[cellRef].t = 's';
 
         if (col.rawComment) {

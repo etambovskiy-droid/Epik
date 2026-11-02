@@ -21,6 +21,7 @@ import {
   matchDictionaryValue,
   matchSingleOptionAgainstAllowed,
   normalizeApostrophes,
+  normalizeEpicentrHeaderName,
   normalizeForDictionaryComparison,
   resolveMandatoryFallback,
   sanitizeValueAgainstDictionary,
@@ -29,6 +30,7 @@ import {
   universalStemWord
 } from './epicentrEngine';
 import { callGeminiDirect } from './geminiClientDirect';
+import { getStoredApiKey } from './aiApiKeyService';
 
 export const MISSING_API_KEY_EVENT = 'epic_ai_missing_key_warning';
 
@@ -45,7 +47,8 @@ export const UNIVERSAL_PIM_SYSTEM_PROMPT = `Ти — універсальний 
  */
 export function getCleanAttributeName(rawName: string): string {
   if (!rawName) return '';
-  return rawName
+  return normalizeEpicentrHeaderName(rawName)
+    .replace(/_x000[dD]_/gi, ' ')
     .replace(/\*|\(select\)|\(multiselect\)|\(text\)|\(float\)|\(array\)|\(string\)|\(мм\)|\(см\)|\(м\)|\(г\)|\(кг\)|\(л\)|\(мл\)|\[ua\]|\[ru\]/gi, ' ')
     .replace(/[\r\n]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -160,6 +163,19 @@ function applyLocalPimExtraction(
     const origKey = col.originalName;
     const cleanKey = col.cleanName || getCleanAttributeName(origKey);
     const normKey = getCleanAttributeName(cleanKey).toLowerCase();
+    const normHeader = normalizeEpicentrHeaderName(origKey);
+
+    // CRITICAL: NEVER overwrite or touch any cell that already has data in productRow
+    const valOrig = productRow[origKey];
+    const valClean = productRow[cleanKey];
+    const valNorm = productRow[normHeader];
+    const hasData =
+      (valOrig !== undefined && valOrig !== null && String(valOrig).trim() !== '' && String(valOrig).toLowerCase() !== 'nan') ||
+      (valClean !== undefined && valClean !== null && String(valClean).trim() !== '' && String(valClean).toLowerCase() !== 'nan') ||
+      (valNorm !== undefined && valNorm !== null && String(valNorm).trim() !== '' && String(valNorm).toLowerCase() !== 'nan');
+    if (hasData) {
+      continue;
+    }
 
     if (result[origKey] || result[cleanKey]) continue;
 
@@ -701,7 +717,8 @@ export function extractProductIdentity(productRow: Record<string, any>, merchant
 function mapAttributesToColumns(
   rawAttributes: Record<string, string>,
   targetCols: EpicentrColumn[],
-  dictionaryIndex: Record<string, EpicentrDictionaryAttribute>
+  dictionaryIndex: Record<string, EpicentrDictionaryAttribute>,
+  productRow?: Record<string, any>
 ): Record<string, string> {
   const mapped: Record<string, string> = {};
 
@@ -714,6 +731,7 @@ function mapAttributesToColumns(
       c =>
         c.cleanName.toLowerCase() === colName.toLowerCase() ||
         c.originalName === colName ||
+        normalizeEpicentrHeaderName(c.originalName) === normalizeEpicentrHeaderName(colName) ||
         getCleanAttributeName(c.cleanName || c.originalName).toLowerCase() ===
           getCleanAttributeName(colName).toLowerCase()
     );
@@ -721,6 +739,22 @@ function mapAttributesToColumns(
     if (matchedCol) {
       const origKey = matchedCol.originalName;
       const cleanKey = matchedCol.cleanName || getCleanAttributeName(origKey);
+      const normKey = normalizeEpicentrHeaderName(origKey);
+
+      // CRITICAL: NEVER overwrite or modify any cell that already had data in productRow
+      if (productRow) {
+        const valOrig = productRow[origKey];
+        const valClean = productRow[cleanKey];
+        const valNorm = productRow[normKey];
+        const hasExisting =
+          (valOrig !== undefined && valOrig !== null && String(valOrig).trim() !== '' && String(valOrig).toLowerCase() !== 'nan') ||
+          (valClean !== undefined && valClean !== null && String(valClean).trim() !== '' && String(valClean).toLowerCase() !== 'nan') ||
+          (valNorm !== undefined && valNorm !== null && String(valNorm).trim() !== '' && String(valNorm).toLowerCase() !== 'nan');
+        if (hasExisting) {
+          continue;
+        }
+      }
+
       const dict = findDictionaryAttr(dictionaryIndex, cleanKey);
       let enforcedVal: string | null = null;
       if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
@@ -741,7 +775,125 @@ function mapAttributesToColumns(
 }
 
 /**
- * Researches missing product characteristics using Google Search Grounding (gemini-3.8-flash).
+ * Direct client-side Google Generative Language REST API call with Google Search Grounding.
+ * Uses gemini-3.5-flash-lite and passes apiKey in URL query ?key= and header x-goog-api-key.
+ * Extracts grounding sources and metadata directly from candidates[0].groundingMetadata.
+ * Completely eliminates backend relative routes (/api/gemini/...) and 404 errors on Vercel/static hosts.
+ */
+export async function callGeminiSearchRestDirect(
+  prompt: string,
+  options?: {
+    systemInstruction?: string;
+    maxOutputTokens?: number;
+    storeId?: string;
+  }
+): Promise<{
+  text: string;
+  sources: { uri: string; title: string }[];
+  searchEntryPoint?: string | null;
+  error?: string;
+}> {
+  const apiKey = getStoredApiKey(options?.storeId);
+  if (!apiKey) {
+    notifyMissingApiKey('Google Search Grounding розшук специфікацій');
+    return {
+      text: '',
+      sources: [],
+      error: 'Google AI Studio API Key не знайдено в localStorage (epic_ai_key). Будь ласка, вкажіть ваш API-ключ у налаштуваннях.'
+    };
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const body: any = {
+    contents: [
+      {
+        role: 'user',
+        parts: [{ text: prompt }]
+      }
+    ],
+    tools: [
+      {
+        googleSearch: {}
+      }
+    ],
+    generationConfig: {
+      maxOutputTokens: options?.maxOutputTokens || 350,
+      temperature: 0.2
+    }
+  };
+
+  if (options?.systemInstruction) {
+    body.systemInstruction = {
+      parts: [{ text: options.systemInstruction }]
+    };
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      let errDetail = '';
+      try {
+        const errJson = await response.json();
+        errDetail = errJson?.error?.message || JSON.stringify(errJson?.error || errJson);
+      } catch {
+        errDetail = await response.text();
+      }
+      return {
+        text: '',
+        sources: [],
+        error: `Помилка Google Generative Language API (${response.status}): ${errDetail}`
+      };
+    }
+
+    const data = await response.json();
+    const candidate = data?.candidates?.[0];
+    const text = candidate?.content?.parts?.map((p: any) => p?.text || '').join('') || '';
+
+    // Direct extraction of grounding metadata
+    const grounding = candidate?.groundingMetadata;
+    const sources: { uri: string; title: string }[] = [];
+
+    if (grounding?.groundingChunks && Array.isArray(grounding.groundingChunks)) {
+      for (const chunk of grounding.groundingChunks) {
+        if (chunk?.web?.uri) {
+          sources.push({
+            uri: chunk.web.uri,
+            title: chunk.web.title || chunk.web.uri
+          });
+        }
+      }
+    }
+
+    let searchEntryPoint: string | null = null;
+    if (grounding?.searchEntryPoint?.renderedContent) {
+      searchEntryPoint = grounding.searchEntryPoint.renderedContent;
+    }
+
+    return {
+      text,
+      sources,
+      searchEntryPoint
+    };
+  } catch (err: any) {
+    return {
+      text: '',
+      sources: [],
+      error: `Помилка клієнтського звернення до Google Generative Language API: ${err?.message || err}`
+    };
+  }
+}
+
+/**
+ * Researches missing product characteristics using Google Search Grounding (gemini-3.5-flash-lite).
  * Implements:
  * 1. Step 1 local heuristic pre-fill (skips network if all fields resolved locally).
  * 2. LocalStorage cache lookup by "[Бренд]_[Артикул/Модель]" (skips network if cached).
@@ -916,10 +1068,8 @@ ${missingAttributesPayload
   }
 }`;
 
-    const aiRes = await callGeminiDirect(researchPrompt, {
-      model: 'gemini-3.8-flash',
+    const aiRes = await callGeminiSearchRestDirect(researchPrompt, {
       systemInstruction: OFFICIAL_CATALOG_SYSTEM_INSTRUCTION,
-      tools: [{ googleSearch: {} }],
       maxOutputTokens: 350
     });
 

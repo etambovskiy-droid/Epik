@@ -58,11 +58,43 @@ export function getStoreApiKey(storeId?: string): string | null {
 }
 
 export function getStoredApiKey(storeId?: string): string | null {
-  return getStoreApiKey(storeId) || getGlobalApiKey() || 'server-managed';
+  const storeKey = getStoreApiKey(storeId);
+  if (storeKey) return storeKey;
+
+  const globalKey = getGlobalApiKey();
+  if (globalKey) return globalKey;
+
+  if (typeof window !== 'undefined') {
+    try {
+      const fallback = localStorage.getItem('gemini_api_key');
+      if (fallback && fallback.trim()) return fallback.trim();
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+    if (envKey && typeof envKey === 'string' && envKey.trim()) {
+      return envKey.trim();
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
 }
 
 export function getDefaultEnvApiKey(): string | null {
-  return 'server-managed';
+  try {
+    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+    if (envKey && typeof envKey === 'string' && envKey.trim()) {
+      return envKey.trim();
+    }
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 export function getActiveApiKey(storeId?: string): {
@@ -77,7 +109,15 @@ export function getActiveApiKey(storeId?: string): {
   if (globalKey) {
     return { key: globalKey, source: 'custom' };
   }
-  return { key: 'server-managed', source: 'env' };
+  try {
+    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
+    if (envKey && typeof envKey === 'string' && envKey.trim()) {
+      return { key: envKey.trim(), source: 'env' };
+    }
+  } catch {
+    // ignore
+  }
+  return { key: null, source: 'none' };
 }
 
 export function saveApiKey(
@@ -149,7 +189,7 @@ export async function testApiKeyConnection(key: string): Promise<{ success: bool
     };
   }
 
-  const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(trimmed)}`;
 
   try {
     const response = await fetch(endpoint, {

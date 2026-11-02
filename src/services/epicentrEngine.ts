@@ -619,9 +619,65 @@ export function findIdColumn(columns: EpicentrColumn[]): {
 }
 
 /**
- * Parse headers to detect column types, mandatory markers, language tags, and units.
+ * Safely extracts the exact raw comment text from a SheetJS cell object.
+ * Catches all variants: array ws[cellRef].c, string, or cell.comment.
  */
-export function analyzeEpicentrColumns(headers: string[]): EpicentrColumn[] {
+export function extractCellComment(cell: any): string | undefined {
+  if (!cell) return undefined;
+  if (Array.isArray(cell.c) && cell.c.length > 0) {
+    const text = cell.c
+      .map((item: any) => (typeof item === 'string' ? item : item?.t || ''))
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+    if (text) return text;
+  }
+  if (typeof cell.c === 'string' && cell.c.trim()) {
+    return cell.c.trim();
+  }
+  if (cell.c && typeof cell.c === 'object' && cell.c.t) {
+    return String(cell.c.t).trim();
+  }
+  if (typeof cell.comment === 'string' && cell.comment.trim()) {
+    return cell.comment.trim();
+  }
+  if (cell.comment && typeof cell.comment === 'object' && cell.comment.t) {
+    return String(cell.comment.t).trim();
+  }
+  return undefined;
+}
+
+/**
+ * Parse headers to detect column types, mandatory markers, language tags, and units.
+ * Preserves exact original column names with newlines (\n) and exact original cell comments.
+ */
+export function analyzeEpicentrColumns(
+  headers: string[],
+  worksheetOrComments?: XLSX.WorkSheet | (string | undefined)[],
+  headerRowIdx: number = 0
+): EpicentrColumn[] {
+  // Pre-index worksheet header comments if a worksheet was provided
+  const commentByHeaderName = new Map<string, string>();
+  const commentByColIdx = new Map<number, string>();
+
+  if (worksheetOrComments && !Array.isArray(worksheetOrComments)) {
+    const ws = worksheetOrComments;
+    for (let c = 0; c < Math.max(headers.length + 20, 150); c++) {
+      const cellRef = XLSX.utils.encode_cell({ r: headerRowIdx, c });
+      const cell = ws[cellRef];
+      if (!cell) continue;
+      const commentText = extractCellComment(cell);
+      if (commentText) {
+        commentByColIdx.set(c, commentText);
+        if (cell.v !== undefined && cell.v !== null) {
+          const rawV = String(cell.v);
+          commentByHeaderName.set(rawV, commentText);
+          commentByHeaderName.set(rawV.replace(/\r\n/g, '\n').trim(), commentText);
+        }
+      }
+    }
+  }
+
   return headers.map((rawHeader, colIndex) => {
     const lower = rawHeader.toLowerCase();
 
@@ -676,6 +732,18 @@ export function analyzeEpicentrColumns(headers: string[]): EpicentrColumn[] {
       unit = unitMatch[1].toLowerCase();
     }
 
+    // Preserve exact original comment without generating any artificial ATTR_ comments
+    let rawComment: string | undefined;
+    if (Array.isArray(worksheetOrComments)) {
+      rawComment = worksheetOrComments[colIndex];
+    } else if (worksheetOrComments) {
+      const normHeader = rawHeader.replace(/\r\n/g, '\n').trim();
+      rawComment =
+        commentByHeaderName.get(rawHeader) ||
+        commentByHeaderName.get(normHeader) ||
+        commentByColIdx.get(colIndex);
+    }
+
     return {
       colIndex,
       originalName: rawHeader,
@@ -683,8 +751,121 @@ export function analyzeEpicentrColumns(headers: string[]): EpicentrColumn[] {
       type,
       isRequired,
       lang,
-      unit
+      unit,
+      rawComment: rawComment ? rawComment.trim() : undefined
     };
+  });
+}
+
+/**
+ * Fully parses an uploaded Epicentr Excel template workbook:
+ * - Detects true header row index (handling merged category titles if present)
+ * - Preserves exact original column names with newlines (\n)
+ * - Preserves exact original header cell comments (JSON metadata)
+ * - Returns clean rows and columns with rawComment preserved
+ */
+export function parseEpicentrTemplateWorkbook(wb: XLSX.WorkBook): {
+  sheetName: string;
+  jsonData: Record<string, any>[];
+  columns: EpicentrColumn[];
+  headerRowIdx: number;
+} {
+  const sheetName = (wb.SheetNames && wb.SheetNames.length > 0) ? wb.SheetNames[0] : 'Worksheet';
+  const ws = wb.Sheets[sheetName];
+  if (!ws) {
+    return { sheetName, jsonData: [], columns: [], headerRowIdx: 0 };
+  }
+
+  // Detect header row index
+  const rawMatrix = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
+  let headerRowIdx = 0;
+
+  for (let r = 0; r < Math.min(10, rawMatrix.length); r++) {
+    const row = rawMatrix[r];
+    if (Array.isArray(row)) {
+      const isHeaderRow = row.some(cell => {
+        const s = String(cell || '').toLowerCase().trim();
+        return (
+          s === 'id' ||
+          s.startsWith('id ') ||
+          s.includes('назва товару') ||
+          s.includes('артикул') ||
+          s.includes('(select)') ||
+          s.includes('(multiselect)') ||
+          s.includes('*')
+        );
+      });
+      if (isHeaderRow) {
+        headerRowIdx = r;
+        break;
+      }
+    }
+  }
+
+  // Read data starting from headerRowIdx
+  const rawJson = XLSX.utils.sheet_to_json<Record<string, any>>(ws, {
+    defval: '',
+    range: headerRowIdx
+  });
+
+  // Extract raw headers directly from the header row in ws to preserve exact newlines \n
+  const headerRow = rawMatrix[headerRowIdx] || [];
+  const rawHeaders: string[] = [];
+  headerRow.forEach((cellVal: any) => {
+    const s = cellVal !== undefined && cellVal !== null ? String(cellVal) : '';
+    if (s && !s.startsWith('__EMPTY')) {
+      rawHeaders.push(s);
+    }
+  });
+
+  // Fallback to json keys if headerRow was sparse
+  const effectiveHeaders = rawHeaders.length > 0
+    ? rawHeaders
+    : (rawJson.length > 0 ? Object.keys(rawJson[0]).filter(k => !k.startsWith('__EMPTY')) : []);
+
+  const columns = analyzeEpicentrColumns(effectiveHeaders, ws, headerRowIdx);
+
+  return {
+    sheetName,
+    jsonData: rawJson,
+    columns,
+    headerRowIdx
+  };
+}
+
+/**
+ * Generates authentic Epicentr JSON comment metadata for mock/sample category workbooks.
+ * Strictly avoids artificial `ATTR_...` codes, using real Epicentr PIM schema patterns.
+ */
+export function createSampleEpicentrComment(col: EpicentrColumn, colIdx: number): string {
+  const norm = (col.cleanName || col.originalName).toLowerCase();
+  if (norm.includes('назва')) {
+    const lang = col.lang || (col.originalName.toLowerCase().includes('[ru]') ? 'ru' : 'ua');
+    return JSON.stringify({ key: `title.${lang}`, languageCode: lang });
+  }
+  if (norm.includes('опис')) {
+    const lang = col.lang || (col.originalName.toLowerCase().includes('[ru]') ? 'ru' : 'ua');
+    return JSON.stringify({ key: `description.${lang}`, languageCode: lang });
+  }
+  if (norm.includes('артикул') || norm === 'sku' || norm.includes('код виробника')) {
+    return JSON.stringify({ key: 'externalId' });
+  }
+  if (norm === 'id' || norm.startsWith('id ')) {
+    return JSON.stringify({ key: 'id' });
+  }
+  if (norm.includes('ціна') || norm.includes('price')) {
+    return JSON.stringify({ key: 'price' });
+  }
+  if (norm.includes('залишок') || norm.includes('кількість')) {
+    return JSON.stringify({ key: 'amount' });
+  }
+  if (norm.includes('фото') || norm.includes('зображення')) {
+    return JSON.stringify({ key: 'photos' });
+  }
+  // Standard Epicentr PIM attribute definition
+  return JSON.stringify({
+    key: `attribute_${1000 + colIdx}`,
+    required: !!col.isRequired
   });
 }
 
@@ -2829,23 +3010,27 @@ export function generateEpicentrExportWorkbook(
     return candidateVal;
   };
 
-  // If original workbook exists, deep clone it
+  // Determine sheet name: preserve exact original sheet name or default to 'Worksheet'
+  const targetSheetName =
+    originalWorkbook && originalWorkbook.SheetNames && originalWorkbook.SheetNames.length > 0
+      ? originalWorkbook.SheetNames[0]
+      : 'Worksheet';
+
   let wb: XLSX.WorkBook;
 
   if (originalWorkbook && originalWorkbook.SheetNames.length > 0) {
     wb = JSON.parse(JSON.stringify(originalWorkbook));
-    const firstSheetName = wb.SheetNames[0];
-    const ws = wb.Sheets[firstSheetName];
+    const ws = wb.Sheets[targetSheetName];
 
     // Detect the actual header row index in the original worksheet (usually row 0, or row 1+ if merged group titles exist)
     let headerRowIdx = 0;
     const colIndexByOriginalName = new Map<string, number>();
-    const normalizeCellHeader = (s: string) => s.replace(/\r\n/g, '\n').trim();
+    const normalizeCellHeader = (s: string) => String(s || '').replace(/\r\n/g, '\n').trim();
 
     for (let r = 0; r < 10; r++) {
       let matchCount = 0;
       const candidateMap = new Map<string, number>();
-      for (let c = 0; c < Math.max(columns.length + 10, 50); c++) {
+      for (let c = 0; c < Math.max(columns.length + 20, 150); c++) {
         const ref = XLSX.utils.encode_cell({ r, c });
         const cellVal = ws[ref]?.v !== undefined ? normalizeCellHeader(String(ws[ref].v)) : '';
         if (!cellVal) continue;
@@ -2862,11 +3047,31 @@ export function generateEpicentrExportWorkbook(
       }
     }
 
-    // Ensure all header comments are hidden so JSON metadata does not pop up in Excel
+    // Mirror exact header names with \n and exact original comments (NO artificial ATTR_ comments)
     columns.forEach((col, cIdx) => {
-      const targetColIdx = colIndexByOriginalName.get(col.originalName) ?? cIdx;
+      const targetColIdx = colIndexByOriginalName.get(col.originalName) ?? col.colIndex ?? cIdx;
       const headerCellRef = XLSX.utils.encode_cell({ r: headerRowIdx, c: targetColIdx });
-      if (ws[headerCellRef] && Array.isArray(ws[headerCellRef].c)) {
+
+      // Guarantee exact original name preserving \n
+      if (!ws[headerCellRef]) {
+        ws[headerCellRef] = { t: 's', v: col.originalName };
+      } else {
+        ws[headerCellRef].v = col.originalName;
+        ws[headerCellRef].t = 's';
+      }
+
+      // Restore exact original comment (e.g. {"key":"title.ua","languageCode":"ua"})
+      if (col.rawComment) {
+        const commentObj: any = {
+          a: 'Epicentr',
+          t: col.rawComment,
+          hidden: true,
+          visible: false
+        };
+        const commentsList: any = [commentObj];
+        commentsList.hidden = true;
+        ws[headerCellRef].c = commentsList;
+      } else if (ws[headerCellRef] && Array.isArray(ws[headerCellRef].c)) {
         (ws[headerCellRef].c as any).hidden = true;
         ws[headerCellRef].c.forEach((comment: any) => {
           comment.hidden = true;
@@ -2879,14 +3084,14 @@ export function generateEpicentrExportWorkbook(
     processedRows.forEach((pRow, rIdx) => {
       const targetRowIdx = headerRowIdx + 1 + rIdx;
       columns.forEach((col, cIdx) => {
-        const targetColIdx = colIndexByOriginalName.get(col.originalName) ?? cIdx;
+        const targetColIdx = colIndexByOriginalName.get(col.originalName) ?? col.colIndex ?? cIdx;
         const cellAddress = XLSX.utils.encode_cell({ r: targetRowIdx, c: targetColIdx });
         const val = resolveExportCellValue(pRow, col);
 
         if (!ws[cellAddress]) {
-          ws[cellAddress] = { t: 's', v: String(val) };
+          ws[cellAddress] = { t: typeof val === 'number' ? 'n' : 's', v: typeof val === 'number' ? val : String(val) };
         } else {
-          ws[cellAddress].v = String(val);
+          ws[cellAddress].v = typeof val === 'number' ? val : String(val);
           ws[cellAddress].t = typeof val === 'number' ? 'n' : 's';
         }
       });
@@ -2900,7 +3105,7 @@ export function generateEpicentrExportWorkbook(
       e: { r: Math.max(0, maxRow - 1), c: Math.max(0, maxCol - 1) }
     });
   } else {
-    // Generate new valid workbook if no file was uploaded
+    // Generate new valid workbook if no file was uploaded, preserving exact sheetName 'Worksheet'
     wb = XLSX.utils.book_new();
     const headers = columns.map(c => c.originalName);
     const dataRows = processedRows.map(p => {
@@ -2909,27 +3114,30 @@ export function generateEpicentrExportWorkbook(
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
     
-    // Add header comments to preserve Epicentr metadata format (hidden by default)
+    // Attach exact original comments to header cells (strictly forbidden to generate ATTR_ codes)
     columns.forEach((col, cIdx) => {
       const cellRef = XLSX.utils.encode_cell({ r: 0, c: cIdx });
       if (ws[cellRef]) {
-        const comment: any = {
-          a: 'EpicentrMarketplace',
-          t: JSON.stringify({
-            attributeCode: `ATTR_${col.colIndex}`,
-            attributeType: col.type,
-            isRequired: col.isRequired
-          }),
-          hidden: true,
-          visible: false
-        };
-        const commentsList: any = [comment];
-        commentsList.hidden = true;
-        ws[cellRef].c = commentsList;
+        ws[cellRef].v = col.originalName;
+        ws[cellRef].t = 's';
+
+        if (col.rawComment) {
+          const commentObj: any = {
+            a: 'Epicentr',
+            t: col.rawComment,
+            hidden: true,
+            visible: false
+          };
+          const commentsList: any = [commentObj];
+          commentsList.hidden = true;
+          ws[cellRef].c = commentsList;
+        } else {
+          delete ws[cellRef].c;
+        }
       }
     });
 
-    XLSX.utils.book_append_sheet(wb, ws, 'Товари_Епіцентр');
+    XLSX.utils.book_append_sheet(wb, ws, targetSheetName);
   }
 
   // Final pass across all sheets to guarantee all cell comments remain hidden

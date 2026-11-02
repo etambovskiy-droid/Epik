@@ -16,6 +16,7 @@ import { SAMPLE_CATEGORIES } from './data/sampleEpicentrCategories';
 import {
   analyzeEpicentrColumns,
   buildDictionaryIndex,
+  createSampleEpicentrComment,
   runEpicentrFillingEngine,
   enforceDictionaryValue,
   findDictionaryAttr
@@ -386,18 +387,16 @@ export function App() {
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(defaultCat.defaultData);
 
-      // Attach comments metadata to row 1
+      // Attach authentic Epicentr comments metadata to row 1
       analyzedCols.forEach((col, idx) => {
         const cellRef = XLSX.utils.encode_cell({ r: 0, c: idx });
         if (ws[cellRef]) {
+          const commentMeta = createSampleEpicentrComment(col, idx);
+          col.rawComment = commentMeta;
           ws[cellRef].c = [
             {
-              a: 'EpicentrMarketplace',
-              t: JSON.stringify({
-                attributeCode: `ATTR_${idx + 100}`,
-                attributeType: col.type,
-                isRequired: col.isRequired
-              }),
+              a: 'Epicentr',
+              t: commentMeta,
               hidden: true,
               visible: false
             } as any
@@ -405,7 +404,7 @@ export function App() {
           (ws[cellRef].c as any).hidden = true;
         }
       });
-      XLSX.utils.book_append_sheet(wb, ws, 'Навушники_Шаблон');
+      XLSX.utils.book_append_sheet(wb, ws, 'Worksheet');
 
       setRawRows(defaultCat.defaultData);
       setColumns(analyzedCols);

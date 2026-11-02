@@ -36,8 +36,10 @@ import {
   analyzeEpicentrColumns,
   buildDictionaryIndex,
   buildDictionaryIndexAsync,
+  createSampleEpicentrComment,
   parseDictionaryWorkbook,
-  parseDictionaryWorkbookAsync
+  parseDictionaryWorkbookAsync,
+  parseEpicentrTemplateWorkbook
 } from '../../services/epicentrEngine';
 import {
   generateDictionaryCacheKey,
@@ -127,49 +129,17 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     return parseDictionaryWorkbookAsync(wb, sheetNames, onProgress);
   };
 
-  // Handle template file upload
+  // Handle template file upload preserving exact cell comments, exact header \n, and original sheet names
   const handleTemplateFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const buffer = e.target?.result;
-        const wb = XLSX.read(buffer, { type: 'array' });
-        const sheetName = wb.SheetNames[0];
-        const ws = wb.Sheets[sheetName];
-        let jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' });
+        // MUST include cellComments: true to preserve exact hidden JSON metadata from Epicentr
+        const wb = XLSX.read(buffer, { type: 'array', cellComments: true } as any);
+        const { jsonData, columns: analyzedCols } = parseEpicentrTemplateWorkbook(wb);
 
-        // If row 1 had merged group titles (producing __EMPTY keys), locate the real header row
-        if (jsonData.length > 0) {
-          const initialKeys = Object.keys(jsonData[0]);
-          const emptyKeyCount = initialKeys.filter(k => k.startsWith('__EMPTY')).length;
-          if (emptyKeyCount > initialKeys.length / 2) {
-            const rawMatrix = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' });
-            const headerRowIdx = rawMatrix.slice(0, 10).findIndex(row =>
-              Array.isArray(row) &&
-              row.some(cell => {
-                const s = String(cell || '').toLowerCase().trim();
-                return (
-                  s === 'id' ||
-                  s.startsWith('id ') ||
-                  s.includes('назва товару') ||
-                  s.includes('артикул') ||
-                  s.includes('(select)') ||
-                  s.includes('(multiselect)')
-                );
-              })
-            );
-            if (headerRowIdx > 0) {
-              jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(ws, {
-                defval: '',
-                range: headerRowIdx
-              });
-            }
-          }
-        }
-
-        if (jsonData.length > 0) {
-          const rawHeaders = Object.keys(jsonData[0]).filter(h => !h.startsWith('__EMPTY'));
-          const analyzedCols = analyzeEpicentrColumns(rawHeaders.length > 0 ? rawHeaders : Object.keys(jsonData[0]));
+        if (jsonData.length > 0 || analyzedCols.length > 0) {
           onLoadTemplate(jsonData, analyzedCols, wb, file.name);
 
           // If the uploaded template workbook also contains a secondary dictionary sheet, load it automatically
@@ -315,22 +285,20 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     const headers = Object.keys(cat.defaultData[0]);
     const analyzedCols = analyzeEpicentrColumns(headers);
 
-    // Create a mock original workbook with comments
+    // Create a mock original workbook with comments and standard Epicentr sheet name
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(cat.defaultData);
 
-    // Add Epicentr metadata comments to row 1
+    // Attach authentic Epicentr metadata comments to row 1 (Worksheet)
     analyzedCols.forEach((col, idx) => {
       const cellRef = XLSX.utils.encode_cell({ r: 0, c: idx });
       if (ws[cellRef]) {
+        const commentMeta = createSampleEpicentrComment(col, idx);
+        col.rawComment = commentMeta;
         ws[cellRef].c = [
           {
-            a: 'EpicentrMarketplace',
-            t: JSON.stringify({
-              attributeCode: `ATTR_${idx + 100}`,
-              attributeType: col.type,
-              isRequired: col.isRequired
-            }),
+            a: 'Epicentr',
+            t: commentMeta,
             hidden: true,
             visible: false
           } as any
@@ -338,7 +306,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
         (ws[cellRef].c as any).hidden = true;
       }
     });
-    XLSX.utils.book_append_sheet(wb, ws, cat.title.substring(0, 25));
+    XLSX.utils.book_append_sheet(wb, ws, 'Worksheet');
 
     onLoadTemplate(cat.defaultData, analyzedCols, wb, `Шаблон_${cat.id}_Епіцентр.xlsx`);
     onLoadDictionary(cat.dictionaryData, `Довідник_${cat.id}_Офіційний.xlsx`);

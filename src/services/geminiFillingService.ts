@@ -1175,6 +1175,8 @@ export async function enrichProductsBatchWithAI<T extends { idx: number; updated
   dictionaryIndex: Record<string, EpicentrDictionaryAttribute>,
   options?: {
     useWebGrounding?: boolean;
+    merchantDomain?: string;
+    restrictToDomain?: boolean;
     batchSize?: number;
     onStageUpdate?: (message: string) => void;
     onItemEnriched?: (
@@ -1375,7 +1377,12 @@ export async function enrichProductsBatchWithAI<T extends { idx: number; updated
         const res = await researchProductAttributesWithWebGrounding(
           group.representativeRow,
           group.unionMissingCols,
-          dictionaryIndex
+          dictionaryIndex,
+          undefined,
+          {
+            merchantDomain: options?.merchantDomain,
+            restrictToDomain: options?.restrictToDomain
+          }
         );
         return { group, res };
       })

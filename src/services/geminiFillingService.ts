@@ -10,6 +10,7 @@ import {
   encodeHtmlEntities,
   enforceDictionaryValue,
   extractAgeFromText,
+  extractDeterministicMandatoryPimAttribute,
   extractDimensionsFromText,
   extractPlayersFromText,
   extractWeightGramsFromText,
@@ -18,17 +19,22 @@ import {
   isAiDisclaimerOrServiceText,
   isInternalHexOrHashId,
   matchDictionaryValue,
+  matchSingleOptionAgainstAllowed,
   normalizeApostrophes,
   normalizeForDictionaryComparison,
-  stripHtmlToCleanText
+  resolveMandatoryFallback,
+  sanitizeValueAgainstDictionary,
+  stripHtmlToCleanText,
+  stripServiceAffixes,
+  universalStemWord
 } from './epicentrEngine';
 import { callGeminiDirect } from './geminiClientDirect';
 
 export const MISSING_API_KEY_EVENT = 'epic_ai_missing_key_warning';
 
-export const UNIVERSAL_PIM_SYSTEM_PROMPT = `Ти — універсальний PIM-агент маркетплейсу Епіцентр. Для будь-якої категорії товарів обирай значення для полів select/multiselect СУВОРО з наданого масиву allowedValues (з колонки "Назва опції" довідника).
+export const UNIVERSAL_PIM_SYSTEM_PROMPT = `Ти — універсальний PIM-агент маркетплейсу Епіцентр. Обирай значення СУВОРО з наданого масиву allowedValues (з колонки "Назва опції" довідника). Якщо значення відсутнє в allowedValues або інформації немає — повертай порожній рядок ("").
 ПРАВИЛА ВАЛІДАЦІЇ:
-1. Заборонено повертати внутрішні хеш-коди та ідентифікатори (наприклад: "a8xqzwivcojproo", "cfd9340c...").
+1. Заборонено повертати внутрішні хеш-коди та ідентифікатори (наприклад: "5b78c0e9...", "cfd9340c...", "a8xqzwivcojproo").
 2. Заборонено писати будь-які пояснення, вибачення чи мета-текст (наприклад: "відсутнє в довіднику", "немає у відкритому доступі", "Джерело:", "постановою кабінету міністрів", "allowedValues"). Якщо значення немає в allowedValues або воно невідоме — повертай виключно порожній рядок ("").
 3. Для полів типу multiselect розділяй обрані значення через крапку з комою з пробілом ("; "). Кожен окремий елемент повинен бути присутнім в allowedValues.
 4. Будь-яке вигадане або недопустиме значення поза довідником суворо заборонено.`;
@@ -164,8 +170,22 @@ function applyLocalPimExtraction(
     // 1. Dictionary-backed columns (ANY category, ANY select / multiselect / dictionary column)
     if (hasDict && dict) {
       const isBrandCol = normKey.includes('бренд') || normKey.includes('brand') || normKey === 'виробник';
+
+      // 0. High-priority deterministic extraction for 'Вид*', 'Стать*', 'Склад набору*', 'Бренд*', 'Призначення*'
+      const detVal = extractDeterministicMandatoryPimAttribute(
+        origKey,
+        col.type,
+        dict.allowedValues,
+        fullText,
+        titleUa,
+        titleRu
+      );
+      if (detVal) {
+        candidateVal = detVal;
+      }
+
       const sortedAllowed = [...dict.allowedValues].sort((a, b) => b.length - a.length);
-      const matchedItems: string[] = [];
+      const matchedItems: string[] = candidateVal ? [candidateVal] : [];
 
       for (const allowedVal of sortedAllowed) {
         if (isBrandCol && normalizeForDictionaryComparison(allowedVal, 'exact') === 'інше') {
@@ -257,6 +277,14 @@ function applyLocalPimExtraction(
       if (matchedItems.length > 0) {
         candidateVal = col.type === 'multiselect' ? matchedItems.join('; ') : matchedItems[0];
       }
+
+      // Mandatory fallback: If still empty and column is mandatory (*), pull category-aware default from allowedValues
+      if (!candidateVal && (col.isRequired || origKey.includes('*'))) {
+        const fallback = resolveMandatoryFallback(origKey, col.type, dict.allowedValues, fullText);
+        if (fallback) {
+          candidateVal = fallback;
+        }
+      }
     }
 
     // 2. Non-dictionary numeric & structural extractors (ONLY when column does NOT have fixed select/multiselect dictionary)
@@ -285,10 +313,20 @@ function applyLocalPimExtraction(
     }
 
     // 3. Enforce strict dictionary validation before recording
-    const enforced = enforceDictionaryValue(candidateVal, col.type, dict);
-    if (enforced) {
-      result[origKey] = enforced;
-      result[cleanKey] = enforced;
+    if (candidateVal && String(candidateVal).trim()) {
+      if (hasDict && dict && dict.allowedValues && dict.allowedValues.length > 0) {
+        const sanitized = sanitizeValueAgainstDictionary(candidateVal, dict.allowedValues, col.type === 'multiselect');
+        if (sanitized) {
+          result[origKey] = sanitized;
+          result[cleanKey] = sanitized;
+        }
+      } else {
+        const enforced = enforceDictionaryValue(candidateVal, col.type, dict);
+        if (enforced) {
+          result[origKey] = enforced;
+          result[cleanKey] = enforced;
+        }
+      }
     }
   }
 
@@ -684,8 +722,14 @@ function mapAttributesToColumns(
       const origKey = matchedCol.originalName;
       const cleanKey = matchedCol.cleanName || getCleanAttributeName(origKey);
       const dict = findDictionaryAttr(dictionaryIndex, cleanKey);
+      let enforcedVal: string | null = null;
+      if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
+        const sanitized = sanitizeValueAgainstDictionary(cleanVal, dict.allowedValues, matchedCol.type === 'multiselect');
+        enforcedVal = sanitized || null;
+      } else {
+        enforcedVal = enforceDictionaryValue(cleanVal, matchedCol.type, dict);
+      }
 
-      const enforcedVal = enforceDictionaryValue(cleanVal, matchedCol.type, dict);
       if (enforcedVal) {
         mapped[origKey] = enforcedVal;
         mapped[cleanKey] = enforcedVal;
@@ -1152,6 +1196,35 @@ ${JSON.stringify(productRow, null, 2)}
     }
   }
 
+  // Step 3: Final Mandatory Fallback Gate (Mandatory Fallback)
+  // Ensure NO mandatory field (*) remains empty if an allowed default exists in the dictionary!
+  for (const col of emptyCols) {
+    const origKey = col.originalName;
+    const cleanKey = col.cleanName || getCleanAttributeName(origKey);
+    const isMandatory = col.isRequired || origKey.includes('*') || cleanKey.includes('*');
+
+    if (isMandatory && !finalSuggested[origKey] && !finalSuggested[cleanKey]) {
+      const cleanCol = getCleanAttributeName(cleanKey).toLowerCase();
+      const dict =
+        dictionaryIndex[cleanCol] ||
+        Object.values(dictionaryIndex).find(
+          d => getCleanAttributeName(d.cleanAttributeName).toLowerCase() === cleanCol
+        );
+
+      if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
+        const fullContext = `${productRow['Назва товару*\n[ua]'] || productRow['Назва товару [ua]*'] || productRow['Назва товару'] || ''} ${productRow['Опис (text)\n[ua]'] || productRow['Опис'] || ''}`.toLowerCase();
+        const fallback = resolveMandatoryFallback(origKey, col.type, dict.allowedValues, fullContext);
+        if (fallback) {
+          finalSuggested[origKey] = fallback;
+          finalSuggested[cleanKey] = fallback;
+          if (!explanations[origKey]) {
+            explanations[origKey] = 'Базовий дефолтний фолбек для обов\'язкового поля за PIM-довідником категорії';
+          }
+        }
+      }
+    }
+  }
+
   return {
     suggestedValues: finalSuggested,
     explanations: Object.keys(explanations).length > 0 ? explanations : undefined,
@@ -1402,8 +1475,23 @@ export async function enrichProductsBatchWithAI<T extends { idx: number; updated
         for (const col of member.remainingCols) {
           const origKey = col.originalName;
           const cleanKey = col.cleanName || getCleanAttributeName(origKey);
-          const val = res.suggestedValues[origKey] || res.suggestedValues[cleanKey];
-          if (val && String(val).trim() !== '') {
+          let val: string = res.suggestedValues[origKey] || res.suggestedValues[cleanKey] || '';
+
+          // If mandatory field remains empty after web research, apply category-aware fallback
+          if ((!val || val.trim() === '') && (col.isRequired || origKey.includes('*'))) {
+            const cleanCol = getCleanAttributeName(cleanKey).toLowerCase();
+            const dict =
+              dictionaryIndex[cleanCol] ||
+              Object.values(dictionaryIndex).find(
+                d => getCleanAttributeName(d.cleanAttributeName).toLowerCase() === cleanCol
+              );
+            if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
+              const fullContext = `${member.workingRow['Назва товару*\n[ua]'] || member.workingRow['Назва товару [ua]*'] || member.workingRow['Назва товару'] || ''} ${member.workingRow['Опис (text)\n[ua]'] || member.workingRow['Опис'] || ''}`.toLowerCase();
+              val = resolveMandatoryFallback(origKey, col.type, dict.allowedValues, fullContext) || '';
+            }
+          }
+
+          if (val && val.trim() !== '') {
             memberSuggested[origKey] = val;
           }
         }

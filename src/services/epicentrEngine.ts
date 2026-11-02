@@ -114,18 +114,33 @@ export function isInternalHexOrHashId(val: any): boolean {
     return true;
   }
 
-  // Pure hex hashes >= 8 characters (e.g. cfd9340c, cfd9340cf7d5)
-  if (/^[0-9a-f]{8,}$/i.test(s) && /\d/.test(s) && /[a-f]/i.test(s)) {
+  // Hex codes starting with 0x (e.g. 0x5b78c0e9)
+  if (/^0x[0-9a-f]{6,}$/i.test(s)) {
     return true;
   }
 
-  // Alphanumeric hashes / option codes >= 10 characters without spaces (e.g. "a8xqzwivcojproo", "opt_cfd9340c")
-  if (/^(opt_|attr_|val_|code_)?[a-z0-9_-]{10,}$/i.test(s) && /\d/.test(s) && /[a-z]/i.test(s)) {
+  // Pure hex hashes >= 6 characters with mixed letters and numbers (e.g. "5b78c0e9", "cfd9340c", "cfd9340cf7d5")
+  if (/^[0-9a-f]{6,}$/i.test(s) && /\d/.test(s) && /[a-f]/i.test(s)) {
+    return true;
+  }
+
+  // Pure hex strings of 8+ characters (MD5/SHA or 32-bit hex blocks)
+  if (/^[0-9a-f]{8,}$/i.test(s)) {
+    return true;
+  }
+
+  // System prefixes (opt_, attr_, val_, code_, id_, option_)
+  if (/^(opt_|attr_|val_|code_|id_|option_)[a-z0-9_-]+$/i.test(s)) {
+    return true;
+  }
+
+  // Alphanumeric hashes / option codes >= 8 characters with digits and letters (e.g. "a8xqzwivcojproo", "opt_cfd9340c")
+  if (/^[a-z0-9_-]{8,}$/i.test(s) && /\d/.test(s) && /[a-z]/i.test(s) && !/^(bluetooth|wireless|rechargeable|waterproof|mechanical|electronic)/i.test(s)) {
     return true;
   }
 
   // Specifically check known random alphanumeric hash identifiers like "a8xqzwivcojproo" (base36 hashes)
-  if (/^[a-z0-9]{12,}$/i.test(s) && !/^(bluetooth|wireless|rechargeable|waterproof)/i.test(s)) {
+  if (/^[a-z0-9]{10,}$/i.test(s) && !/^(bluetooth|wireless|rechargeable|waterproof|mechanical|electronic)/i.test(s)) {
     return true;
   }
 
@@ -510,8 +525,960 @@ const COMMON_SYNONYMS: Record<string, string> = {
   'принт': 'з візерунком',
   'малюнок': 'з візерунком',
   'смужки': 'з візерунком',
-  'орнамент': 'з візерунком'
+  'орнамент': 'з візерунком',
+  // Косметичні та доглядові характеристики (Призначення, Вид, Склад набору, Стать)
+  'об\'єм': 'надання об\'єму',
+  'об’єм': 'надання об\'єму',
+  'объем': 'надання об\'єму',
+  'надання об\'єму': 'для об\'єму',
+  'надання блиску': 'блиск',
+  'зволоження': 'для зволоження',
+  'увлажнение': 'для зволоження',
+  'очищення': 'для очищення',
+  'очищение': 'для очищення',
+  'живлення': 'для живлення',
+  'питание': 'для живлення',
+  'відновлення': 'для відновлення',
+  'восстановление': 'для відновлення',
+  'догляд': 'для догляду',
+  'уход': 'для догляду',
+  'пом\'якшення': 'для пом\'якшення',
+  'смягчение': 'для пом\'якшення',
+  'зміцнення': 'для зміцнення',
+  'укрепление': 'для зміцнення',
+  'захист': 'для захисту',
+  'защита': 'для захисту',
+  'тонізація': 'для тонізації',
+  'заспокоєння': 'для заспокоєння',
+  'матування': 'для матування',
+  'розгладження': 'для розгладження',
+  'обличчя': 'для обличчя',
+  'лицо': 'для обличчя',
+  'тіло': 'для тіла',
+  'тело': 'для тіла',
+  'волосся': 'для волосся',
+  'волосы': 'для волосся',
+  'шкіра': 'для шкіри',
+  'кожа': 'для шкіри',
+  'руки': 'для рук',
+  'ноги': 'для ніг',
+  'щоденне використання': 'для щоденного використання',
+  'щоденний догляд': 'для щоденного використання',
+  'косметичний набір': 'набір',
+  'набір косметики': 'косметичний набір',
+  'подарунковий набір': 'косметичний набір'
 };
+
+/**
+ * Automatically strips service prefixes and suffixes common across retail catalog specs:
+ * Prefixes: "Для ", "для ", "з ", "зі ", "із ", "без ", "від ", "під "
+ * Suffixes: " для волосся", " для тіла", " для обличчя", " для шкіри", " для авто", " для дому",
+ *           " для ванної", " для кухні", " для рук", " для ніг", " волосся", " шкіри", " тіла", " обличчя"
+ * (e.g. "Для очищення" -> "очищення", "Для зволоження волосся" -> "зволоження")
+ */
+export function stripServiceAffixes(str: string): string {
+  if (!str) return '';
+  let s = str.trim();
+
+  // Strip prefixes
+  s = s.replace(/^(для\s+(?:всіх\s+)?(?:типів\s+)?|для\s+|з\s+|зі\s+|із\s+|без\s+|від\s+|під\s+)/i, '').trim();
+
+  // Strip suffixes
+  s = s.replace(
+    /(\s+для\s+волосся|\s+для\s+тіла|\s+для\s+обличчя|\s+для\s+шкіри|\s+для\s+авто|\s+для\s+автомобіля|\s+для\s+дому|\s+для\s+ванної|\s+для\s+кухні|\s+для\s+рук|\s+для\s+ніг|\s+волосся|\s+шкіри|\s+тіла|\s+обличчя)$/i,
+    ''
+  ).trim();
+
+  return s;
+}
+
+/**
+ * Universal morphological stemmer across Ukrainian & Russian retail catalogs.
+ * Handles cases, genders, numbers, materials, and categories:
+ * - 'бавовняні' / 'бавовняна' / 'бавовняний' -> 'бавовна'
+ * - 'чоловічий' / 'чоловіча' -> 'чоловічі'
+ * - 'шампуні' -> 'шампунь'
+ * - 'дрелі' / 'дрилі' -> 'дрель' / 'дриль'
+ */
+export function universalStemWord(word: string): string[] {
+  if (!word) return [];
+  const lower = word.toLowerCase().trim();
+  const results = new Set<string>();
+  results.add(lower);
+
+  // Direct known morphological stems & material forms
+  if (/^бавовн(ян[а-я]|а|і|и|ою|і|ів)?$/i.test(lower) || /^хлоп(ок|ков[а-я])$/i.test(lower)) {
+    results.add('бавовна');
+    results.add('бавовняні');
+    results.add('хлопок');
+  }
+  if (/^шовк(ов[а-я]|у)?$/i.test(lower) || /^шелк(ов[а-я])?$/i.test(lower)) {
+    results.add('шовк');
+  }
+  if (/^ль(он|ляний|ляна|ляні|ляного)$/i.test(lower)) {
+    results.add('льон');
+  }
+  if (/^вовн(ян[а-я]|а|и)?$/i.test(lower) || /^шерст(ян[а-я]|ь)?$/i.test(lower)) {
+    results.add('вовна');
+  }
+  if (/^дерев('?ян[а-я]|о|а)?$/i.test(lower)) {
+    results.add('дерево');
+  }
+  if (/^метал(ев[а-я]|ічн[а-я]|л)?$/i.test(lower)) {
+    results.add('метал');
+  }
+  if (/^шкір(ян[а-я]|а|и)?$/i.test(lower) || /^кож(ан[а-я]|а)?$/i.test(lower)) {
+    results.add('шкіра');
+  }
+  if (/^гум(ов[а-я]|а)?$/i.test(lower) || /^резин(ов[а-я]|а)?$/i.test(lower)) {
+    results.add('гума');
+  }
+  if (/^скл(ян[а-я]|о)?$/i.test(lower) || /^стекл(ян[а-я]|о)?$/i.test(lower)) {
+    results.add('скло');
+  }
+  if (/^пластик(ов[а-я])?$/i.test(lower)) {
+    results.add('пластик');
+  }
+  if (/^папер(ов[а-я]|ір)?$/i.test(lower) || /^бумаг(а)?$/i.test(lower)) {
+    results.add('папір');
+  }
+  if (/^текстиль(н[а-я])?$/i.test(lower)) {
+    results.add('текстиль');
+  }
+
+  // Gender & number canonical targets
+  if (/^(чоловіч[а-я]|мужск[а-я]|для\s+чоловіків)$/i.test(lower)) {
+    results.add('чоловічі');
+  }
+  if (/^(жіноч[а-я]|женск[а-я]|для\s+жінок)$/i.test(lower)) {
+    results.add('жіночі');
+  }
+  if (/^(дитяч[а-я]|детск[а-я]|для\s+дітей)$/i.test(lower)) {
+    results.add('дитячі');
+  }
+
+  // Nouns plural -> singular transformations
+  if (lower.endsWith('ні') && lower.length >= 4) {
+    results.add(lower.slice(0, -2) + 'нь'); // шампуні -> шампунь
+  }
+  if ((lower.endsWith('лі') || lower.endsWith('ли')) && lower.length >= 4) {
+    results.add(lower.slice(0, -2) + 'ль'); // дрелі -> дрель, дрилі -> дриль
+  }
+  if (lower.endsWith('ла') && lower.length >= 4) {
+    results.add(lower.slice(0, -2) + 'ло'); // крісла -> крісло
+  }
+  if (lower.endsWith('ки') && lower.length >= 4) {
+    results.add(lower.slice(0, -2) + 'ка'); // викрутки -> викрутка, маски -> маска
+  }
+  if (lower.endsWith('ти') && lower.length >= 4) {
+    results.add(lower.slice(0, -2) + 'тка'); // сироватки -> сироватка
+  }
+  if (lower.endsWith('ри') && lower.length >= 4) {
+    results.add(lower.slice(0, -1)); // перфоратори -> перфоратор
+  }
+  if (lower.endsWith('ти') && lower.length >= 4) {
+    results.add(lower.slice(0, -1)); // шурупокрути -> шурупокрут
+  }
+
+  // Strip adjectival endings
+  const adjStem = lower.replace(
+    /(?:ний|на|не|ні|ного|ному|ним|них|ною|ній|овий|ова|ове|ові|ового|овому|овим|ових|овою|овій|ський|ська|ське|ські|ського|ському|ським|ських|ською|ській|яний|яна|яне|яні|яного|яному|яним|яних|яною|яній|ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою|ому|ям|ях|ів|ой|ей|ом|ем|ам|ами|ями)$/i,
+    ''
+  );
+  if (adjStem && adjStem.length >= 3) {
+    results.add(adjStem);
+  }
+
+  return Array.from(results);
+}
+
+/**
+ * Universal Bidirectional Category-Agnostic Option Matcher:
+ * Matches a candidate value against allowedValues with:
+ * 1. Step A (Exact Match): Checks raw candidate and symmetric entity/apostrophe normalized version in allowedValues.
+ * 2. Step B (Bidirectional 'для ' Search):
+ *    - If input lacks 'для ', generates counter-variant 'для ${input}' and searches allowedValues.
+ *    - If input has 'для ', generates counter-variant without 'для ' and searches allowedValues.
+ *    - Bidirectionally tests contextual domain suffixes without blind stripping.
+ * 3. Step C (Canonical Selection, Synonyms & Morphology):
+ *    - Tests canonical categories (gender/number, return policies, brackets)
+ *    - Universal synonyms (COMMON_SYNONYMS) and translations (RU_TO_UA_WORDS) with bidirectional testing
+ *    - Universal morphological stemmer
+ *    - Standalone token/word boundary matching
+ * 4. 100% Dictionary Compliance:
+ *    - Returns STRICTLY the exact canonical string from allowedValues, or null if no match is found.
+ */
+export function matchSingleOptionAgainstAllowed(
+  candidate: string,
+  allowedValues: string[]
+): string | null {
+  if (!candidate || !Array.isArray(allowedValues) || allowedValues.length === 0) return null;
+
+  const rawTrimmed = String(candidate).replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
+  if (!rawTrimmed || rawTrimmed.toLowerCase() === 'nan') return null;
+
+  // Strict check: Forbid internal hex/hash IDs
+  if (isInternalHexOrHashId(rawTrimmed)) return null;
+
+  // Strict check: Forbid AI disclaimers / explanations / apologies
+  if (isAiDisclaimerOrServiceText(rawTrimmed)) {
+    if (/повернен/i.test(rawTrimmed) || /постанов.*кабінет/i.test(rawTrimmed)) {
+      const legalMapped = canonicalMapCandidate(rawTrimmed, allowedValues);
+      if (legalMapped) return legalMapped;
+    }
+    return null;
+  }
+
+  // Inner helper: Symmetrically test if any entry in allowedValues matches target string
+  // Handles HTML entities (&#039; <-> '), Unicode apostrophes (’ ` ʻ ʼ ‘ ´), quotes, case, and whitespace
+  const findInAllowed = (testStr: string): string | null => {
+    if (!testStr) return null;
+    const testTrim = testStr.trim();
+    if (!testTrim || isInternalHexOrHashId(testTrim)) return null;
+
+    // 1. Literal exact check
+    const literal = allowedValues.find(v => v === testTrim);
+    if (literal && !isInternalHexOrHashId(literal)) return literal;
+
+    // 2. Symmetric entity & apostrophe normalization
+    const testDecoded = decodeHtmlEntities(testTrim).replace(/[’`ʻʼ']/g, "'").replace(/["«»„“”]/g, '"').trim();
+    const testExactNorm = normalizeForDictionaryComparison(testDecoded, 'exact');
+    const testRelaxedNorm = normalizeForDictionaryComparison(testDecoded, 'relaxed');
+    const testCompactNorm = testExactNorm.replace(/\s+/g, '');
+
+    for (const allowedVal of allowedValues) {
+      if (!allowedVal || isInternalHexOrHashId(allowedVal)) continue;
+
+      const aDecoded = decodeHtmlEntities(allowedVal).replace(/[’`ʻʼ']/g, "'").replace(/["«»„“”]/g, '"').trim();
+      if (aDecoded.toLowerCase() === testDecoded.toLowerCase()) {
+        return allowedVal;
+      }
+
+      const aExactNorm = normalizeForDictionaryComparison(allowedVal, 'exact');
+      if (aExactNorm === testExactNorm) {
+        return allowedVal;
+      }
+
+      if (testCompactNorm && aExactNorm.replace(/\s+/g, '') === testCompactNorm) {
+        return allowedVal;
+      }
+
+      if (testRelaxedNorm && normalizeForDictionaryComparison(allowedVal, 'relaxed') === testRelaxedNorm) {
+        return allowedVal;
+      }
+    }
+
+    return null;
+  };
+
+  const decodedRaw = decodeHtmlEntities(rawTrimmed).replace(/[’`ʻʼ']/g, "'").replace(/["«»„“”]/g, '"').trim();
+
+  // =========================================================================
+  // Крок А (Точний збіг): Якщо rawValue є у allowedValues — повертай його
+  // =========================================================================
+  const exactMatch = findInAllowed(decodedRaw);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  // =========================================================================
+  // Крок Б (Двонаправлений пошук 'для '):
+  // Якщо входження не знайдено, генеруємо 2 варіанти: ${rawValue} та для ${rawValue}
+  // (і навпаки: якщо у rawValue вже є 'для ' — шукаємо варіант без 'для ')
+  // =========================================================================
+  const hasDlyaPrefix = /^для\s+/i.test(decodedRaw);
+  const variantWithoutDlya = hasDlyaPrefix ? decodedRaw.replace(/^для\s+/i, '').trim() : decodedRaw;
+  const variantWithDlya = hasDlyaPrefix ? decodedRaw : `для ${decodedRaw}`;
+
+  if (hasDlyaPrefix) {
+    // Вхідне містило 'для ' (наприклад, "Для очищення") -> шукаємо варіант без 'для ' (наприклад, "очищення")
+    const matchWithout = findInAllowed(variantWithoutDlya);
+    if (matchWithout) {
+      return matchWithout;
+    }
+  } else {
+    // Вхідне не містило 'для ' (наприклад, "обличчя") -> шукаємо варіант з 'для ' (наприклад, "для обличчя")
+    const matchWith = findInAllowed(variantWithDlya);
+    if (matchWith) {
+      return matchWith;
+    }
+  }
+
+  // Двонаправлені семантичні трансформації для полів 'Призначення*' та 'Стать*'
+  const lowerDecoded = decodedRaw.toLowerCase();
+  if (lowerDecoded.includes("об'єм") || lowerDecoded.includes("об’єм") || lowerDecoded.includes("объем")) {
+    const volMatch = findInAllowed("надання об'єму") || findInAllowed("для об'єму") || findInAllowed("для надання об'єму") || findInAllowed("об'єм");
+    if (volMatch) return volMatch;
+  }
+  if (lowerDecoded.startsWith('надання ')) {
+    const withoutAction = lowerDecoded.replace(/^надання\s+/i, '').trim();
+    const actionMatch = findInAllowed(withoutAction) || findInAllowed(`для ${withoutAction}`);
+    if (actionMatch) return actionMatch;
+  }
+  if (lowerDecoded === 'зволоження') {
+    const m = findInAllowed('для зволоження');
+    if (m) return m;
+  } else if (lowerDecoded === 'для зволоження') {
+    const m = findInAllowed('зволоження');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'очищення') {
+    const m = findInAllowed('для очищення');
+    if (m) return m;
+  } else if (lowerDecoded === 'для очищення') {
+    const m = findInAllowed('очищення');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'живлення') {
+    const m = findInAllowed('для живлення');
+    if (m) return m;
+  } else if (lowerDecoded === 'для живлення') {
+    const m = findInAllowed('живлення');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'відновлення') {
+    const m = findInAllowed('для відновлення');
+    if (m) return m;
+  } else if (lowerDecoded === 'для відновлення') {
+    const m = findInAllowed('відновлення');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'догляд') {
+    const m = findInAllowed('для догляду') || findInAllowed('для щоденного використання');
+    if (m) return m;
+  } else if (lowerDecoded === 'для догляду') {
+    const m = findInAllowed('догляд');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'обличчя') {
+    const m = findInAllowed('для обличчя');
+    if (m) return m;
+  } else if (lowerDecoded === 'для обличчя') {
+    const m = findInAllowed('обличчя');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'тіло') {
+    const m = findInAllowed('для тіла');
+    if (m) return m;
+  } else if (lowerDecoded === 'для тіла') {
+    const m = findInAllowed('тіло');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'волосся') {
+    const m = findInAllowed('для волосся');
+    if (m) return m;
+  } else if (lowerDecoded === 'для волосся') {
+    const m = findInAllowed('волосся');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'руки') {
+    const m = findInAllowed('для рук');
+    if (m) return m;
+  } else if (lowerDecoded === 'для рук') {
+    const m = findInAllowed('руки');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'ноги') {
+    const m = findInAllowed('для ніг');
+    if (m) return m;
+  } else if (lowerDecoded === 'для ніг') {
+    const m = findInAllowed('ноги');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'шкіра') {
+    const m = findInAllowed('для шкіри');
+    if (m) return m;
+  } else if (lowerDecoded === 'для шкіри') {
+    const m = findInAllowed('шкіра');
+    if (m) return m;
+  }
+
+  // Трансформації для поля 'Стать*'
+  if (lowerDecoded === 'жіночі' || lowerDecoded === 'жіноча' || lowerDecoded === 'жіночий') {
+    const m = findInAllowed('для жінок') || findInAllowed('жіночі');
+    if (m) return m;
+  } else if (lowerDecoded === 'для жінок') {
+    const m = findInAllowed('жіночі') || findInAllowed('жіноча');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'чоловічі' || lowerDecoded === 'чоловіча' || lowerDecoded === 'чоловічий') {
+    const m = findInAllowed('для чоловіків') || findInAllowed('чоловічі');
+    if (m) return m;
+  } else if (lowerDecoded === 'для чоловіків') {
+    const m = findInAllowed('чоловічі') || findInAllowed('чоловіча');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'дитячі' || lowerDecoded === 'дитяча' || lowerDecoded === 'дитячий') {
+    const m = findInAllowed('для дітей') || findInAllowed('дитячі');
+    if (m) return m;
+  } else if (lowerDecoded === 'для дітей') {
+    const m = findInAllowed('дитячі') || findInAllowed('дитяча');
+    if (m) return m;
+  }
+  if (lowerDecoded === 'унісекс') {
+    const m = findInAllowed('unisex');
+    if (m) return m;
+  } else if (lowerDecoded === 'unisex') {
+    const m = findInAllowed('унісекс');
+    if (m) return m;
+  }
+
+  // Також перевіряємо контекстні суфікси двонаправлено (БЕЗ сліпого обрізання):
+  const suffixesToTest = [
+    ' для волосся',
+    ' для тіла',
+    ' для обличчя',
+    ' для шкіри',
+    ' для авто',
+    ' для дому',
+    ' для ванної',
+    ' для кухні',
+    ' для рук',
+    ' для ніг'
+  ];
+
+  for (const suffix of suffixesToTest) {
+    if (decodedRaw.toLowerCase().endsWith(suffix)) {
+      const withoutSuffix = decodedRaw.slice(0, -suffix.length).trim();
+      const matchSuff = findInAllowed(withoutSuffix);
+      if (matchSuff) return matchSuff;
+    }
+  }
+
+  // =========================================================================
+  // Крок В (Канонічна вибірка, синоніми, морфологія):
+  // =========================================================================
+  const candidateForms = [decodedRaw];
+  if (hasDlyaPrefix && variantWithoutDlya && !candidateForms.includes(variantWithoutDlya)) {
+    candidateForms.push(variantWithoutDlya);
+  } else if (!hasDlyaPrefix && variantWithDlya && !candidateForms.includes(variantWithDlya)) {
+    candidateForms.push(variantWithDlya);
+  }
+
+  // 1. Канонічний мапер (стать, повернення, дужки)
+  for (const form of candidateForms) {
+    const canonical = canonicalMapCandidate(form, allowedValues);
+    if (canonical) return canonical;
+  }
+
+  // 2. Синоніми та переклади RU->UA (двонаправлено)
+  for (const form of candidateForms) {
+    const formNorm = normalizeForDictionaryComparison(form, 'exact');
+    const formRelaxed = normalizeForDictionaryComparison(form, 'relaxed');
+
+    const synTargets = [
+      COMMON_SYNONYMS[formNorm],
+      COMMON_SYNONYMS[formRelaxed],
+      RU_TO_UA_WORDS[formNorm],
+      RU_TO_UA_WORDS[formRelaxed]
+    ].filter(Boolean) as string[];
+
+    for (const syn of synTargets) {
+      const synMatch = findInAllowed(syn);
+      if (synMatch) return synMatch;
+
+      // Двонаправлена перевірка 'для ' у знайденому синонімі
+      if (/^для\s+/i.test(syn)) {
+        const synWithoutDlya = syn.replace(/^для\s+/i, '').trim();
+        const m = findInAllowed(synWithoutDlya);
+        if (m) return m;
+      } else {
+        const synWithDlya = `для ${syn}`;
+        const m = findInAllowed(synWithDlya);
+        if (m) return m;
+      }
+    }
+  }
+
+  // 3. Морфологічний стемінг
+  for (const form of candidateForms) {
+    const stems = universalStemWord(form);
+    for (const stem of stems) {
+      if (!stem || stem.length < 3) continue;
+      for (const allowedVal of allowedValues) {
+        if (!allowedVal || isInternalHexOrHashId(allowedVal)) continue;
+        const allowedStems = universalStemWord(allowedVal);
+        if (allowedStems.some(aStem => aStem === stem)) {
+          return allowedVal;
+        }
+        const allowedNorm = normalizeForDictionaryComparison(allowedVal, 'exact');
+        if (allowedNorm === stem || (stem.length >= 4 && allowedNorm.startsWith(stem))) {
+          return allowedVal;
+        }
+      }
+    }
+  }
+
+  // 4. Пошук точних окремих слів з word boundaries
+  for (const form of candidateForms) {
+    const formNorm = normalizeForDictionaryComparison(form, 'exact');
+    for (const allowedVal of allowedValues) {
+      if (!allowedVal || isInternalHexOrHashId(allowedVal)) continue;
+      const aNorm = normalizeForDictionaryComparison(allowedVal, 'exact');
+      if (aNorm.length >= 3) {
+        const escaped = aNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const reg = new RegExp(`(?<![а-яіїєґa-z0-9])${escaped}(?![а-яіїєґa-z0-9])`, 'i');
+        if (reg.test(formNorm)) {
+          return allowedVal;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Strict Category-Agnostic Gatekeeper:
+ * The SINGLE control point before writing ANY `select` or `multiselect` cell into the final Excel.
+ * - If value or element is not in allowedValues after all normalization attempts -> replaces with `""`.
+ * - Categorically forbids any free-form text, hex-codes ("5b78c0e9..."), descriptive quotes, or AI apologies.
+ * - For multiselect: splits by `;`, validates each element against allowedValues, and joins valid elements via `; `.
+ * - Returns valid value from allowedValues, or `""`.
+ */
+export function sanitizeValueAgainstDictionary(
+  rawValue: any,
+  allowedValues: string[],
+  isMultiselect: boolean = false
+): string {
+  if (rawValue === undefined || rawValue === null) return '';
+  const s = String(rawValue).replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
+  if (!s || s.toLowerCase() === 'nan') return '';
+
+  // Strict check: Forbid internal hex/hash IDs
+  if (isInternalHexOrHashId(s)) return '';
+
+  // Strict check: Forbid AI disclaimers / apologetic phrases
+  if (isAiDisclaimerOrServiceText(s)) {
+    if (/повернен/i.test(s) || /постанов.*кабінет/i.test(s)) {
+      const legalMatch = matchSingleOptionAgainstAllowed(s, allowedValues);
+      if (legalMatch) return legalMatch;
+    }
+    return '';
+  }
+
+  if (!Array.isArray(allowedValues) || allowedValues.length === 0) {
+    return '';
+  }
+
+  // 1. MULTISELECT: Strict element-by-element validation
+  if (isMultiselect || s.includes(';')) {
+    const rawElements = s.includes(';')
+      ? s.split(';').map(item => item.trim()).filter(Boolean)
+      : s.split(/[,\n]+/).map(item => item.trim()).filter(Boolean);
+
+    const validMatches: string[] = [];
+    for (const el of rawElements) {
+      const match = matchSingleOptionAgainstAllowed(el, allowedValues);
+      if (match && !validMatches.includes(match)) {
+        validMatches.push(match);
+      }
+    }
+
+    return validMatches.length > 0 ? validMatches.join('; ') : '';
+  }
+
+  // 2. SELECT: Strict single option match
+  const singleMatch = matchSingleOptionAgainstAllowed(s, allowedValues);
+  return singleMatch || '';
+}
+
+/**
+ * Deterministic local extractor for high-priority mandatory Epicentr characteristics (*):
+ * 1. 'Вид*' (Type): e.g. "набір" / "set" -> "косметичний набір" / "набір" from allowedValues.
+ * 2. 'Склад набору*' (Set Components): detects items in title/desc ("шампунь", "кондиціонер", "спрей", "міст", "гель", "олія", etc.) and maps with 100% priority to allowedValues.
+ * 3. 'Бренд*' (Brand): maps "Mades Cosmetics" or any brand mentioned in title to allowedValues.
+ * 4. 'Стать*' (Gender): bidirectional mapping for women, men, unisex.
+ * 5. 'Призначення*' (Purpose): bidirectional mapping ("обличчя" <-> "для обличчя", "зволоження" <-> "для зволоження", "об'єм" <-> "надання об'єму").
+ */
+export function extractDeterministicMandatoryPimAttribute(
+  columnName: string,
+  colType: EpicentrColumnType,
+  allowedValues: string[],
+  fullText: string,
+  titleUa: string = '',
+  titleRu: string = ''
+): string | null {
+  if (!columnName || !Array.isArray(allowedValues) || allowedValues.length === 0) return null;
+
+  const normKey = normalizeAttributeKey(columnName, true);
+  const textLower = (fullText || '').toLowerCase();
+  const titleCombined = `${titleUa} ${titleRu}`.toLowerCase();
+
+  const findAllowed = (target: string): string | null => {
+    return matchSingleOptionAgainstAllowed(target, allowedValues);
+  };
+
+  // -------------------------------------------------------------------------
+  // 1. ВИД* (Type)
+  // -------------------------------------------------------------------------
+  if (normKey === 'вид' || normKey.startsWith('вид')) {
+    // If title or description has "набір" / "набор" / "set"
+    if (
+      titleCombined.includes('набір') ||
+      titleCombined.includes('набор') ||
+      /\bset\b/i.test(titleCombined) ||
+      textLower.includes('набір') ||
+      textLower.includes('набор') ||
+      /\bset\b/i.test(textLower) ||
+      titleCombined.includes('подарунк')
+    ) {
+      const match =
+        findAllowed('косметичний набір') ||
+        findAllowed('набір') ||
+        findAllowed('подарунковий набір') ||
+        findAllowed('набір косметики') ||
+        findAllowed('набір для догляду');
+      if (match) return match;
+
+      // Check any option in allowedValues with "набір"
+      const anySet = allowedValues.find(v => /набір|набор|set/i.test(v) && !isInternalHexOrHashId(v));
+      if (anySet) return anySet;
+    }
+
+    // Specific product types if not set
+    const typeCandidates = [
+      'шампунь', 'кондиціонер', 'крем', 'сироватка', 'маска', 'гель для душу',
+      'гель', 'спрей', 'міст', 'бальзам', 'лосьйон', 'олія', 'пінка', 'скраб',
+      'мило', 'дезодорант', 'молочко', 'тонік', 'пілінг'
+    ];
+    for (const typeCand of typeCandidates) {
+      if (titleCombined.includes(typeCand) || textLower.includes(typeCand)) {
+        const m = findAllowed(typeCand);
+        if (m) return m;
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 2. СКЛАД НАБОРУ* (Set Components)
+  // -------------------------------------------------------------------------
+  if (normKey.includes('склад набору') || normKey === 'склад набору') {
+    const COMPONENT_PATTERNS: Array<{ key: string; regex: RegExp }> = [
+      { key: 'шампунь', regex: /\bшампун/i },
+      { key: 'кондиціонер', regex: /\bкондиц|\bбальзам-ополіскувач/i },
+      { key: 'спрей', regex: /\bспре[йя]|\bspray/i },
+      { key: 'міст', regex: /\bміст\b|\bміста\b|\bmist\b/i },
+      { key: 'гель', regex: /\bгель\b|\bгелю\b|гель\s+для\s+душу/i },
+      { key: 'олія', regex: /\bолі[яєї]|\bмасл[оа]|\boil\b/i },
+      { key: 'маска', regex: /\bмаск[аиу]|\bmask\b/i },
+      { key: 'крем', regex: /\bкрем|\bcream\b/i },
+      { key: 'бальзам', regex: /\bбальзам|\bbalm\b/i },
+      { key: 'лосьйон', regex: /\bлосьйон|\blotion\b/i },
+      { key: 'сироватка', regex: /\bсироватк|\bсерум|\bserum\b/i },
+      { key: 'пінка', regex: /\bпінк|\bпіна\b|\bfoam\b/i },
+      { key: 'скраб', regex: /\bскраб|\bscrub\b/i },
+      { key: 'мило', regex: /\bмил[оа]|\bsoap\b/i },
+      { key: 'дезодорант', regex: /\bдезодорант|\bdeodorant\b/i },
+      { key: 'молочко', regex: /\bмолочк|\bmilk\b/i },
+      { key: 'тонік', regex: /\bтонік|\btoner\b/i },
+      { key: 'пілінг', regex: /\bпілінг|\bpeeling\b/i },
+      { key: 'емульсія', regex: /\bемульсі/i },
+      { key: 'косметичка', regex: /\bкосметичк/i },
+      { key: 'губка', regex: /\bгубк|\bмочалк/i }
+    ];
+
+    const matchedOptions: string[] = [];
+
+    // Scan title first (100% priority), then description
+    for (const comp of COMPONENT_PATTERNS) {
+      if (comp.regex.test(titleCombined) || comp.regex.test(textLower)) {
+        // Find matching option in allowedValues
+        let optMatch = findAllowed(comp.key);
+        if (!optMatch) {
+          if (comp.key === 'гель') optMatch = findAllowed('гель для душу');
+          else if (comp.key === 'шампунь') optMatch = findAllowed('шампунь для волосся');
+          else if (comp.key === 'кондиціонер') optMatch = findAllowed('кондиціонер для волосся');
+          else if (comp.key === 'олія') optMatch = findAllowed('олія для тіла');
+          else if (comp.key === 'крем') optMatch = findAllowed('крем для тіла') || findAllowed('крем для рук');
+        }
+        if (!optMatch) {
+          optMatch = allowedValues.find(v => comp.regex.test(v) && !isInternalHexOrHashId(v)) || null;
+        }
+
+        if (optMatch && !matchedOptions.includes(optMatch)) {
+          matchedOptions.push(optMatch);
+        }
+      }
+    }
+
+    if (matchedOptions.length > 0) {
+      return colType === 'multiselect' ? matchedOptions.join('; ') : matchedOptions[0];
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 3. БРЕНД* (Brand)
+  // -------------------------------------------------------------------------
+  if (normKey === 'бренд' || normKey.includes('бренд') || normKey === 'виробник') {
+    // Specifically check "Mades Cosmetics" or "Mades"
+    if (titleCombined.includes('mades') || textLower.includes('mades')) {
+      const mades = findAllowed('Mades Cosmetics') || findAllowed('Mades') || allowedValues.find(v => /mades/i.test(v));
+      if (mades) return mades;
+    }
+
+    // Scan all non-"інше" brands in allowedValues (sorted longest first)
+    const sortedBrands = [...allowedValues]
+      .filter(b => b && normalizeForDictionaryComparison(b, 'exact') !== 'інше' && !isInternalHexOrHashId(b))
+      .sort((a, b) => b.length - a.length);
+
+    for (const b of sortedBrands) {
+      if (b.length < 2) continue;
+      const bNorm = normalizeForDictionaryComparison(b, 'exact');
+      const escaped = bNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const reg = new RegExp(`(?<![a-z0-9а-яіїєґ])${escaped}(?![a-z0-9а-яіїєґ])`, 'i');
+      if (reg.test(titleCombined)) {
+        return b;
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 4. СТАТЬ* (Gender)
+  // -------------------------------------------------------------------------
+  if (normKey === 'стать' || normKey.includes('стать')) {
+    const hasWomen = /для\s+жінок|жіноч|женск|дівчат|дівчин|девоч/i.test(titleCombined) || /для\s+жінок|жіноч|женск/i.test(textLower);
+    const hasMen = /для\s+чоловіків|чоловіч|мужск|хлопч|хлопц|мальчик/i.test(titleCombined) || /для\s+чоловіків|чоловіч|мужск/i.test(textLower);
+    const hasKids = /для\s+дітей|дитяч|детск/i.test(titleCombined) || /для\s+дітей|дитяч|детск/i.test(textLower);
+    const hasUnisex = /унісекс|unisex|для\s+всіх|для\s+всієї\s+родини/i.test(titleCombined) || /унісекс|unisex/i.test(textLower);
+
+    if (hasWomen && !hasMen) {
+      const res = findAllowed('для жінок') || findAllowed('жіночі') || findAllowed('жіноча');
+      if (res) return res;
+    }
+    if (hasMen && !hasWomen) {
+      const res = findAllowed('для чоловіків') || findAllowed('чоловічі') || findAllowed('чоловіча');
+      if (res) return res;
+    }
+    if (hasKids) {
+      const res = findAllowed('для дітей') || findAllowed('дитячі') || findAllowed('дитяча');
+      if (res) return res;
+    }
+    if (hasUnisex || (hasWomen && hasMen) || titleCombined.includes('набір')) {
+      const res = findAllowed('унісекс') || findAllowed('unisex') || findAllowed('для жінок');
+      if (res) return res;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 5. ПРИЗНАЧЕННЯ* (Purpose / Target Benefit)
+  // -------------------------------------------------------------------------
+  if (normKey.includes('призначення') || normKey === 'призначення') {
+    const PURPOSES: Array<{ words: RegExp; candidates: string[] }> = [
+      { words: /зволож|увлажн/i, candidates: ['для зволоження', 'зволоження'] },
+      { words: /об'?єм|об&#039;єм|об’єм|объем/i, candidates: ['надання об\'єму', 'для об\'єму', 'об\'єм'] },
+      { words: /очищ|очист/i, candidates: ['для очищення', 'очищення'] },
+      { words: /живлен|питани/i, candidates: ['для живлення', 'живлення'] },
+      { words: /відновл|восстанов/i, candidates: ['для відновлення', 'відновлення'] },
+      { words: /догляд|уход/i, candidates: ['догляд', 'для догляду', 'для щоденного використання'] },
+      { words: /пом'?якш|смягч/i, candidates: ['для пом\'якшення', 'пом\'якшення'] },
+      { words: /зміцнен|укрепл/i, candidates: ['для зміцнення', 'зміцнення'] },
+      { words: /захист|защит/i, candidates: ['для захисту', 'захист'] },
+      { words: /тоніз|тонизир/i, candidates: ['для тонізації', 'тонізація'] },
+      { words: /заспоко|успоко/i, candidates: ['для заспокоєння', 'заспокоєння'] },
+      { words: /блиск|блеск/i, candidates: ['надання блиску', 'для блиску'] },
+      { words: /обличч|лиц/i, candidates: ['для обличчя', 'обличчя'] },
+      { words: /тіл|тел/i, candidates: ['для тіла', 'тіло'] },
+      { words: /волос/i, candidates: ['для волосся', 'волосся'] },
+      { words: /рук/i, candidates: ['для рук', 'руки'] },
+      { words: /ніг|стоп/i, candidates: ['для ніг', 'ноги'] },
+      { words: /шкір|кож/i, candidates: ['для шкіри', 'шкіра'] },
+      { words: /щоденн/i, candidates: ['для щоденного використання', 'щоденний догляд'] }
+    ];
+
+    const matchedPurposes: string[] = [];
+
+    for (const p of PURPOSES) {
+      if (p.words.test(titleCombined) || p.words.test(textLower)) {
+        for (const cand of p.candidates) {
+          const m = findAllowed(cand);
+          if (m && !matchedPurposes.includes(m)) {
+            matchedPurposes.push(m);
+            break;
+          }
+        }
+      }
+    }
+
+    if (matchedPurposes.length > 0) {
+      return colType === 'multiselect' ? matchedPurposes.join('; ') : matchedPurposes[0];
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Universal Mandatory Field Fallback:
+ * If after local analysis and AI, a mandatory field with asterisk (*) remains empty,
+ * pulls the most probable category-aware default canonical option from allowedValues.
+ */
+export function resolveMandatoryFallback(
+  columnName: string,
+  colType: EpicentrColumnType,
+  allowedValues: string[],
+  contextText: string = ''
+): string | null {
+  if (!allowedValues || allowedValues.length === 0) return null;
+  const normKey = normalizeAttributeKey(columnName, true);
+  const lowerContext = (contextText || '').toLowerCase();
+
+  const findAllowed = (target: string): string | null => {
+    return matchSingleOptionAgainstAllowed(target, allowedValues);
+  };
+
+  // 1. Вид* (Type)
+  if (normKey === 'вид' || normKey.startsWith('вид')) {
+    if (lowerContext.includes('набір') || lowerContext.includes('набор') || lowerContext.includes('set') || lowerContext.includes('косметик')) {
+      const match =
+        findAllowed('косметичний набір') ||
+        findAllowed('набір') ||
+        findAllowed('подарунковий набір') ||
+        findAllowed('набір косметики') ||
+        findAllowed('набір для догляду');
+      if (match) return match;
+    }
+    const anySet = allowedValues.find(v => /набір|набор|set/i.test(v) && !isInternalHexOrHashId(v));
+    if (anySet) return anySet;
+
+    const setDef = findAllowed('косметичний набір') || findAllowed('набір');
+    if (setDef) return setDef;
+
+    const uni = findAllowed('універсальний');
+    if (uni) return uni;
+
+    const firstValid = allowedValues.find(v => v && !isInternalHexOrHashId(v) && !isAiDisclaimerOrServiceText(v));
+    if (firstValid) return firstValid;
+  }
+
+  // 2. Стать* (Gender)
+  if (normKey === 'стать' || normKey.includes('стать')) {
+    const match =
+      findAllowed('унісекс') ||
+      findAllowed('unisex') ||
+      findAllowed('для жінок') ||
+      findAllowed('жіночі') ||
+      findAllowed('жіноча') ||
+      findAllowed('для чоловіків') ||
+      findAllowed('чоловічі') ||
+      findAllowed('для дорослих');
+    if (match) return match;
+
+    const firstValid = allowedValues.find(v => v && !isInternalHexOrHashId(v) && !isAiDisclaimerOrServiceText(v));
+    if (firstValid) return firstValid;
+  }
+
+  // 3. Склад набору* (Set Components)
+  if (normKey.includes('склад набору') || normKey === 'склад набору') {
+    const comps = ['шампунь', 'кондиціонер', 'гель для душу', 'гель', 'спрей', 'міст', 'олія', 'крем', 'маска', 'мило', 'бальзам'];
+    const matchedComps: string[] = [];
+    for (const c of comps) {
+      if (lowerContext.includes(c)) {
+        const m = findAllowed(c);
+        if (m && !matchedComps.includes(m)) {
+          matchedComps.push(m);
+        }
+      }
+    }
+    if (matchedComps.length > 0) {
+      return colType === 'multiselect' ? matchedComps.join('; ') : matchedComps[0];
+    }
+
+    const combo = allowedValues.find(v => (v.includes(';') || v.includes(',') || v.includes('+')) && !isInternalHexOrHashId(v));
+    if (combo) return combo;
+
+    const commonComp =
+      findAllowed('шампунь') ||
+      findAllowed('гель для душу') ||
+      findAllowed('крем') ||
+      findAllowed('косметичні засоби');
+    if (commonComp) return commonComp;
+
+    const firstValid = allowedValues.find(v => v && !isInternalHexOrHashId(v) && !isAiDisclaimerOrServiceText(v));
+    if (firstValid) return firstValid;
+  }
+
+  // 4. Бренд* (Brand)
+  if (normKey === 'бренд' || normKey.includes('бренд') || normKey === 'виробник') {
+    if (lowerContext.includes('mades')) {
+      const mades = findAllowed('Mades Cosmetics') || findAllowed('Mades');
+      if (mades) return mades;
+    }
+    const other = findAllowed('Інше') || findAllowed('інше') || findAllowed('Other');
+    if (other) return other;
+
+    const firstValid = allowedValues.find(v => v && !isInternalHexOrHashId(v) && !isAiDisclaimerOrServiceText(v));
+    if (firstValid) return firstValid;
+  }
+
+  // 5. Призначення* (Purpose / Target Benefit)
+  if (normKey.includes('призначення') || normKey === 'призначення') {
+    const match =
+      findAllowed('для щоденного використання') ||
+      findAllowed('догляд') ||
+      findAllowed('для догляду') ||
+      findAllowed('для зволоження') ||
+      findAllowed('зволоження') ||
+      findAllowed('для очищення') ||
+      findAllowed('очищення') ||
+      findAllowed('для тіла') ||
+      findAllowed('для обличчя') ||
+      findAllowed('для волосся') ||
+      findAllowed('надання об\'єму') ||
+      findAllowed('для живлення') ||
+      findAllowed('живлення');
+    if (match) return match;
+
+    const firstValid = allowedValues.find(v => v && !isInternalHexOrHashId(v) && !isAiDisclaimerOrServiceText(v));
+    if (firstValid) return firstValid;
+  }
+
+  // 6. Одиниця виміру*
+  if (normKey.includes('одиниця виміру') || normKey.includes('одиниці виміру')) {
+    const match =
+      findAllowed('шт.') ||
+      findAllowed('компл.') ||
+      findAllowed('уп.');
+    if (match) return match;
+  }
+
+  // 7. Клас косметики*
+  if (normKey.includes('клас косметики') || normKey.includes('клас')) {
+    const match =
+      findAllowed('мас-маркет') ||
+      findAllowed('мідл-маркет') ||
+      findAllowed('дерматокосметика') ||
+      findAllowed('натуральна') ||
+      findAllowed('професійна');
+    if (match) return match;
+  }
+
+  // 8. Країна*
+  if (normKey.includes('країна')) {
+    if (lowerContext.includes('mades')) {
+      const nl = findAllowed('Нідерланди') || findAllowed('Нидерланды');
+      if (nl) return nl;
+    }
+    const match =
+      findAllowed('Нідерланди') ||
+      findAllowed('Україна') ||
+      findAllowed('Польща') ||
+      findAllowed('Франція') ||
+      findAllowed('Німеччина');
+    if (match) return match;
+  }
+
+  // Generic fallback for any other mandatory select/multiselect column:
+  const genericUni =
+    findAllowed('універсальний') ||
+    findAllowed('універсальна') ||
+    findAllowed('без візерунка (однотонний)') ||
+    findAllowed('стандартний');
+  if (genericUni) return genericUni;
+
+  const anyValid = allowedValues.find(v => v && !isInternalHexOrHashId(v) && !isAiDisclaimerOrServiceText(v));
+  return anyValid || null;
+}
 
 /**
  * Normalize an attribute/column name by removing service tags, newlines, and units for flexible dictionary lookup.
@@ -919,39 +1886,69 @@ export function parseDictionaryWorkbook(
     let optNameColIdx = -1;
 
     lowerHeaders.forEach((h, idx) => {
-      if (
-        h === 'назва характеристики' ||
-        h === 'характеристика' ||
-        h === 'назва атрибута' ||
-        h === 'назва атрибуту' ||
-        h === 'атрибут' ||
-        h === 'attribute' ||
-        h === 'attribute name'
-      ) {
-        attrColIdx = idx;
-      } else if (
-        h === 'назва опції' ||
-        h === 'значення опції' ||
-        h === 'назва значення' ||
-        h === 'назва' ||
-        h === 'значення' ||
-        h === 'опція' ||
-        h === 'option name' ||
-        h === 'option' ||
-        h === 'value'
-      ) {
-        optNameColIdx = idx;
+      const isSystemCodeOrId =
+        h.includes('код') ||
+        h.includes('code') ||
+        h.includes('id') ||
+        h.includes('ід') ||
+        h.includes('хеш') ||
+        h.includes('hash') ||
+        h.includes('сортуван') ||
+        h.includes('порядок') ||
+        h.includes('позиці') ||
+        h.includes('тип') ||
+        h.includes('type');
+
+      if (!isSystemCodeOrId) {
+        if (
+          h === 'назва характеристики' ||
+          h === 'характеристика' ||
+          h === 'назва атрибута' ||
+          h === 'назва атрибуту' ||
+          h === 'атрибут' ||
+          h === 'attribute' ||
+          h === 'attribute name'
+        ) {
+          attrColIdx = idx;
+        } else if (
+          h === 'назва опції' ||
+          h === 'option name' ||
+          h === 'значення опції' ||
+          h === 'назва значення' ||
+          h === 'назва' ||
+          h === 'значення' ||
+          h === 'опція' ||
+          h === 'option' ||
+          h === 'value'
+        ) {
+          // Strictly prioritize "назва опції"
+          if (optNameColIdx === -1 || h === 'назва опції' || h === 'option name') {
+            optNameColIdx = idx;
+          }
+        }
       }
     });
 
-    // Fallback if not exact match:
+    // Fallback if not exact match (strictly avoiding code/id columns):
     if (attrColIdx === -1) {
-      attrColIdx = lowerHeaders.findIndex(h => h.includes('характерист') || h.includes('атрибут'));
+      attrColIdx = lowerHeaders.findIndex(
+        h =>
+          !h.includes('код') &&
+          !h.includes('id') &&
+          !h.includes('code') &&
+          (h.includes('характерист') || h.includes('атрибут'))
+      );
     }
     if (optNameColIdx === -1) {
       optNameColIdx = lowerHeaders.findIndex(
         (h, i) =>
           i !== attrColIdx &&
+          !h.includes('код') &&
+          !h.includes('id') &&
+          !h.includes('code') &&
+          !h.includes('порядок') &&
+          !h.includes('сортуван') &&
+          !h.includes('позиці') &&
           (h.includes('назва опці') || h.includes('значен') || (h.includes('опці') && !h.includes('код') && !h.includes('id')))
       );
     }
@@ -1088,38 +2085,68 @@ export async function parseDictionaryWorkbookAsync(
     let optNameColIdx = -1;
 
     lowerHeaders.forEach((h, idx) => {
-      if (
-        h === 'назва характеристики' ||
-        h === 'характеристика' ||
-        h === 'назва атрибута' ||
-        h === 'назва атрибуту' ||
-        h === 'атрибут' ||
-        h === 'attribute' ||
-        h === 'attribute name'
-      ) {
-        attrColIdx = idx;
-      } else if (
-        h === 'назва опції' ||
-        h === 'значення опції' ||
-        h === 'назва значення' ||
-        h === 'назва' ||
-        h === 'значення' ||
-        h === 'опція' ||
-        h === 'option name' ||
-        h === 'option' ||
-        h === 'value'
-      ) {
-        optNameColIdx = idx;
+      const isSystemCodeOrId =
+        h.includes('код') ||
+        h.includes('code') ||
+        h.includes('id') ||
+        h.includes('ід') ||
+        h.includes('хеш') ||
+        h.includes('hash') ||
+        h.includes('сортуван') ||
+        h.includes('порядок') ||
+        h.includes('позиці') ||
+        h.includes('тип') ||
+        h.includes('type');
+
+      if (!isSystemCodeOrId) {
+        if (
+          h === 'назва характеристики' ||
+          h === 'характеристика' ||
+          h === 'назва атрибута' ||
+          h === 'назва атрибуту' ||
+          h === 'атрибут' ||
+          h === 'attribute' ||
+          h === 'attribute name'
+        ) {
+          attrColIdx = idx;
+        } else if (
+          h === 'назва опції' ||
+          h === 'option name' ||
+          h === 'значення опції' ||
+          h === 'назва значення' ||
+          h === 'назва' ||
+          h === 'значення' ||
+          h === 'опція' ||
+          h === 'option' ||
+          h === 'value'
+        ) {
+          // Strictly prioritize "назва опції"
+          if (optNameColIdx === -1 || h === 'назва опції' || h === 'option name') {
+            optNameColIdx = idx;
+          }
+        }
       }
     });
 
     if (attrColIdx === -1) {
-      attrColIdx = lowerHeaders.findIndex(h => h.includes('характерист') || h.includes('атрибут'));
+      attrColIdx = lowerHeaders.findIndex(
+        h =>
+          !h.includes('код') &&
+          !h.includes('id') &&
+          !h.includes('code') &&
+          (h.includes('характерист') || h.includes('атрибут'))
+      );
     }
     if (optNameColIdx === -1) {
       optNameColIdx = lowerHeaders.findIndex(
         (h, i) =>
           i !== attrColIdx &&
+          !h.includes('код') &&
+          !h.includes('id') &&
+          !h.includes('code') &&
+          !h.includes('порядок') &&
+          !h.includes('сортуван') &&
+          !h.includes('позиці') &&
           (h.includes('назва опці') || h.includes('значен') || (h.includes('опці') && !h.includes('код') && !h.includes('id')))
       );
     }
@@ -1519,120 +2546,7 @@ export function matchDictionaryValue(
   if (!candidateValue || !dictAttr || !Array.isArray(dictAttr.allowedValues) || dictAttr.allowedValues.length === 0) {
     return null;
   }
-
-  const rawTrimmed = String(candidateValue).replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
-  if (!rawTrimmed || rawTrimmed.toLowerCase() === 'nan') return null;
-
-  // Strict check: Forbid internal hex/hash IDs
-  if (isInternalHexOrHashId(rawTrimmed)) return null;
-
-  // Check AI disclaimers / explanations / apologies
-  if (isAiDisclaimerOrServiceText(rawTrimmed)) {
-    // If the text contains return disclaimer keywords, try to map to official return option
-    if (/повернен/i.test(rawTrimmed)) {
-      const legalMapped = canonicalMapCandidate(rawTrimmed, dictAttr.allowedValues);
-      if (legalMapped) return legalMapped;
-    }
-    return null;
-  }
-
-  // 0. Exact raw match in allowedValues
-  const exactAllowed = dictAttr.allowedValues.find(v => v === rawTrimmed);
-  if (exactAllowed) return exactAllowed;
-
-  const exactNorm = normalizeForDictionaryComparison(rawTrimmed, 'exact');
-  const relaxedNorm = normalizeForDictionaryComparison(rawTrimmed, 'relaxed');
-  const encodedNorm = encodeHtmlEntities(rawTrimmed).toLowerCase().trim();
-  const compactNorm = exactNorm.replace(/\s+/g, '');
-
-  // 1. Direct normalized lookup in decodedValuesMap
-  if (dictAttr.decodedValuesMap) {
-    if (dictAttr.decodedValuesMap[exactNorm]) return dictAttr.decodedValuesMap[exactNorm];
-    if (dictAttr.decodedValuesMap[encodedNorm]) return dictAttr.decodedValuesMap[encodedNorm];
-    if (relaxedNorm && dictAttr.decodedValuesMap[relaxedNorm]) return dictAttr.decodedValuesMap[relaxedNorm];
-    if (compactNorm && dictAttr.decodedValuesMap[compactNorm]) return dictAttr.decodedValuesMap[compactNorm];
-  }
-
-  // Direct scan across allowedValues with exact/relaxed normalization
-  for (const allowedVal of dictAttr.allowedValues) {
-    const allowedExact = normalizeForDictionaryComparison(allowedVal, 'exact');
-    if (allowedExact === exactNorm || allowedExact.replace(/\s+/g, '') === compactNorm) {
-      return allowedVal;
-    }
-    if (relaxedNorm && normalizeForDictionaryComparison(allowedVal, 'relaxed') === relaxedNorm) {
-      return allowedVal;
-    }
-  }
-
-  // 2. Universal canonical mapper (Gender/number, all types, legal return, bracket extraction like 18+ from Makeup.ua (18+))
-  const canonicalMatched = canonicalMapCandidate(rawTrimmed, dictAttr.allowedValues);
-  if (canonicalMatched) {
-    return canonicalMatched;
-  }
-
-  // 3. Universal synonyms & RU->UA word map
-  const synonymCandidate =
-    COMMON_SYNONYMS[exactNorm] ||
-    COMMON_SYNONYMS[relaxedNorm] ||
-    RU_TO_UA_WORDS[exactNorm] ||
-    RU_TO_UA_WORDS[relaxedNorm];
-
-  if (synonymCandidate) {
-    const synExact = normalizeForDictionaryComparison(synonymCandidate, 'exact');
-    const synRelaxed = normalizeForDictionaryComparison(synonymCandidate, 'relaxed');
-    if (dictAttr.decodedValuesMap?.[synExact]) return dictAttr.decodedValuesMap[synExact];
-    if (synRelaxed && dictAttr.decodedValuesMap?.[synRelaxed]) return dictAttr.decodedValuesMap[synRelaxed];
-
-    for (const allowedVal of dictAttr.allowedValues) {
-      if (
-        normalizeForDictionaryComparison(allowedVal, 'exact') === synExact ||
-        (synRelaxed && normalizeForDictionaryComparison(allowedVal, 'relaxed') === synRelaxed)
-      ) {
-        return allowedVal;
-      }
-    }
-  }
-
-  // 4. Closest equivalent in allowedValues: morphological stem match (e.g. "розважальна" <-> "розважальні")
-  if (exactNorm.length >= 4) {
-    const stem = exactNorm.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою|ому|ям|ях|ів)$/i, '');
-    if (stem.length >= 4) {
-      for (const allowedVal of dictAttr.allowedValues) {
-        const allowedDecoded = normalizeForDictionaryComparison(allowedVal, 'exact');
-        const allowedStem = allowedDecoded.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою|ому|ям|ях|ів)$/i, '');
-        if (allowedDecoded === stem || allowedStem === stem || allowedDecoded.startsWith(stem)) {
-          return allowedVal;
-        }
-      }
-    }
-  }
-
-  // 5. Unambiguous substring / token match in allowedValues (e.g. "дихаюча сітка" -> "сітка")
-  if (exactNorm.length >= 3) {
-    let bestMatch: string | null = null;
-    let bestScore = 0;
-
-    for (const allowedVal of dictAttr.allowedValues) {
-      const allowedExact = normalizeForDictionaryComparison(allowedVal, 'exact');
-      if (allowedExact.length < 3) continue;
-
-      if (exactNorm.includes(allowedExact) || allowedExact.includes(exactNorm)) {
-        const overlapLen = Math.min(exactNorm.length, allowedExact.length);
-        const maxLen = Math.max(exactNorm.length, allowedExact.length);
-        const score = overlapLen / maxLen;
-        if (overlapLen >= 3 && score > bestScore) {
-          bestScore = score;
-          bestMatch = allowedVal;
-        }
-      }
-    }
-
-    if (bestMatch && bestScore >= 0.35) {
-      return bestMatch;
-    }
-  }
-
-  return null;
+  return matchSingleOptionAgainstAllowed(candidateValue, dictAttr.allowedValues);
 }
 
 /**
@@ -1668,92 +2582,40 @@ export function enforceDictionaryValue(
 
   const hasDictionary = Boolean(dictAttr && Array.isArray(dictAttr.allowedValues) && dictAttr.allowedValues.length > 0);
 
-  // 1. MULTISELECT: Strict element-by-element validation
+  // 1. MULTISELECT & SELECT with dictionary
+  if (hasDictionary && dictAttr && (colType === 'select' || colType === 'multiselect')) {
+    const sanitized = sanitizeValueAgainstDictionary(cleaned, dictAttr.allowedValues, colType === 'multiselect');
+    return sanitized || null;
+  }
+
+  // 2. Multiselect without fixed dictionary: clean elements
   if (colType === 'multiselect') {
-    const rawElements = cleaned.includes(';')
-      ? cleaned.split(';').map(item => item.trim())
-      : cleaned.split(/[,\n]+/).map(item => item.trim());
-
-    if (rawElements.length === 0) return null;
-
-    const validElements: string[] = [];
-    for (const element of rawElements) {
-      if (!element) continue;
-      if (isInternalHexOrHashId(element)) continue;
-      if (isAiDisclaimerOrServiceText(element)) {
-        if (dictAttr && /повернен/i.test(element)) {
-          const lm = matchDictionaryValue(dictAttr, element);
-          if (lm && !validElements.includes(lm)) validElements.push(lm);
-        }
-        continue;
-      }
-
-      if (hasDictionary && dictAttr) {
-        const matched = matchDictionaryValue(dictAttr, element);
-        if (matched && !validElements.includes(matched)) {
-          validElements.push(matched);
-        }
-      } else {
-        if (!validElements.includes(element)) {
-          validElements.push(element);
-        }
-      }
-    }
-
-    if (hasDictionary) {
-      return validElements.length > 0 ? validElements.join('; ') : null;
-    }
-
-    return validElements.length > 0 ? validElements.join('; ') : null;
+    const parts = cleaned.split(/[;,\n]+/).map(p => p.trim()).filter(p => p && !isInternalHexOrHashId(p) && !isAiDisclaimerOrServiceText(p));
+    return parts.length > 0 ? Array.from(new Set(parts)).join('; ') : null;
   }
 
-  // 2. SELECT: Strict single-option validation against allowedValues
+  // 3. Select without fixed dictionary
   if (colType === 'select') {
-    if (hasDictionary && dictAttr) {
-      const directMatch = matchDictionaryValue(dictAttr, cleaned);
-      if (directMatch) return directMatch;
-
-      // If input contains multiple tokens separated by ; or ,, try each
-      if (/[;,]/.test(cleaned)) {
-        const parts = cleaned.split(/[;,]+/).map(p => p.trim()).filter(Boolean);
-        for (const part of parts) {
-          if (isInternalHexOrHashId(part) || isAiDisclaimerOrServiceText(part)) continue;
-          const matchedPart = matchDictionaryValue(dictAttr, part);
-          if (matchedPart) return matchedPart;
-        }
-      }
-
-      // Guarantee zero import errors: if not in allowedValues, return null (empty cell)
-      return null;
-    }
-
-    return cleaned;
+    return null; // Strict rule: select without verified dictionary cannot accept arbitrary unverified text
   }
 
-  // 3. ARRAY: Normalize delimiter to "; " and match against dictionary if available
+  // 4. ARRAY: Normalize delimiter to "; "
   if (colType === 'array') {
-    const parts = cleaned.split(/[;,]+/).map(p => p.trim()).filter(Boolean);
-    if (parts.length === 0) return null;
     if (hasDictionary && dictAttr) {
-      const validParts: string[] = [];
-      for (const part of parts) {
-        if (isInternalHexOrHashId(part) || isAiDisclaimerOrServiceText(part)) continue;
-        const m = matchDictionaryValue(dictAttr, part);
-        if (m && !validParts.includes(m)) validParts.push(m);
-      }
-      return validParts.length > 0 ? validParts.join('; ') : null;
+      const sanitized = sanitizeValueAgainstDictionary(cleaned, dictAttr.allowedValues, true);
+      return sanitized || null;
     }
-    const cleanParts = parts.filter(p => !isInternalHexOrHashId(p) && !isAiDisclaimerOrServiceText(p));
+    const cleanParts = cleaned.split(/[;,]+/).map(p => p.trim()).filter(p => p && !isInternalHexOrHashId(p) && !isAiDisclaimerOrServiceText(p));
     return cleanParts.length > 0 ? Array.from(new Set(cleanParts)).join('; ') : null;
   }
 
-  // 4. FLOAT: Ensure numeric format
+  // 5. FLOAT: Ensure numeric format
   if (colType === 'float') {
     const numMatch = cleaned.replace(',', '.').match(/-?\d+(?:\.\d+)?/);
     return numMatch ? numMatch[0] : null;
   }
 
-  // 5. STRING / TEXT: If a dictionary exists for this attribute, normalize to canonical dictionary value when matched
+  // 6. STRING / TEXT: If a dictionary exists for this attribute, normalize to canonical dictionary value when matched
   if (hasDictionary && dictAttr) {
     const matched = matchDictionaryValue(dictAttr, cleaned);
     if (matched) return matched;
@@ -2546,9 +3408,26 @@ export function runEpicentrFillingEngine(
           const isBrandCol =
             normKeyNoUnit.includes('бренд') || normKeyNoUnit.includes('brand') || normKeyNoUnit === 'виробник';
 
+          // 0. Детермінований локальний витяг для полів зі зірочкою (*) та ключових характеристик зі 100% пріоритетом
+          const deterministicVal = extractDeterministicMandatoryPimAttribute(
+            col.originalName,
+            col.type,
+            dictAttr.allowedValues,
+            visuals.combinedDesc,
+            visuals.titleUa,
+            visuals.titleRu
+          );
+          if (deterministicVal) {
+            candidateValue = deterministicVal;
+            if (isBrandCol) {
+              detectedBrand = deterministicVal;
+            }
+            note = 'Детерміновано витягнуто за PIM-правилами Епіцентру зі 100% пріоритетом';
+          }
+
           // Sort allowedValues by length descending so more specific multi-word options match before shorter substrings
           const sortedOptions = [...dictAttr.allowedValues].sort((a, b) => b.length - a.length);
-          const matchedFromText: string[] = [];
+          const matchedFromText: string[] = candidateValue ? [candidateValue] : [];
 
           for (const allowedVal of sortedOptions) {
             if (isBrandCol && normalizeForDictionaryComparison(allowedVal, 'exact') === 'інше') {
@@ -2778,7 +3657,22 @@ export function runEpicentrFillingEngine(
         // 3. STRICT FINAL DICTIONARY ENFORCEMENT GATE
         // For ANY select or multiselect column with allowedValues, validate through enforceDictionaryValue.
         // If not in allowedValues -> DELETE (set to null) so no invalid value ever enters Excel!
-        const filledValue = enforceDictionaryValue(candidateValue, col.type, dictAttr);
+        let filledValue = enforceDictionaryValue(candidateValue, col.type, dictAttr);
+
+        // Mandatory Fallback: If mandatory column (*) remains empty, pull category-aware default from allowedValues
+        if (!filledValue && (col.isRequired || col.originalName.includes('*')) && dictAttr && dictAttr.allowedValues.length > 0) {
+          const fallbackVal = resolveMandatoryFallback(
+            col.originalName,
+            col.type,
+            dictAttr.allowedValues,
+            visuals.combinedDesc
+          );
+          if (fallbackVal) {
+            filledValue = fallbackVal;
+            source = 'description';
+            note = 'Базовий дефолтний фолбек для обов\'язкового поля за PIM-довідником категорії';
+          }
+        }
 
         // Finalize value check
         if (filledValue) {
@@ -2977,6 +3871,21 @@ export function generateEpicentrExportWorkbook(
       : '';
 
     if (candidateVal === undefined || candidateVal === null || String(candidateVal).trim() === '') {
+      if ((col.isRequired || col.originalName.includes('*')) && dictionaryIndex) {
+        const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
+        if (dictAttr && dictAttr.allowedValues.length > 0) {
+          const fallback = resolveMandatoryFallback(
+            col.originalName,
+            col.type,
+            dictAttr.allowedValues,
+            pRow.titleFormattedUa || pRow.titleOriginal || ''
+          );
+          if (fallback) {
+            pRow.updatedRow[col.originalName] = fallback;
+            return fallback;
+          }
+        }
+      }
       return '';
     }
 
@@ -2990,21 +3899,25 @@ export function generateEpicentrExportWorkbook(
     if ((col.type === 'select' || col.type === 'multiselect') && dictionaryIndex) {
       const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
       if (dictAttr && dictAttr.allowedValues.length > 0) {
-        const enforced = enforceDictionaryValue(candStr, col.type, dictAttr);
-        return enforced ?? '';
+        return sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, col.type === 'multiselect');
       }
+      return '';
     }
 
     if (col.type === 'multiselect') {
-      const enforced = enforceDictionaryValue(candStr, 'multiselect');
-      return enforced ?? '';
+      const dictAttr = dictionaryIndex ? findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName) : undefined;
+      if (dictAttr && dictAttr.allowedValues.length > 0) {
+        return sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, true);
+      }
+      return '';
     }
 
-    if (col.type === 'select' && dictionaryIndex) {
-      const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
+    if (col.type === 'select') {
+      const dictAttr = dictionaryIndex ? findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName) : undefined;
       if (dictAttr && dictAttr.allowedValues.length > 0) {
-        return '';
+        return sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, false);
       }
+      return '';
     }
 
     return candidateVal;

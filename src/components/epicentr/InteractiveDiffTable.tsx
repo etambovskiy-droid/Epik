@@ -37,7 +37,7 @@ import {
   Pencil,
   X
 } from 'lucide-react';
-import { generateEpicentrExportWorkbook, findDictionaryAttr } from '../../services/epicentrEngine';
+import { generateEpicentrExportWorkbook, findDictionaryAttr, sanitizeValueAgainstDictionary } from '../../services/epicentrEngine';
 import { EpicentrDictionaryAttribute } from '../../types/epicentr';
 import {
   notifyMissingApiKey,
@@ -166,13 +166,21 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
 
   // Saves a manually edited cell and offers the "Apply to All" action
   const handleSaveCell = (rowIdx: number, colName: string, newValue: string) => {
-    const trimmed = newValue.trim();
+    let trimmed = newValue.trim();
+    const col = columns.find(c => c.originalName === colName || c.cleanName === colName);
+    const cleanName = col ? col.cleanName : colName;
+
+    // Strict dictionary validation & normalization for select/multiselect columns
+    if (trimmed && col && dictionaryIndex && (col.type === 'select' || col.type === 'multiselect')) {
+      const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
+      if (dictAttr && dictAttr.allowedValues && dictAttr.allowedValues.length > 0) {
+        trimmed = sanitizeValueAgainstDictionary(trimmed, dictAttr.allowedValues, col.type === 'multiselect');
+      }
+    }
+
     if (onUpdateCellValue) {
       onUpdateCellValue(rowIdx, colName, trimmed);
     }
-
-    const col = columns.find(c => c.originalName === colName || c.cleanName === colName);
-    const cleanName = col ? col.cleanName : colName;
 
     if (trimmed) {
       setManuallyEditedCols(prev => ({

@@ -723,6 +723,43 @@ ${attributesPromptSection}
     }
   });
 
+  // 8. Gemini: Generic Direct Proxy Endpoint
+  app.post('/api/gemini/direct', async (req, res) => {
+    try {
+      const { prompt, model, systemInstruction, responseMimeType, maxOutputTokens = 350, temperature, tools } = req.body;
+      if (!prompt || typeof prompt !== 'string') {
+        res.status(400).json({ error: 'Prompt is required' });
+        return;
+      }
+
+      const config: any = {
+        maxOutputTokens: Number(maxOutputTokens) || 350,
+        temperature: temperature !== undefined ? Number(temperature) : 0.2
+      };
+      if (systemInstruction) {
+        config.systemInstruction = systemInstruction;
+      }
+      if (responseMimeType) {
+        config.responseMimeType = responseMimeType;
+      }
+      if (tools && Array.isArray(tools) && tools.length > 0) {
+        config.tools = tools;
+      }
+
+      const response = await generateTextWithFallback(model || 'gemini-3.5-flash-lite', prompt, config);
+      res.json({ text: response?.text || '' });
+    } catch (error: any) {
+      if (isPrepaymentDepletedError(error)) {
+        res.status(402).json({
+          error: 'PREPAYMENT_CREDITS_DEPLETED',
+          message: 'Баланс кредитів AI Studio вичерпано. Перейдіть на https://ai.studio/projects для поповнення.'
+        });
+      } else {
+        res.status(500).json({ error: error?.message || 'Gemini direct request failed' });
+      }
+    }
+  });
+
   // Vite middleware for development, static serving for production
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

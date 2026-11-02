@@ -87,6 +87,10 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   const [aiProgressMessage, setAiProgressMessage] = useState<string | null>(null);
   const [googleSheetExportOpen, setGoogleSheetExportOpen] = useState(false);
 
+  // Domain/Merchant Website Search state
+  const [merchantDomain, setMerchantDomain] = useState('');
+  const [restrictToDomain, setRestrictToDomain] = useState(false);
+
   // Manual Cell Editing and "Apply to All" state
   const [editingCell, setEditingCell] = useState<{
     rowIdx: number;
@@ -421,6 +425,8 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
     try {
       const stats = await enrichProductsBatchWithAI(unfilledRows, columns, dictionaryIndex || {}, {
         useWebGrounding: useGrounding,
+        merchantDomain,
+        restrictToDomain,
         batchSize: 4,
         onStageUpdate: (msg) => {
           setAiProgressMessage(msg);
@@ -478,7 +484,9 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
       const result = await researchProductAttributesWithWebGrounding(
         pRow.updatedRow,
         columns,
-        dictionaryIndex || {}
+        dictionaryIndex || {},
+        undefined,
+        { merchantDomain, restrictToDomain }
       );
 
       const keys = Object.keys(result.suggestedValues);
@@ -528,6 +536,46 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
+      {/* Merchant Domain & Site-Scoped Search Panel */}
+      <div className="bg-gradient-to-r from-blue-50/90 via-slate-50 to-indigo-50/90 border border-blue-200/80 rounded-2xl p-4 shadow-xs space-y-2">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <Globe className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-slate-900">Масове заповнення характеристик за доменним джерелом</h4>
+              <p className="text-[11px] text-slate-600">
+                Вкажіть сайт мерчанта для пошуку специфікацій та суворої валідації за PIM-довідником Епіцентру.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 sm:w-72">
+              <Globe className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="🌐 Домен/Сайт мерчанта (напр. my-store.com.ua)"
+                value={merchantDomain}
+                onChange={(e) => setMerchantDomain(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#004BB7] transition-all"
+              />
+            </div>
+
+            <label className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-700 cursor-pointer select-none hover:border-slate-400 transition-all">
+              <input
+                type="checkbox"
+                checked={restrictToDomain}
+                onChange={(e) => setRestrictToDomain(e.target.checked)}
+                className="w-3.5 h-3.5 rounded text-[#004BB7] focus:ring-0 cursor-pointer"
+              />
+              <span>Шукати специфікації тільки на цьому ресурсі</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
       {/* Top Bar: Search, Filters, and Quick Export Buttons */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
         

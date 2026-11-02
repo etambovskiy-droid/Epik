@@ -580,7 +580,8 @@ function saveCachedSearchResult(cacheKey: string, data: CachedGroundingData): vo
 export function buildConciseSearchQuery(
   brand: string,
   vendorCode: string,
-  productTitle: string
+  productTitle: string,
+  merchantDomain?: string
 ): string {
   const cleanBrand = (brand || '').replace(/^інше$/i, '').trim();
   const cleanSku = (vendorCode || '').trim();
@@ -599,15 +600,21 @@ export function buildConciseSearchQuery(
       ? `${cleanSku} ${modelSnippet}`.slice(0, 65).trim()
       : cleanSku || modelSnippet;
 
-  return `${cleanBrand} ${codeOrModel} характеристики специфікація`
+  const baseQuery = `${cleanBrand} ${codeOrModel} характеристики специфікація`
     .replace(/\s+/g, ' ')
     .trim();
+
+  const cleanDomain = (merchantDomain || '').trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+  if (cleanDomain) {
+    return `site:${cleanDomain} ${baseQuery}`;
+  }
+  return baseQuery;
 }
 
 /**
  * Helper to extract basic product identity fields from a row
  */
-export function extractProductIdentity(productRow: Record<string, any>): {
+export function extractProductIdentity(productRow: Record<string, any>, merchantDomain?: string): {
   productTitle: string;
   brand: string;
   vendorCode: string;
@@ -641,7 +648,7 @@ export function extractProductIdentity(productRow: Record<string, any>): {
   ).trim();
 
   const cacheKey = buildSearchCacheKey(brand, vendorCode, productTitle);
-  const searchQuery = buildConciseSearchQuery(brand, vendorCode, productTitle);
+  const searchQuery = buildConciseSearchQuery(brand, vendorCode, productTitle, merchantDomain);
 
   return { productTitle, brand, vendorCode, cacheKey, searchQuery };
 }
@@ -701,7 +708,11 @@ export async function researchProductAttributesWithWebGrounding(
   productRow: Record<string, any>,
   columns: EpicentrColumn[],
   dictionaryIndex: Record<string, EpicentrDictionaryAttribute>,
-  targetColumnNames?: string[]
+  targetColumnNames?: string[],
+  options?: {
+    merchantDomain?: string;
+    restrictToDomain?: boolean;
+  }
 ): Promise<GroundedResearchResult> {
   const result: GroundedResearchResult = {
     suggestedValues: {},
@@ -778,7 +789,7 @@ export async function researchProductAttributesWithWebGrounding(
     return result;
   }
 
-  const { productTitle, brand, vendorCode, cacheKey, searchQuery } = extractProductIdentity(productRow);
+  const { productTitle, brand, vendorCode, cacheKey, searchQuery } = extractProductIdentity(productRow, options?.merchantDomain);
   result.searchQuery = searchQuery;
   result.cacheKey = cacheKey;
 
@@ -827,7 +838,13 @@ export async function researchProductAttributesWithWebGrounding(
 
   try {
     const cleanTitle = cleanProductTitleNoise(productTitle, brand, vendorCode);
+    const cleanDomain = (options?.merchantDomain || '').trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+    const siteRestrictionInstruction = cleanDomain
+      ? `\nУВАГА: Шукай інформацію СУВОРО на сайті (домені): ${cleanDomain}.${options?.restrictToDomain ? ' Використовуй дані виключно з цього ресурсу.' : ''}`
+      : '';
+
     const researchPrompt = `${OFFICIAL_CATALOG_SYSTEM_INSTRUCTION}
+${siteRestrictionInstruction}
 
 Знайди характеристики товару через Google Search у перевірених джерелах.
 Пошуковий запит: ${searchQuery}

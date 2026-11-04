@@ -414,7 +414,31 @@ const RU_TO_UA_WORDS: Record<string, string> = {
   'джеггинсы': 'джеггінси',
   'высокая': 'висока',
   'средняя': 'середня',
-  'низкая': 'низькая'
+  'низкая': 'низька',
+  'нидерланды': 'Нідерланди',
+  'франция': 'Франція',
+  'польша': 'Польща',
+  'германия': 'Німеччина',
+  'италия': 'Італія',
+  'испания': 'Іспанія',
+  'великобритания': 'Велика Британія',
+  'англия': 'Велика Британія',
+  'китай': 'Китай',
+  'сша': 'США',
+  'швеция': 'Швеція',
+  'швейцария': 'Швейцарія',
+  'турция': 'Туреччина',
+  'корея': 'Корея',
+  'япония': 'Японія',
+  'чехия': 'Чехія',
+  'масс-маркет': 'Мас-маркет',
+  'массмаркет': 'Мас-маркет',
+  'миддл-маркет': 'Мідл-маркет',
+  'миддлмаркет': 'Мідл-маркет',
+  'мидл-маркет': 'Мідл-маркет',
+  'натуральная': 'Натуральна',
+  'профессиональная': 'Професійна',
+  'органическая': 'Органічна'
 };
 
 const UA_TO_RU_WORDS: Record<string, string> = {
@@ -1323,6 +1347,115 @@ export function extractDeterministicMandatoryPimAttribute(
     }
   }
 
+  // -------------------------------------------------------------------------
+  // 6. ДІЯ* (Action / Effect)
+  // -------------------------------------------------------------------------
+  if (normKey === 'дія' || normKey.startsWith('дія') || normKey.includes('действие')) {
+    const ACTIONS: Array<{ words: RegExp; candidates: string[] }> = [
+      { words: /очищ|очист/i, candidates: ['очищення', 'делікатне очищення', 'для очищення'] },
+      { words: /зволож|увлажн/i, candidates: ['зволоження', 'для зволоження', 'глибоке зволоження'] },
+      { words: /живлен|питани/i, candidates: ['живлення', 'для живлення', 'інтенсивне живлення'] },
+      { words: /тоніз|тонизир/i, candidates: ['тонізування', 'тонізація', 'для тонізації'] },
+      { words: /пом'?якш|смягч/i, candidates: ['пом\'якшення', 'для пом\'якшення'] },
+      { words: /освіж|освеж/i, candidates: ['освіження', 'освіжає', 'для освіження'] },
+      { words: /заспоко|успоко/i, candidates: ['заспокоєння', 'для заспокоєння'] },
+      { words: /аромат|пахуч/i, candidates: ['ароматизація', 'дезодорування'] },
+      { words: /відновл|восстанов/i, candidates: ['відновлення', 'для відновлення'] },
+      { words: /зміцнен|укрепл/i, candidates: ['зміцнення', 'для зміцнення'] },
+      { words: /захист|защит/i, candidates: ['захист', 'для захисту'] }
+    ];
+
+    const matchedActions: string[] = [];
+    for (const act of ACTIONS) {
+      if (act.words.test(titleCombined) || act.words.test(textLower)) {
+        for (const cand of act.candidates) {
+          const m = findAllowed(cand);
+          if (m && !matchedActions.includes(m)) {
+            matchedActions.push(m);
+            break;
+          }
+        }
+      }
+    }
+
+    // Cosmetics domain rule: Shower gel, body wash, soap, scrub ALWAYS cleanses and moisturizes
+    if (
+      matchedActions.length === 0 ||
+      !matchedActions.some(a => /очищ/i.test(a))
+    ) {
+      const isCleansingProduct =
+        /гель\s+для\s+душу|мило|шампунь|пінка|скраб|shower\s+gel/i.test(titleCombined) ||
+        /гель\s+для\s+душу|мило|шампунь/i.test(textLower);
+      if (isCleansingProduct) {
+        const cleanMatch = findAllowed('очищення') || findAllowed('делікатне очищення');
+        if (cleanMatch && !matchedActions.includes(cleanMatch)) {
+          matchedActions.unshift(cleanMatch);
+        }
+        const moistMatch = findAllowed('зволоження');
+        if (moistMatch && !matchedActions.includes(moistMatch)) {
+          matchedActions.push(moistMatch);
+        }
+        const nourishMatch = findAllowed('живлення');
+        if (nourishMatch && !matchedActions.includes(nourishMatch)) {
+          matchedActions.push(nourishMatch);
+        }
+      }
+    }
+
+    if (matchedActions.length > 0) {
+      return colType === 'multiselect' ? matchedActions.join('; ') : matchedActions[0];
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 7. ФОРМА ВИПУСКУ* (Packaging / Release Form)
+  // -------------------------------------------------------------------------
+  if (normKey.includes('форма випуску') || normKey === 'форма випуску' || normKey.includes('форма выпуска')) {
+    // Check explicit mentions in text
+    if (/дозатор|помп[ао]/i.test(titleCombined) || /дозатор|помп[ао]/i.test(textLower)) {
+      const m = findAllowed('флакон з дозатором') || findAllowed('пляшка з дозатором') || findAllowed('флакон');
+      if (m) return m;
+    }
+    if (/тюбик|туб[аи]/i.test(titleCombined) || /тюбик|туб[аи]/i.test(textLower)) {
+      const m = findAllowed('тюбик') || findAllowed('туба');
+      if (m) return m;
+    }
+    if (/банк[аи]/i.test(titleCombined) || /банк[аи]/i.test(textLower)) {
+      const m = findAllowed('банка');
+      if (m) return m;
+    }
+    if (/дой-пак|дойпак/i.test(titleCombined) || /дой-пак|дойпак/i.test(textLower)) {
+      const m = findAllowed('дой-пак') || findAllowed('дойпак');
+      if (m) return m;
+    }
+    if (/спрей|пульверизатор/i.test(titleCombined) || /спрей|пульверизатор/i.test(textLower)) {
+      const m = findAllowed('спрей') || findAllowed('флакон');
+      if (m) return m;
+    }
+    if (/флакон/i.test(titleCombined) || /флакон/i.test(textLower)) {
+      const m = findAllowed('флакон') || findAllowed('флакон з дозатором');
+      if (m) return m;
+    }
+    if (/пляшк/i.test(titleCombined) || /пляшк/i.test(textLower)) {
+      const m = findAllowed('пляшка') || findAllowed('пляшка з дозатором') || findAllowed('флакон');
+      if (m) return m;
+    }
+
+    // Volume-correlated packaging heuristics for cosmetics
+    const volMl = extractVolumeMlFromText(`${titleCombined} ${textLower}`);
+    if (volMl && volMl >= 500) {
+      const m = findAllowed('флакон з дозатором') || findAllowed('флакон') || findAllowed('пляшка з дозатором');
+      if (m) return m;
+    } else if (volMl && volMl <= 100) {
+      const m = findAllowed('тюбик') || findAllowed('флакон') || findAllowed('туба');
+      if (m) return m;
+    }
+
+    // Standard liquid cosmetic packaging default from allowed options
+    const defaultBottle = findAllowed('флакон') || findAllowed('тюбик') || findAllowed('пляшка');
+    if (defaultBottle) return defaultBottle;
+  }
+
   return null;
 }
 
@@ -1484,6 +1617,28 @@ export function resolveMandatoryFallback(
       findAllowed('Франція') ||
       findAllowed('Німеччина');
     if (match) return match;
+  }
+
+  // 9. Дія* (Action / Effect)
+  if (normKey === 'дія' || normKey.startsWith('дія') || normKey.includes('действие')) {
+    const act =
+      findAllowed('очищення') ||
+      findAllowed('зволоження') ||
+      findAllowed('живлення') ||
+      findAllowed('тонізування') ||
+      findAllowed('делікатне очищення');
+    if (act) return act;
+  }
+
+  // 10. Форма випуску* (Packaging / Release Form)
+  if (normKey.includes('форма випуску') || normKey === 'форма випуску' || normKey.includes('форма выпуска')) {
+    const pack =
+      findAllowed('флакон') ||
+      findAllowed('тюбик') ||
+      findAllowed('флакон з дозатором') ||
+      findAllowed('пляшка з дозатором') ||
+      findAllowed('пляшка');
+    if (pack) return pack;
   }
 
   // Generic fallback for any other mandatory select/multiselect column:
@@ -2493,7 +2648,7 @@ export async function buildDictionaryIndexAsync(
 }
 
 /**
- * Lookup dictionary attribute by column name (supports multiline headers and unit stripping)
+ * Lookup dictionary attribute by column name (supports multiline headers, unit stripping, and fuzzy matching)
  */
 export function findDictionaryAttr(
   dictionaryIndex: Record<string, EpicentrDictionaryAttribute>,
@@ -2502,15 +2657,54 @@ export function findDictionaryAttr(
   if (!dictionaryIndex || !colName) return undefined;
   const keyWithUnit = normalizeAttributeKey(colName, false);
   const keyWithoutUnit = normalizeAttributeKey(colName, true);
-  return (
-    dictionaryIndex[keyWithUnit] ||
-    dictionaryIndex[keyWithoutUnit] ||
-    Object.values(dictionaryIndex).find(
-      d =>
-        normalizeAttributeKey(d.cleanAttributeName, true) === keyWithoutUnit ||
-        normalizeAttributeKey(d.attributeName, true) === keyWithoutUnit
-    )
+
+  if (dictionaryIndex[keyWithUnit]) return dictionaryIndex[keyWithUnit];
+  if (dictionaryIndex[keyWithoutUnit]) return dictionaryIndex[keyWithoutUnit];
+
+  const toFuzzy = (s: string) =>
+    normalizeAttributeKey(s, true)
+      .toLowerCase()
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const colFuzzy = toFuzzy(colName);
+
+  // 1. Exact match on clean or attribute name
+  const exact = Object.values(dictionaryIndex).find(
+    d =>
+      normalizeAttributeKey(d.cleanAttributeName, true) === keyWithoutUnit ||
+      normalizeAttributeKey(d.attributeName, true) === keyWithoutUnit
   );
+  if (exact) return exact;
+
+  // 2. Fuzzy match (ignoring hyphens, underscores, extra spaces)
+  const fuzzy = Object.values(dictionaryIndex).find(d => {
+    const dFuzzy1 = toFuzzy(d.cleanAttributeName || '');
+    const dFuzzy2 = toFuzzy(d.attributeName || '');
+    return dFuzzy1 === colFuzzy || dFuzzy2 === colFuzzy;
+  });
+  if (fuzzy) return fuzzy;
+
+  // 3. Domain alias matching for common catalog discrepancies:
+  // e.g. "країна-виробник" <-> "країна виробник", "клас косметики" <-> "клас", "одиниця виміру" <-> "одиниці виміру"
+  return Object.values(dictionaryIndex).find(d => {
+    const dFuzzy = toFuzzy(d.cleanAttributeName || d.attributeName || '');
+    if (!dFuzzy || !colFuzzy) return false;
+    if (colFuzzy.includes('країн') && dFuzzy.includes('країн')) {
+      if (colFuzzy.includes('реєстрац') || dFuzzy.includes('реєстрац')) {
+        return colFuzzy.includes('реєстрац') && dFuzzy.includes('реєстрац');
+      }
+      return !dFuzzy.includes('реєстрац');
+    }
+    if (colFuzzy.includes('клас') && dFuzzy.includes('клас')) return true;
+    if (colFuzzy.includes('одиниц') && dFuzzy.includes('одиниц')) return true;
+    if (colFuzzy.includes('форма випуску') && dFuzzy.includes('форма випуску')) return true;
+    if (colFuzzy.includes('призначення') && dFuzzy.includes('призначення')) return true;
+    if ((colFuzzy === 'вид' || colFuzzy.startsWith('вид')) && (dFuzzy === 'вид' || dFuzzy.startsWith('вид'))) return true;
+    if (colFuzzy.includes('бренд') && dFuzzy.includes('бренд')) return true;
+    return false;
+  });
 }
 
 /**
@@ -3019,9 +3213,10 @@ function analyzeProductVisualsAndText(
     unitValue = 'уп.';
   }
 
-  // Parse 3D / 2D dimensions & explicit dimensions from text
+  // Parse 3D / 2D dimensions, weight, volume & explicit dimensions from text
   const parsedDimensions = extractDimensionsFromText(combinedDesc);
   const parsedWeightGrams = extractWeightGramsFromText(combinedDesc);
+  const parsedVolumeMl = extractVolumeMlFromText(combinedDesc);
   const parsedAge = extractAgeFromText(combinedDesc);
   const parsedPlayers = extractPlayersFromText(combinedDesc);
 
@@ -3043,6 +3238,7 @@ function analyzeProductVisualsAndText(
     unitValue,
     parsedDimensions,
     parsedWeightGrams,
+    parsedVolumeMl,
     parsedAge,
     parsedPlayers
   };
@@ -3174,6 +3370,42 @@ export function extractWeightGramsFromText(text: string): number | undefined {
     const w = parseWeight(m[1], m[2]);
     if (w && w >= 10 && w <= 100000) {
       return w;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Extract volume in milliliters (ml) from product title & description.
+ * Automatically converts l (літри) -> ml (мілілітри).
+ */
+export function extractVolumeMlFromText(text: string): number | undefined {
+  if (!text) return undefined;
+
+  const parseVol = (numStr: string, unitStr: string): number | undefined => {
+    const num = parseFloat(numStr.replace(',', '.'));
+    if (isNaN(num) || num <= 0) return undefined;
+    const u = unitStr.toLowerCase().trim();
+    if (u === 'л' || u === 'l' || u.startsWith('літр') || u.startsWith('литр')) {
+      return Math.round(num * 1000);
+    }
+    return Math.round(num);
+  };
+
+  // 1. Labeled volume: "Об'єм: 400 мл", "Объем: 250 мл", "Об'єм: 1 л", "Об'єм товару: 500 мл"
+  const labeledMatch = text.match(/(?:об['’ʼ`]?єм|объем|емкость|місткість|мікрооб['’ʼ`]?єм)(?:\s*в\s*упаковці|\s*товару|\s*упаковки|\s*флакона|\s*банки)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(мл|ml|л|l|літрів|літра|литров|литра)\b/i);
+  if (labeledMatch) {
+    const v = parseVol(labeledMatch[1], labeledMatch[2]);
+    if (v && v >= 1 && v <= 50000) return v;
+  }
+
+  // 2. Unlabeled volume with explicit unit in title or text: "400 мл", "100 ml", "0.5 л", "500 мл"
+  const generalMatches = Array.from(text.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(мл|ml|л|l)\b/gi));
+  for (const m of generalMatches) {
+    const v = parseVol(m[1], m[2]);
+    if (v && v >= 5 && v <= 20000) {
+      return v;
     }
   }
 
@@ -3932,6 +4164,22 @@ export function runEpicentrFillingEngine(
               note = 'Вагу витягнуто з опису/назви товару';
             }
           }
+          // Volume (ml / l)
+          else if (
+            normKeyNoUnit.includes("об'єм") ||
+            normKeyNoUnit.includes("объем") ||
+            normKeyNoUnit.includes("об ем") ||
+            normKeyNoUnit.includes("volume")
+          ) {
+            const volMl = visuals.parsedVolumeMl;
+            if (volMl !== undefined && volMl > 0) {
+              const isLTarget = col.unit === 'л' || cleanKey.includes('(л)');
+              candidateValue = isLTarget
+                ? String(Number((volMl / 1000).toFixed(2)))
+                : String(Math.round(volMl));
+              note = 'Об\'єм витягнуто з опису/назви товару';
+            }
+          }
           // Manufacturer color (free string)
           else if (normKeyNoUnit.includes('колір виробника') && visuals.detectedManufacturerColor) {
             candidateValue = visuals.detectedManufacturerColor;
@@ -4197,22 +4445,46 @@ export function generateEpicentrExportWorkbook(
       return pRow.updatedRow[col.originalName] || '';
     }
 
-    // 2. Existing Non-Empty Cells Inviolability (CRITICAL RULE #1 & #3)
-    // If originalRow already contains data in the uploaded Excel, it MUST NOT be cleared or overwritten.
+    // 2. Existing Non-Empty Cells Inviolability & Dictionary Sanitization
+    // Preserve existing valid data, but ensure select/multiselect cells comply with Epicentr dictionary
     if (hasOriginalNonEmpty) {
       const updatedVal = pRow.updatedRow[col.originalName];
-      if (updatedVal !== undefined && updatedVal !== null && String(updatedVal).trim() !== '' && String(updatedVal).toLowerCase() !== 'nan') {
-        const updatedStr = String(updatedVal).trim();
-        if ((col.type === 'select' || col.type === 'multiselect') && dictionaryIndex) {
-          const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
-          if (dictAttr && dictAttr.allowedValues.length > 0) {
-            const sanitized = sanitizeValueAgainstDictionary(updatedStr, dictAttr.allowedValues, col.type === 'multiselect');
-            if (sanitized) return sanitized;
+      const hasUpdated = updatedVal !== undefined && updatedVal !== null && String(updatedVal).trim() !== '' && String(updatedVal).toLowerCase() !== 'nan';
+      const targetStr = String(hasUpdated ? updatedVal : origVal).trim();
+
+      if ((col.type === 'select' || col.type === 'multiselect') && dictionaryIndex) {
+        const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
+        if (dictAttr && dictAttr.allowedValues.length > 0) {
+          // A. Try direct sanitization
+          const sanitized = sanitizeValueAgainstDictionary(targetStr, dictAttr.allowedValues, col.type === 'multiselect');
+          if (sanitized) return decodeHtmlEntities(sanitized);
+
+          // B. If targetStr was updatedVal and failed, try origVal
+          if (hasUpdated && origVal) {
+            const sanitizedOrig = sanitizeValueAgainstDictionary(String(origVal).trim(), dictAttr.allowedValues, col.type === 'multiselect');
+            if (sanitizedOrig) return decodeHtmlEntities(sanitizedOrig);
           }
+
+          // C. Brand handling: If brand is not registered in Epicentr's category dictionary, Epicentr requires "Інше"
+          const isBrandCol = col.cleanName.toLowerCase().includes('бренд') || col.originalName.toLowerCase().includes('бренд');
+          if (isBrandCol) {
+            const other = dictAttr.allowedValues.find(v => v.toLowerCase() === 'інше' || v.toLowerCase() === 'інша' || v.toLowerCase() === 'other');
+            if (other) return decodeHtmlEntities(other);
+          }
+
+          // D. Fallback for mandatory select/multiselect if value was completely invalid in dictionary
+          if (col.isRequired || col.originalName.includes('*')) {
+            const fallback = resolveMandatoryFallback(col.originalName, col.type, dictAttr.allowedValues, pRow.titleFormattedUa || pRow.titleOriginal || '');
+            if (fallback) return decodeHtmlEntities(fallback);
+          }
+
+          // E. In Epicentr, writing an invalid string to a select/multiselect column causes "Значення не з довідника" rejection
+          return '';
         }
-        return updatedVal;
       }
-      return origVal;
+
+      const rawResult = hasUpdated ? updatedVal : origVal;
+      return typeof rawResult === 'string' ? decodeHtmlEntities(rawResult) : rawResult;
     }
 
     // 3. For cells that were originally EMPTY in the input Excel:
@@ -4243,7 +4515,7 @@ export function generateEpicentrExportWorkbook(
           );
           if (fallback) {
             pRow.updatedRow[col.originalName] = fallback;
-            return fallback;
+            return decodeHtmlEntities(fallback);
           }
         }
       }
@@ -4257,33 +4529,32 @@ export function generateEpicentrExportWorkbook(
       return '';
     }
 
+    // Strictly enforce dictionary for any select / multiselect column
     if ((col.type === 'select' || col.type === 'multiselect') && dictionaryIndex) {
       const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
       if (dictAttr && dictAttr.allowedValues.length > 0) {
         const sanitized = sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, col.type === 'multiselect');
-        return sanitized || '';
+        if (sanitized) return decodeHtmlEntities(sanitized);
+
+        // Brand not in category dictionary -> map to "Інше"
+        const isBrandCol = col.cleanName.toLowerCase().includes('бренд') || col.originalName.toLowerCase().includes('бренд');
+        if (isBrandCol) {
+          const other = dictAttr.allowedValues.find(v => v.toLowerCase() === 'інше' || v.toLowerCase() === 'інша' || v.toLowerCase() === 'other');
+          if (other) return decodeHtmlEntities(other);
+        }
+
+        // For mandatory fields, resolve canonical fallback from allowedValues
+        if (col.isRequired || col.originalName.includes('*')) {
+          const fallback = resolveMandatoryFallback(col.originalName, col.type, dictAttr.allowedValues, pRow.titleFormattedUa || pRow.titleOriginal || '');
+          if (fallback) return decodeHtmlEntities(fallback);
+        }
+
+        return '';
       }
-      // If no dictionary attribute exists in index, preserve the valid filled value
-      return candStr;
+      return decodeHtmlEntities(candStr);
     }
 
-    if (col.type === 'multiselect') {
-      const dictAttr = dictionaryIndex ? findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName) : undefined;
-      if (dictAttr && dictAttr.allowedValues.length > 0) {
-        return sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, true) || '';
-      }
-      return candStr;
-    }
-
-    if (col.type === 'select') {
-      const dictAttr = dictionaryIndex ? findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName) : undefined;
-      if (dictAttr && dictAttr.allowedValues.length > 0) {
-        return sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, false) || '';
-      }
-      return candStr;
-    }
-
-    return candidateVal;
+    return typeof candidateVal === 'string' ? decodeHtmlEntities(candidateVal) : candidateVal;
   };
 
   // Determine sheet name: preserve exact original sheet name or default to 'Worksheet'

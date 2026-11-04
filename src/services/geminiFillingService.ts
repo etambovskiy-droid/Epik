@@ -15,6 +15,7 @@ import {
   extractDimensionsFromText,
   extractPlayersFromText,
   extractProductSeriesKey,
+  extractVolumeMlFromText,
   extractWeightGramsFromText,
   findDictionaryAttr,
   formatEpicentrTitle,
@@ -160,6 +161,7 @@ function applyLocalPimExtraction(
   );
   const parsedDimensions = extractDimensionsFromText(fullText);
   const parsedWeightGrams = extractWeightGramsFromText(fullText);
+  const parsedVolumeMl = extractVolumeMlFromText(fullText);
   const parsedAge = extractAgeFromText(fullText);
   const parsedPlayers = extractPlayersFromText(fullText);
 
@@ -328,6 +330,18 @@ function applyLocalPimExtraction(
           candidateVal = isKg
             ? String(Number((parsedWeightGrams / 1000).toFixed(3)))
             : String(Math.round(parsedWeightGrams));
+        }
+      } else if (
+        normKey.includes("об'єм") ||
+        normKey.includes("объем") ||
+        normKey.includes("об ем") ||
+        normKey.includes("volume")
+      ) {
+        if (parsedVolumeMl && parsedVolumeMl > 0) {
+          const isL = col.unit === 'л' || origKey.toLowerCase().includes('(л)');
+          candidateVal = isL
+            ? String(Number((parsedVolumeMl / 1000).toFixed(2)))
+            : String(Math.round(parsedVolumeMl));
         }
       }
     }
@@ -667,7 +681,7 @@ export function extractAndSaveSeriesAttributes(
 
   const toSave: Record<string, string> = {};
 
-  // Criteria for series-level shared attributes (Країна, Вид, Стать, etc.)
+  // Criteria for series-level shared attributes (Країна, Вид, Стать, Форма випуску, Дія, etc.)
   const isSeriesLevelAttr = (name: string): boolean => {
     const l = name.toLowerCase();
     return (
@@ -680,6 +694,11 @@ export function extractAndSaveSeriesAttributes(
       l.includes('одиниц') ||
       l.includes('вік') ||
       l.includes('бренд') ||
+      l.includes('форма випуску') ||
+      l.includes('форма выпуска') ||
+      l === 'дія' ||
+      l.startsWith('дія') ||
+      l.includes('действие') ||
       l.includes('тип шкіри') ||
       l.includes('тип волосся')
     );
@@ -730,6 +749,16 @@ export function extractAndSaveSeriesAttributes(
       if (norm.includes('одиниц')) {
         toSave['__unit__'] = str;
         toSave['одиниця виміру'] = str;
+      }
+      // 6. Форма випуску
+      if (norm.includes('форма випуску') || norm.includes('форма выпуска')) {
+        toSave['__packaging__'] = str;
+        toSave['форма випуску'] = str;
+      }
+      // 7. Дія
+      if (norm === 'дія' || norm.startsWith('дія') || norm.includes('действие')) {
+        toSave['__action__'] = str;
+        toSave['дія'] = str;
       }
     }
   }
@@ -807,6 +836,14 @@ export function applySeriesCacheToRow(
         matchedVal =
           cachedAttrs['вік'] ||
           cachedAttrs['вік*'];
+      } else if (normKey.includes('форма випуску') || normKey.includes('форма выпуска')) {
+        matchedVal =
+          cachedAttrs['__packaging__'] ||
+          cachedAttrs['форма випуску'];
+      } else if (normKey === 'дія' || normKey.startsWith('дія') || normKey.includes('действие')) {
+        matchedVal =
+          cachedAttrs['__action__'] ||
+          cachedAttrs['дія'];
       }
     }
 
@@ -935,9 +972,19 @@ function saveCachedSearchResult(cacheKey: string, data: CachedGroundingData): vo
   }
 }
 
+export function extractBarcodeFromText(text: string): string | null {
+  if (!text) return null;
+  // Match standard EAN-13, EAN-8 or UPC-A barcodes (8, 12, 13, 14 digits)
+  const matchParen = text.match(/\((\d{8}|\d{12,14})\)/);
+  if (matchParen) return matchParen[1];
+  const matchWord = text.match(/\b(\d{12,14})\b/);
+  if (matchWord) return matchWord[1];
+  return null;
+}
+
 /**
  * Builds a focused, noise-free Google Search query using the formula:
- * "${brand} ${vendorCode || model} характеристики специфікація"
+ * "${brand} ${barcode || model} характеристики специфікація"
  */
 export function buildConciseSearchQuery(
   brand: string,
@@ -947,22 +994,37 @@ export function buildConciseSearchQuery(
 ): string {
   const cleanBrand = (brand || '').replace(/^інше$/i, '').trim();
   const cleanSku = (vendorCode || '').trim();
+
+  // Extract real barcode if present in title or vendorCode (e.g. EAN-13: 8714462091651)
+  const barcode =
+    extractBarcodeFromText(productTitle) ||
+    (/^\d{12,14}$/.test(cleanSku) ? cleanSku : null);
+
   const cleanedTitle = cleanProductTitleNoise(productTitle, cleanBrand, cleanSku);
 
   const modelSnippet = cleanedTitle
     .split(/\s+/)
     .filter(Boolean)
-    .slice(0, 5)
+    .slice(0, 6)
     .join(' ')
-    .slice(0, 55)
+    .slice(0, 60)
     .trim();
 
-  const codeOrModel =
-    cleanSku && modelSnippet
-      ? `${cleanSku} ${modelSnippet}`.slice(0, 65).trim()
-      : cleanSku || modelSnippet;
+  // If vendorCode is a pure internal merchant number (e.g. 10 digits like 3206024502),
+  // it is not recognized by manufacturer sites or Google index, so we do NOT prioritize it over real model/product name.
+  const isInternalNumericSku = /^\d{8,11}$/.test(cleanSku) && !barcode;
 
-  const baseQuery = `${cleanBrand} ${codeOrModel} характеристики специфікація`
+  let queryCore = '';
+  if (barcode) {
+    // Barcode query provides 100% exact match in global Google search
+    queryCore = `${cleanBrand} ${barcode} ${modelSnippet}`.trim();
+  } else if (cleanSku && !isInternalNumericSku) {
+    queryCore = `${cleanBrand} ${cleanSku} ${modelSnippet}`.trim();
+  } else {
+    queryCore = `${cleanBrand} ${modelSnippet}`.trim();
+  }
+
+  const baseQuery = `${queryCore} характеристики специфікація`
     .replace(/\s+/g, ' ')
     .trim();
 

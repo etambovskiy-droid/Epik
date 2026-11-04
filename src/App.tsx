@@ -1022,7 +1022,7 @@ export function App() {
         allShops={allShops}
         onSelectShop={handleSelectShop}
         onAddStore={handleAddStore}
-        appVersion="v1.2.0"
+        appVersion="v1.3.0"
         lastSavedTimestamp={lastSavedTimestamp}
         isAutoSaving={isAutoSaving}
         hasPendingChanges={hasPendingChanges}

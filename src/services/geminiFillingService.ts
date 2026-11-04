@@ -6,6 +6,7 @@
 import { EpicentrColumn, EpicentrDictionaryAttribute } from '../types/epicentr';
 import { EPICENTR_SYSTEM_PROMPT } from '../constants/epicentrPrompt';
 import {
+  areAllMandatoryCharacteristicsFilled,
   decodeHtmlEntities,
   encodeHtmlEntities,
   enforceDictionaryValue,
@@ -13,14 +14,17 @@ import {
   extractDeterministicMandatoryPimAttribute,
   extractDimensionsFromText,
   extractPlayersFromText,
+  extractProductSeriesKey,
   extractWeightGramsFromText,
   findDictionaryAttr,
   formatEpicentrTitle,
   isAiDisclaimerOrServiceText,
   isInternalHexOrHashId,
+  isMandatoryCharacteristicColumn,
   matchDictionaryValue,
   matchSingleOptionAgainstAllowed,
   normalizeApostrophes,
+  normalizeAttributeKey,
   normalizeEpicentrHeaderName,
   normalizeForDictionaryComparison,
   resolveMandatoryFallback,
@@ -547,6 +551,310 @@ export function extractBaseSeriesModelOrSku(
     .join(' ')
     .slice(0, 50)
     .trim();
+}
+
+// ============================================================================
+// Series Level Caching (Кешування характеристик брендів та серій)
+// ============================================================================
+export interface SeriesCacheEntry {
+  brand: string;
+  series: string;
+  attributes: Record<string, string>;
+  timestamp: number;
+}
+
+const SERIES_CACHE_STORAGE_KEY = 'epic_series_cache_v2';
+
+/**
+ * Map for storing shared series-level attributes based on the "Brand + Series" (Бренд + Серія) key.
+ * Automatically populates Країна, Вид, Стать (and other shared specs) for subsequent items
+ * of the same series WITHOUT calls to Gemini API.
+ */
+export const seriesCacheMap = new Map<string, Record<string, string>>();
+
+function initSeriesCache(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(SERIES_CACHE_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        for (const [k, v] of Object.entries(parsed)) {
+          if (v && typeof v === 'object') {
+            seriesCacheMap.set(k, v as Record<string, string>);
+          }
+        }
+      }
+    }
+  } catch {
+    // Ignore read errors
+  }
+}
+
+initSeriesCache();
+
+/**
+ * Builds the canonical series cache key on the basis of "Brand + Series" (Бренд + Серія).
+ * E.g. Brand: "Mades Cosmetics", Title: "Chapter 01 Body Spray" -> "mades_cosmetics__chapter_01"
+ */
+export function buildBrandSeriesKey(brand?: string, productTitle?: string, vendorCode?: string): string {
+  return extractProductSeriesKey(brand, productTitle, vendorCode);
+}
+
+/**
+ * Normalizes an attribute name for series cache indexing:
+ * Strips technical suffixes, asterisks, [ua]/[ru], and units.
+ */
+export function getSeriesAttrCanonicalKey(rawName: string): string {
+  return normalizeAttributeKey(getCleanAttributeName(rawName), true);
+}
+
+export function getSeriesCache(seriesKey: string): Record<string, string> | null {
+  if (!seriesKey) return null;
+  return seriesCacheMap.get(seriesKey) || null;
+}
+
+export function saveSeriesCache(seriesKey: string, attributes: Record<string, string>): void {
+  if (!seriesKey || !attributes || Object.keys(attributes).length === 0) return;
+  const existing = seriesCacheMap.get(seriesKey) || {};
+  const merged = { ...existing, ...attributes };
+  seriesCacheMap.set(seriesKey, merged);
+
+  if (typeof window !== 'undefined') {
+    try {
+      const obj: Record<string, Record<string, string>> = {};
+      seriesCacheMap.forEach((val, k) => {
+        obj[k] = val;
+      });
+      localStorage.setItem(SERIES_CACHE_STORAGE_KEY, JSON.stringify(obj));
+    } catch {
+      // Ignore localStorage write quota errors
+    }
+  }
+}
+
+export function clearSeriesCache(): void {
+  seriesCacheMap.clear();
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(SERIES_CACHE_STORAGE_KEY);
+    } catch {}
+  }
+}
+
+export function getSeriesCacheSize(): number {
+  return seriesCacheMap.size;
+}
+
+export function getAllSeriesCacheEntries(): Record<string, Record<string, string>> {
+  const result: Record<string, Record<string, string>> = {};
+  seriesCacheMap.forEach((val, k) => {
+    result[k] = val;
+  });
+  return result;
+}
+
+/**
+ * Extracts and saves shared series-level attributes ('Країна', 'Вид', 'Стать', etc.)
+ * from a product row or AI result into seriesCacheMap.
+ */
+export function extractAndSaveSeriesAttributes(
+  seriesKey: string,
+  data: Record<string, any>,
+  columns?: EpicentrColumn[]
+): void {
+  if (!seriesKey || !data) return;
+
+  const toSave: Record<string, string> = {};
+
+  // Criteria for series-level shared attributes (Країна, Вид, Стать, etc.)
+  const isSeriesLevelAttr = (name: string): boolean => {
+    const l = name.toLowerCase();
+    return (
+      l.includes('країн') ||
+      l.startsWith('вид') ||
+      l === 'вид' ||
+      l.includes('стать') ||
+      l.includes('призначення') ||
+      l.includes('клас') ||
+      l.includes('одиниц') ||
+      l.includes('вік') ||
+      l.includes('бренд') ||
+      l.includes('тип шкіри') ||
+      l.includes('тип волосся')
+    );
+  };
+
+  for (const [key, val] of Object.entries(data)) {
+    if (val === undefined || val === null) continue;
+    const str = String(val).trim();
+    if (!str || str.toLowerCase() === 'nan' || isInternalHexOrHashId(str) || isAiDisclaimerOrServiceText(str)) {
+      continue;
+    }
+
+    const clean = getCleanAttributeName(key);
+    const norm = getSeriesAttrCanonicalKey(key);
+
+    if (isSeriesLevelAttr(key) || isSeriesLevelAttr(clean) || isSeriesLevelAttr(norm)) {
+      toSave[key] = str;
+      toSave[clean] = str;
+      toSave[norm] = str;
+
+      // Canonical aliases for specific key fields:
+      // 1. Країна
+      if (norm.includes('країн')) {
+        toSave['__country__'] = str;
+        toSave['країна'] = str;
+        toSave['країна-виробник'] = str;
+        toSave['країна реєстрації бренду'] = str;
+      }
+      // 2. Вид
+      if (norm === 'вид' || norm.startsWith('вид')) {
+        toSave['__type__'] = str;
+        toSave['вид'] = str;
+        toSave['вид продукту'] = str;
+      }
+      // 3. Стать
+      if (norm.includes('стать')) {
+        toSave['__gender__'] = str;
+        toSave['стать'] = str;
+        toSave['призначення за статтю'] = str;
+      }
+      // 4. Клас
+      if (norm.includes('клас')) {
+        toSave['__class__'] = str;
+        toSave['клас косметики'] = str;
+        toSave['клас'] = str;
+      }
+      // 5. Одиниця виміру
+      if (norm.includes('одиниц')) {
+        toSave['__unit__'] = str;
+        toSave['одиниця виміру'] = str;
+      }
+    }
+  }
+
+  if (Object.keys(toSave).length > 0) {
+    saveSeriesCache(seriesKey, toSave);
+  }
+}
+
+/**
+ * Applies cached series-level attributes ('Країна', 'Вид', 'Стать', etc.)
+ * based on 'Бренд + Серія' to a product row WITHOUT making calls to Gemini API.
+ */
+export function applySeriesCacheToRow(
+  workingRow: Record<string, any>,
+  emptyCols: EpicentrColumn[],
+  seriesKey: string,
+  dictionaryIndex?: Record<string, EpicentrDictionaryAttribute>
+): {
+  appliedValues: Record<string, string>;
+  explanations: Record<string, string>;
+} {
+  const appliedValues: Record<string, string> = {};
+  const explanations: Record<string, string> = {};
+  if (!seriesKey) return { appliedValues, explanations };
+
+  const cachedAttrs = getSeriesCache(seriesKey);
+  if (!cachedAttrs || Object.keys(cachedAttrs).length === 0) {
+    return { appliedValues, explanations };
+  }
+
+  for (const col of emptyCols) {
+    const origName = col.originalName;
+    const cleanName = col.cleanName || getCleanAttributeName(origName);
+    const normKey = getSeriesAttrCanonicalKey(origName);
+
+    let matchedVal =
+      cachedAttrs[origName] ||
+      cachedAttrs[cleanName] ||
+      cachedAttrs[normKey];
+
+    // Priority matching for Країна, Вид, Стать, Клас, Одиниця виміру
+    if (!matchedVal) {
+      if (normKey.includes('країн')) {
+        matchedVal =
+          cachedAttrs['__country__'] ||
+          cachedAttrs['країна-виробник'] ||
+          cachedAttrs['країна реєстрації бренду'] ||
+          cachedAttrs['країна'];
+      } else if (normKey === 'вид' || normKey.startsWith('вид')) {
+        matchedVal =
+          cachedAttrs['__type__'] ||
+          cachedAttrs['вид'] ||
+          cachedAttrs['вид продукту'];
+      } else if (normKey.includes('стать')) {
+        matchedVal =
+          cachedAttrs['__gender__'] ||
+          cachedAttrs['стать'] ||
+          cachedAttrs['призначення за статтю'];
+      } else if (normKey.includes('клас')) {
+        matchedVal =
+          cachedAttrs['__class__'] ||
+          cachedAttrs['клас косметики'] ||
+          cachedAttrs['клас'];
+      } else if (normKey.includes('одиниц')) {
+        matchedVal =
+          cachedAttrs['__unit__'] ||
+          cachedAttrs['одиниця виміру'] ||
+          cachedAttrs['одиниці виміру'];
+      } else if (normKey.includes('призначення')) {
+        matchedVal =
+          cachedAttrs['призначення'] ||
+          cachedAttrs['призначення*'];
+      } else if (normKey.includes('вік')) {
+        matchedVal =
+          cachedAttrs['вік'] ||
+          cachedAttrs['вік*'];
+      }
+    }
+
+    if (matchedVal && String(matchedVal).trim()) {
+      let finalVal = String(matchedVal).trim();
+      // Sanitize against dictionary if available
+      if (dictionaryIndex && (col.type === 'select' || col.type === 'multiselect')) {
+        const dict = findDictionaryAttr(dictionaryIndex, cleanName || origName);
+        if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
+          finalVal = sanitizeValueAgainstDictionary(finalVal, dict.allowedValues, col.type === 'multiselect');
+        }
+      }
+
+      if (finalVal && finalVal.trim()) {
+        appliedValues[origName] = finalVal;
+        if (cleanName && cleanName !== origName) {
+          appliedValues[cleanName] = finalVal;
+        }
+        explanations[origName] = `Series Level Cache: заповнено на основі зв'язки Бренд + Серія (${seriesKey})`;
+      }
+    }
+  }
+
+  return { appliedValues, explanations };
+}
+
+/**
+ * Concurrency Pool: executes tasks with bounded concurrency (e.g. CONCURRENCY = 12)
+ */
+export async function runConcurrentPool<T, R>(
+  items: T[],
+  concurrency: number,
+  taskFn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const currentIndex = nextIndex++;
+      if (currentIndex >= items.length) break;
+      results[currentIndex] = await taskFn(items[currentIndex], currentIndex);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
 }
 
 /**
@@ -1194,8 +1502,36 @@ export async function enrichProductMandatoryWithAI(
     return { suggestedValues: {} };
   }
 
-  // Step 1: Run local heuristic extraction first to see what can be resolved without network calls
-  let finalSuggested = applyLocalPimExtraction(productRow, emptyCols, dictionaryIndex, {});
+  // Step 1: Check Series Level Cache ('Бренд + Серія') to populate Країна, Вид, Стать without Gemini API
+  const brand = String(productRow['Бренд*'] || productRow['Бренд'] || '');
+  const title = String(
+    productRow['Назва товару*\n[ua]'] ||
+    productRow['Назва товару [ua]*'] ||
+    productRow['Назва товару\n[ua]'] ||
+    productRow['Назва товару'] ||
+    ''
+  );
+  const sku = String(productRow['Артикул*'] || productRow['Артикул'] || '');
+  const seriesKey = buildBrandSeriesKey(brand, title, sku);
+
+  // Pre-seed seriesCacheMap from existing non-empty fields in this row
+  extractAndSaveSeriesAttributes(seriesKey, productRow, columns);
+
+  // Apply Series Level Cache
+  const { appliedValues: seriesValues, explanations: seriesExplanations } = applySeriesCacheToRow(
+    productRow,
+    emptyCols,
+    seriesKey,
+    dictionaryIndex
+  );
+
+  let finalSuggested: Record<string, string> = { ...seriesValues };
+  let explanations: Record<string, string> = { ...seriesExplanations };
+  let fromCache = Object.keys(seriesValues).length > 0;
+
+  // Run local heuristic extraction for remaining empty columns
+  const localExtracted = applyLocalPimExtraction(productRow, emptyCols, dictionaryIndex, finalSuggested);
+  finalSuggested = { ...finalSuggested, ...localExtracted };
 
   const colsForAi = emptyCols.filter(c => {
     const origKey = c.originalName;
@@ -1203,9 +1539,15 @@ export async function enrichProductMandatoryWithAI(
     return !finalSuggested[origKey] && !finalSuggested[cleanKey];
   });
 
-  // If all empty columns were resolved by local heuristics, skip network AI & Web Grounding completely
-  if (colsForAi.length === 0) {
-    return { suggestedValues: finalSuggested };
+  // If all empty columns (or all mandatory columns) were resolved by Series Cache + local heuristics,
+  // SKIP network AI & Gemini API completely!
+  if (colsForAi.length === 0 || areAllMandatoryCharacteristicsFilled({ ...productRow, ...finalSuggested }, columns)) {
+    extractAndSaveSeriesAttributes(seriesKey, { ...productRow, ...finalSuggested }, columns);
+    return {
+      suggestedValues: finalSuggested,
+      explanations: Object.keys(explanations).length > 0 ? explanations : undefined,
+      fromCache
+    };
   }
 
   if (!options?.skipTextAiCall) {
@@ -1307,9 +1649,7 @@ ${JSON.stringify(productRow, null, 2)}
     }
   }
 
-  let explanations: Record<string, string> = {};
   let sources: { uri: string; title: string }[] = [];
-  let fromCache = false;
 
   // Step 2: Before calling Google Search Grounding, check if any fields are still unfilled after Step 1
   if (options?.useWebGrounding) {
@@ -1375,6 +1715,10 @@ ${JSON.stringify(productRow, null, 2)}
     }
   }
 
+  if (Object.keys(finalSuggested).length > 0) {
+    extractAndSaveSeriesAttributes(seriesKey, { ...productRow, ...finalSuggested }, columns);
+  }
+
   return {
     suggestedValues: finalSuggested,
     explanations: Object.keys(explanations).length > 0 ? explanations : undefined,
@@ -1384,44 +1728,262 @@ ${JSON.stringify(productRow, null, 2)}
 }
 
 /**
- * 2-Step Cascading + Variant-Grouped + Cached + Parallel Batch Processor (3-4 groups concurrently via Promise.all):
- *
- * Step 1: Runs fast local AI/heuristic filling from description, title & dictionaries on all items.
- *         Items with all fields resolved in Step 1 skip Google Search Grounding completely.
- * Step 2: Groups remaining unfilled items by variant series key "[Бренд]_[Артикул/Модель]" (same model/series,
- *         different sizes or colors), checks localStorage cache, and executes parallel batches of 3-4 groups
- *         via Promise.all(), propagating shared attributes across all variant items in each group.
+ * Groups up to 5 products into a single prompt for gemini-3.5-flash-lite, returning a JSON array of responses
+ */
+export async function enrichProductBatchWithGemini5(
+  entries: Array<{
+    id: string;
+    productRow: Record<string, any>;
+    missingCols: EpicentrColumn[];
+  }>,
+  dictionaryIndex: Record<string, EpicentrDictionaryAttribute>
+): Promise<Record<string, Record<string, string>>> {
+  const resultsByEntryId: Record<string, Record<string, string>> = {};
+  if (entries.length === 0) return resultsByEntryId;
+
+  // Build dictionary context for all columns needed across these products
+  const dictContext: Record<string, { type: string; allowedValues: string[] }> = {};
+  for (const entry of entries) {
+    resultsByEntryId[entry.id] = {};
+    for (const col of entry.missingCols) {
+      const cleanCol = getCleanAttributeName(col.cleanName || col.originalName).toLowerCase();
+      const dict =
+        dictionaryIndex[cleanCol] ||
+        Object.values(dictionaryIndex).find(
+          d => getCleanAttributeName(d.cleanAttributeName).toLowerCase() === cleanCol
+        );
+
+      if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
+        dictContext[col.originalName] = {
+          type: col.type === 'multiselect' ? 'multiselect' : 'select',
+          allowedValues: dict.allowedValues.slice(0, 100)
+        };
+      }
+    }
+  }
+
+  // Build the multi-item prompt
+  const productsSummary = entries
+    .map((entry, idx) => {
+      const title =
+        entry.productRow['Назва товару*\n[ua]'] ||
+        entry.productRow['Назва товару [ua]*'] ||
+        entry.productRow['Назва товару\n[ua]'] ||
+        entry.productRow['Назва товару'] ||
+        '';
+      const brand = entry.productRow['Бренд*'] || entry.productRow['Бренд'] || '';
+      const sku = entry.productRow['Артикул*'] || entry.productRow['Артикул'] || '';
+      const desc = stripHtmlToCleanText(
+        entry.productRow['Опис (text)\n[ua]'] || entry.productRow['Опис'] || ''
+      ).slice(0, 300);
+
+      const colsList = entry.missingCols
+        .map(c => `- "${c.originalName}" (${c.type}${c.isRequired ? ', *' : ''})`)
+        .join('\n');
+
+      return `--- ТОВАР #${idx + 1} (ID: "${entry.id}") ---
+Назва: ${title}
+Бренд: ${brand}
+Артикул: ${sku}
+Опис: ${desc}
+Порожні колонки:
+${colsList}`;
+    })
+    .join('\n\n');
+
+  const batchPrompt = `${UNIVERSAL_PIM_SYSTEM_PROMPT}
+
+Проаналізуй дані наданих товарів (назву, артикул, опис) та заповни порожні характеристики для кожного з них СУВОРО з масивів allowedValues.
+
+ПРАВИЛА:
+1. Для колонок типів "select" та "multiselect" обирай значення СУВОРО з наданого довідника allowedValues.
+2. Для "multiselect" розділяй значення крапкою з комою з пробілом ("; ").
+3. Якщо інформації немає або значення відсутнє в allowedValues — став порожній рядок ("").
+4. Поверни СУВОРО JSON-масив відповідей з об'єктами для кожного товару:
+[
+  {
+    "id": "ідентифікатор_товару",
+    "suggestedValues": {
+      "Точна назва колонки": "значення з allowedValues або порожній рядок"
+    }
+  }
+]
+
+СПИСОК ТОВАРІВ У ПАКЕТІ:
+${productsSummary}
+
+ДОВІДНИК ДОЗВОЛЕНИХ ОПЦІЙ (allowedValues):
+${JSON.stringify(dictContext, null, 2)}`;
+
+  try {
+    const aiRes = await callGeminiDirect(batchPrompt, {
+      model: 'gemini-3.5-flash-lite',
+      systemInstruction: UNIVERSAL_PIM_SYSTEM_PROMPT,
+      responseMimeType: 'application/json',
+      maxOutputTokens: 1200
+    });
+
+    const text = aiRes.text;
+    if (text) {
+      const cleanedText = text
+        .replace(/^[\s\S]*?```(?:json)?\s*/i, '')
+        .replace(/\s*```[\s\S]*$/, '')
+        .trim();
+
+      let parsedArr: any[] = [];
+      try {
+        const parsed = JSON.parse(cleanedText);
+        parsedArr = Array.isArray(parsed) ? parsed : parsed.products || parsed.items || [parsed];
+      } catch {
+        const match = cleanedText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+        if (match) {
+          try {
+            parsedArr = JSON.parse(match[0]);
+          } catch {}
+        }
+      }
+
+      for (const itemResult of parsedArr) {
+        if (!itemResult || typeof itemResult !== 'object') continue;
+        const targetId = String(itemResult.id || itemResult.ID || '');
+        const entry = entries.find(e => e.id === targetId) || (parsedArr.length === 1 ? entries[0] : null);
+        if (!entry) continue;
+
+        const rawSuggested = (itemResult.suggestedValues || itemResult.attributes || itemResult) as Record<string, string>;
+        const mapped = mapAttributesToColumns(rawSuggested, entry.missingCols, dictionaryIndex);
+        resultsByEntryId[entry.id] = mapped;
+      }
+    }
+  } catch (err) {
+    console.warn('Batch AI prompt to gemini-3.5-flash-lite failed, falling back to local extraction:', err);
+  }
+
+  // Safety fallback: for any entry where mandatory columns remain empty, apply local extraction & mandatory fallback
+  for (const entry of entries) {
+    const currentSuggested = resultsByEntryId[entry.id] || {};
+    for (const col of entry.missingCols) {
+      const origKey = col.originalName;
+      const cleanKey = col.cleanName || getCleanAttributeName(origKey);
+      if (!currentSuggested[origKey] && !currentSuggested[cleanKey]) {
+        if (col.isRequired || origKey.includes('*')) {
+          const cleanCol = getCleanAttributeName(cleanKey).toLowerCase();
+          const dict =
+            dictionaryIndex[cleanCol] ||
+            Object.values(dictionaryIndex).find(
+              d => getCleanAttributeName(d.cleanAttributeName).toLowerCase() === cleanCol
+            );
+          if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
+            const fullContext = `${entry.productRow['Назва товару*\n[ua]'] || entry.productRow['Назва товару'] || ''} ${entry.productRow['Опис (text)\n[ua]'] || ''}`.toLowerCase();
+            const fallback = resolveMandatoryFallback(origKey, col.type, dict.allowedValues, fullContext);
+            if (fallback) {
+              currentSuggested[origKey] = fallback;
+            }
+          }
+        }
+      }
+    }
+    resultsByEntryId[entry.id] = currentSuggested;
+  }
+
+  return resultsByEntryId;
+}
+
+export interface BatchEnrichmentProgressMetrics {
+  processed: number;
+  total: number;
+  speed: number; // items / sec
+  etaSeconds: number;
+  savedApiCalls: number;
+  zeroAiCount: number;
+  seriesCacheHits: number;
+  stage: string;
+}
+
+export interface BatchEnrichmentOptions<T> {
+  useWebGrounding?: boolean;
+  merchantDomain?: string;
+  restrictToDomain?: boolean;
+  batchSize?: number;
+  concurrency?: number; // Default 12
+  itemsPerPrompt?: number; // Default 5
+  onlyMandatoryUnfilledGrounding?: boolean;
+  onStageUpdate?: (message: string) => void;
+  onProgressMetrics?: (metrics: BatchEnrichmentProgressMetrics) => void;
+  onItemEnriched?: (
+    item: T,
+    result: {
+      suggestedValues: Record<string, string>;
+      explanations?: Record<string, string>;
+      sources?: { uri: string; title: string }[];
+      fromCache?: boolean;
+    }
+  ) => void;
+}
+
+/**
+ * Scalable High-Performance Batch Processor for Large Catalogs (7000+ items):
+ * 1. Zero-AI Cutoff: Deterministic Level 1 & 2 analysis + series cache bypasses Gemini completely if mandatory fields are met.
+ * 2. 5-product prompt batching for gemini-3.5-flash-lite reduces HTTP request overhead by 80%.
+ * 3. Asynchronous Concurrency Pool with CONCURRENCY = 12 executes 60 parallel product evaluations simultaneously.
+ * 4. Series Level Caching (seriesCacheMap) shares specs across brand/lines without repeated API calls.
+ * 5. Point Grounding: selective stage 2 execution only for products with unfilled mandatory asterisks (*).
+ * 6. Real-time ETA, items/sec throughput calculation, and saved API requests metrics.
  */
 export async function enrichProductsBatchWithAI<T extends { idx: number; updatedRow: Record<string, any> }>(
   items: T[],
   columns: EpicentrColumn[],
   dictionaryIndex: Record<string, EpicentrDictionaryAttribute>,
-  options?: {
-    useWebGrounding?: boolean;
-    merchantDomain?: string;
-    restrictToDomain?: boolean;
-    batchSize?: number;
-    onStageUpdate?: (message: string) => void;
-    onItemEnriched?: (
-      item: T,
-      result: {
-        suggestedValues: Record<string, string>;
-        explanations?: Record<string, string>;
-        sources?: { uri: string; title: string }[];
-        fromCache?: boolean;
-      }
-    ) => void;
-  }
+  options?: BatchEnrichmentOptions<T>
 ): Promise<{
   totalProcessed: number;
   resolvedLocallyCount: number;
   resolvedFromCacheCount: number;
   variantGroupsSearchedCount: number;
+  savedApiCallsCount: number;
+  zeroAiCount: number;
+  seriesCacheHits: number;
 }> {
-  const batchSize = options?.batchSize || 4;
+  const concurrency = options?.concurrency || 12;
+  const itemsPerPrompt = options?.itemsPerPrompt || 5;
+
+  let totalProcessed = 0;
   let resolvedLocallyCount = 0;
   let resolvedFromCacheCount = 0;
   let variantGroupsSearchedCount = 0;
+  let savedApiCallsCount = 0;
+  let zeroAiCount = 0;
+  let seriesCacheHits = 0;
+
+  const startTime = performance.now();
+
+  const emitProgress = (stage: string) => {
+    const elapsedSec = Math.max(0.1, (performance.now() - startTime) / 1000);
+    const speed = Math.round((totalProcessed / elapsedSec) * 10) / 10;
+    const remaining = Math.max(0, items.length - totalProcessed);
+    const etaSeconds = speed > 0 ? Math.round(remaining / speed) : 0;
+
+    if (options?.onProgressMetrics) {
+      options.onProgressMetrics({
+        processed: totalProcessed,
+        total: items.length,
+        speed,
+        etaSeconds,
+        savedApiCalls: savedApiCallsCount,
+        zeroAiCount,
+        seriesCacheHits,
+        stage
+      });
+    }
+
+    if (options?.onStageUpdate) {
+      const etaMin = Math.floor(etaSeconds / 60);
+      const etaSec = etaSeconds % 60;
+      const etaStr = etaMin > 0 ? `${etaMin} хв ${etaSec} с` : `${etaSec} с`;
+      options.onStageUpdate(
+        `${stage} | ${totalProcessed}/${items.length} (${speed} тов./сек, ETA: ${etaStr}, Зекономлено API: ${savedApiCallsCount})`
+      );
+    }
+  };
 
   // Identify fillable characteristic columns
   const isFillableCol = (c: EpicentrColumn) => {
@@ -1446,54 +2008,129 @@ export async function enrichProductsBatchWithAI<T extends { idx: number; updated
 
   const fillableCols = columns.filter(isFillableCol);
 
-  // ============================================================================
-  // STEP 1: Fast Local Pre-filling from Description, Title & Dictionaries
-  // ============================================================================
-  if (options?.onStageUpdate) {
-    options.onStageUpdate(`Етап 1/2: Локальне AI-дозаповнення з описів та довідників (${items.length} тов.)...`);
+  // If Stage 2 Point Grounding is requested: filter exclusively to products where mandatory fields remain unfilled!
+  const targetItems = options?.onlyMandatoryUnfilledGrounding
+    ? items.filter(item => !areAllMandatoryCharacteristicsFilled(item.updatedRow, columns))
+    : items;
+
+  // Pre-seed seriesCacheMap from any products in targetItems that already have non-empty series attributes (Країна, Вид, Стать)
+  for (const it of targetItems) {
+    const b = String(it.updatedRow['Бренд*'] || it.updatedRow['Бренд'] || '');
+    const t = String(
+      it.updatedRow['Назва товару*\n[ua]'] ||
+      it.updatedRow['Назва товару [ua]*'] ||
+      it.updatedRow['Назва товару'] ||
+      ''
+    );
+    const s = String(it.updatedRow['Артикул*'] || it.updatedRow['Артикул'] || '');
+    const sKey = buildBrandSeriesKey(b, t, s);
+    extractAndSaveSeriesAttributes(sKey, it.updatedRow, columns);
   }
+
+  // ============================================================================
+  // STEP 1: Fast Local Deterministic Pre-filling + Series Cache + Zero-AI Cutoff
+  // ============================================================================
+  emitProgress('Етап 1/2: Локальне PIM-дозаповнення та перевірка серій');
 
   const itemsNeedingStep2: Array<{
     item: T;
     workingRow: Record<string, any>;
     remainingCols: EpicentrColumn[];
     cacheKey: string;
+    seriesKey: string;
   }> = [];
 
-  for (const item of items) {
+  for (let i = 0; i < targetItems.length; i++) {
+    const item = targetItems[i];
     const emptyColsForItem = fillableCols.filter(c => {
       const vOrig = item.updatedRow[c.originalName];
       const vClean = item.updatedRow[c.cleanName];
-      const emptyOrig = vOrig === undefined || vOrig === null || String(vOrig).trim() === '' || String(vOrig).toLowerCase() === 'nan';
-      const emptyClean = vClean === undefined || vClean === null || String(vClean).trim() === '' || String(vClean).toLowerCase() === 'nan';
+      const emptyOrig =
+        vOrig === undefined || vOrig === null || String(vOrig).trim() === '' || String(vOrig).toLowerCase() === 'nan';
+      const emptyClean =
+        vClean === undefined || vClean === null || String(vClean).trim() === '' || String(vClean).toLowerCase() === 'nan';
       return emptyOrig && emptyClean;
     });
 
     if (emptyColsForItem.length === 0) {
       resolvedLocallyCount++;
+      savedApiCallsCount++;
+      zeroAiCount++;
+      totalProcessed++;
+      if (totalProcessed % 50 === 0) emitProgress('Етап 1/2: Локальне PIM-дозаповнення та перевірка серій');
       continue;
     }
 
-    const localValues = applyLocalPimExtraction(item.updatedRow, emptyColsForItem, dictionaryIndex, {});
-    if (Object.keys(localValues).length > 0 && options?.onItemEnriched) {
+    const brand = String(item.updatedRow['Бренд*'] || item.updatedRow['Бренд'] || '');
+    const title = String(
+      item.updatedRow['Назва товару*\n[ua]'] ||
+      item.updatedRow['Назва товару [ua]*'] ||
+      item.updatedRow['Назва товару'] ||
+      ''
+    );
+    const sku = String(item.updatedRow['Артикул*'] || item.updatedRow['Артикул'] || '');
+    const seriesKey = buildBrandSeriesKey(brand, title, sku);
+
+    // Apply Series Level Cache ('Бренд + Серія') to populate Країна, Вид, Стать and other series attributes
+    const { appliedValues: seriesValues, explanations: seriesExplanations } = applySeriesCacheToRow(
+      item.updatedRow,
+      emptyColsForItem,
+      seriesKey,
+      dictionaryIndex
+    );
+
+    if (Object.keys(seriesValues).length > 0) {
+      seriesCacheHits++;
+      savedApiCallsCount++;
+    }
+
+    // Run local deterministic extractor
+    const extracted = applyLocalPimExtraction(item.updatedRow, emptyColsForItem, dictionaryIndex, seriesValues);
+    const combinedLocal = { ...seriesValues, ...extracted };
+
+    if (Object.keys(combinedLocal).length > 0 && options?.onItemEnriched) {
       options.onItemEnriched(item, {
-        suggestedValues: localValues,
-        explanations: Object.fromEntries(
-          Object.keys(localValues).map(k => [k, 'Етап 1: Заповнено локально з опису/назви та довідника'])
-        )
+        suggestedValues: combinedLocal,
+        explanations: {
+          ...seriesExplanations,
+          ...Object.fromEntries(
+            Object.keys(extracted).map(k => [k, 'Заповнено локально (Експрес PIM-аналіз)'])
+          )
+        },
+        fromCache: Object.keys(seriesValues).length > 0
       });
     }
 
-    const workingRow = { ...item.updatedRow, ...localValues };
+    const workingRow = { ...item.updatedRow, ...combinedLocal };
+
+    // Check Zero-AI Cutoff condition:
+    // If all mandatory asterisked fields (*) are satisfied -> BYPASS GEMINI & GROUNDING COMPLETELY!
+    const mandatoryComplete = areAllMandatoryCharacteristicsFilled(workingRow, columns);
+    if (mandatoryComplete) {
+      resolvedLocallyCount++;
+      zeroAiCount++;
+      savedApiCallsCount++;
+
+      // Save any series-wide attributes discovered for subsequent items
+      extractAndSaveSeriesAttributes(seriesKey, workingRow, columns);
+
+      totalProcessed++;
+      if (totalProcessed % 50 === 0) emitProgress('Етап 1/2: Локальне PIM-дозаповнення та перевірка серій');
+      continue;
+    }
+
     const remainingCols = emptyColsForItem.filter(c => {
       const origKey = c.originalName;
       const cleanKey = c.cleanName || getCleanAttributeName(origKey);
-      return !localValues[origKey] && !localValues[cleanKey];
+      return !combinedLocal[origKey] && !combinedLocal[cleanKey];
     });
 
-    // If all fields were filled in Step 1 -> skip network call completely!
     if (remainingCols.length === 0) {
       resolvedLocallyCount++;
+      zeroAiCount++;
+      savedApiCallsCount++;
+      totalProcessed++;
+      if (totalProcessed % 50 === 0) emitProgress('Етап 1/2: Локальне PIM-дозаповнення та перевірка серій');
       continue;
     }
 
@@ -1502,54 +2139,95 @@ export async function enrichProductsBatchWithAI<T extends { idx: number; updated
       item,
       workingRow,
       remainingCols,
-      cacheKey
+      cacheKey,
+      seriesKey
     });
+
+    totalProcessed++;
+    if (totalProcessed % 50 === 0) emitProgress('Етап 1/2: Локальне PIM-дозаповнення та перевірка серій');
   }
 
-  // If all items were completely filled in Step 1, do not make any network requests!
+  emitProgress('Етап 1/2 завершено');
+
+  // If all items satisfied the Zero-AI cutoff, complete without network calls!
   if (itemsNeedingStep2.length === 0) {
+    emitProgress('Обробку успішно завершено (Zero-AI)');
     return {
-      totalProcessed: items.length,
+      totalProcessed: targetItems.length,
       resolvedLocallyCount,
-      resolvedFromCacheCount: 0,
-      variantGroupsSearchedCount: 0
-    };
-  }
-
-  // If Web Grounding is NOT enabled, run parallel batches of standard AI text enrichment on remaining items
-  if (!options?.useWebGrounding) {
-    for (let i = 0; i < itemsNeedingStep2.length; i += batchSize) {
-      const batch = itemsNeedingStep2.slice(i, i + batchSize);
-      if (options?.onStageUpdate) {
-        options.onStageUpdate(
-          `Етап 2/2: Gemini AI обробка пакета ${i + 1}–${Math.min(i + batchSize, itemsNeedingStep2.length)} з ${itemsNeedingStep2.length}...`
-        );
-      }
-      const batchRes = await Promise.all(
-        batch.map(async entry => {
-          const res = await enrichProductMandatoryWithAI(entry.workingRow, entry.remainingCols, dictionaryIndex, {
-            useWebGrounding: false
-          });
-          return { entry, res };
-        })
-      );
-      for (const { entry, res } of batchRes) {
-        if (options?.onItemEnriched && Object.keys(res.suggestedValues).length > 0) {
-          options.onItemEnriched(entry.item, res);
-        }
-      }
-    }
-
-    return {
-      totalProcessed: items.length,
-      resolvedLocallyCount,
-      resolvedFromCacheCount: 0,
-      variantGroupsSearchedCount: 0
+      resolvedFromCacheCount,
+      variantGroupsSearchedCount,
+      savedApiCallsCount,
+      zeroAiCount,
+      seriesCacheHits
     };
   }
 
   // ============================================================================
-  // STEP 2: Group Variants/Modifications by "[Бренд]_[Артикул/Модель]" & Parallel Google Search
+  // STEP 2A: Express Mode (Gemini 3.5 Flash Lite + 5-item Batching + 12 Concurrency Pool)
+  // ============================================================================
+  if (!options?.useWebGrounding) {
+    // Group remaining items into 5-product batches
+    const promptBatches: Array<typeof itemsNeedingStep2> = [];
+    for (let i = 0; i < itemsNeedingStep2.length; i += itemsPerPrompt) {
+      promptBatches.push(itemsNeedingStep2.slice(i, i + itemsPerPrompt));
+    }
+
+    let completedPromptBatches = 0;
+
+    await runConcurrentPool(promptBatches, concurrency, async (batch, bIdx) => {
+      const entriesForBatch = batch.map((entry, idx) => ({
+        id: `item_${entry.item.idx}_${idx}`,
+        productRow: entry.workingRow,
+        missingCols: entry.remainingCols
+      }));
+
+      const batchResults = await enrichProductBatchWithGemini5(entriesForBatch, dictionaryIndex);
+
+      for (let j = 0; j < batch.length; j++) {
+        const entry = batch[j];
+        const entryId = entriesForBatch[j].id;
+        const suggested = batchResults[entryId] || {};
+
+        if (Object.keys(suggested).length > 0) {
+          // Update series cache with new discovered specs (Країна, Вид, Стать, etc.)
+          extractAndSaveSeriesAttributes(entry.seriesKey, { ...entry.workingRow, ...suggested }, columns);
+
+          if (options?.onItemEnriched) {
+            options.onItemEnriched(entry.item, {
+              suggestedValues: suggested,
+              explanations: Object.fromEntries(
+                Object.keys(suggested).map(k => [k, 'Етап 2: Заповнено Gemini 3.5 Flash-Lite (Експрес-пакет)'])
+              )
+            });
+          }
+        }
+      }
+
+      // Batching 5 items into 1 prompt saves 4 API requests per batch
+      savedApiCallsCount += Math.max(0, batch.length - 1);
+      completedPromptBatches++;
+
+      emitProgress(
+        `Етап 2/2: Експрес AI-пакетування (пакет ${completedPromptBatches}/${promptBatches.length}, 12 потоків)`
+      );
+    });
+
+    emitProgress('Експрес AI-обробку успішно завершено');
+
+    return {
+      totalProcessed: targetItems.length,
+      resolvedLocallyCount,
+      resolvedFromCacheCount,
+      variantGroupsSearchedCount,
+      savedApiCallsCount,
+      zeroAiCount,
+      seriesCacheHits
+    };
+  }
+
+  // ============================================================================
+  // STEP 2B: Targeted Point Grounding (Google Search + 12 Concurrency Pool)
   // ============================================================================
   const variantGroupsMap = new Map<
     string,
@@ -1558,6 +2236,7 @@ export async function enrichProductsBatchWithAI<T extends { idx: number; updated
       workingRow: Record<string, any>;
       remainingCols: EpicentrColumn[];
       cacheKey: string;
+      seriesKey: string;
     }>
   >();
 
@@ -1568,7 +2247,6 @@ export async function enrichProductsBatchWithAI<T extends { idx: number; updated
   }
 
   const variantGroups = Array.from(variantGroupsMap.entries()).map(([groupKey, members]) => {
-    // Union of all missing columns across all variant rows in this group
     const colMap = new Map<string, EpicentrColumn>();
     for (const m of members) {
       for (const col of m.remainingCols) {
@@ -1579,89 +2257,90 @@ export async function enrichProductsBatchWithAI<T extends { idx: number; updated
       groupKey,
       members,
       representativeRow: members[0].workingRow,
+      seriesKey: members[0].seriesKey,
       unionMissingCols: Array.from(colMap.values())
     };
   });
 
-  // Process variant groups in parallel batches of 3-4 concurrently using Promise.all
-  for (let i = 0; i < variantGroups.length; i += batchSize) {
-    const groupBatch = variantGroups.slice(i, i + batchSize);
-    const startGroup = i + 1;
-    const endGroup = Math.min(i + batchSize, variantGroups.length);
+  let completedGroups = 0;
 
-    if (options?.onStageUpdate) {
-      options.onStageUpdate(
-        `Етап 2/2: Google Search (пакет груп ${startGroup}–${endGroup} з ${variantGroups.length}, залишилось ${itemsNeedingStep2.length} тов.)...`
-      );
-    }
-
-    const batchGroupResults = await Promise.all(
-      groupBatch.map(async group => {
-        const res = await researchProductAttributesWithWebGrounding(
-          group.representativeRow,
-          group.unionMissingCols,
-          dictionaryIndex,
-          undefined,
-          {
-            merchantDomain: options?.merchantDomain,
-            restrictToDomain: options?.restrictToDomain
-          }
-        );
-        return { group, res };
-      })
+  await runConcurrentPool(variantGroups, concurrency, async group => {
+    const res = await researchProductAttributesWithWebGrounding(
+      group.representativeRow,
+      group.unionMissingCols,
+      dictionaryIndex,
+      undefined,
+      {
+        merchantDomain: options?.merchantDomain,
+        restrictToDomain: options?.restrictToDomain
+      }
     );
 
-    // Propagate shared discovered attributes to ALL variant items in each group
-    for (const { group, res } of batchGroupResults) {
-      if (res.fromCache) {
-        resolvedFromCacheCount += group.members.length;
-      } else {
-        variantGroupsSearchedCount++;
+    if (res.fromCache) {
+      resolvedFromCacheCount += group.members.length;
+      savedApiCallsCount += group.members.length;
+    } else {
+      variantGroupsSearchedCount++;
+      savedApiCallsCount += Math.max(0, group.members.length - 1);
+    }
+
+    // Save discovered specs to series cache (Країна, Вид, Стать, etc.)
+    if (res.suggestedValues && Object.keys(res.suggestedValues).length > 0) {
+      extractAndSaveSeriesAttributes(group.seriesKey, { ...group.representativeRow, ...res.suggestedValues }, columns);
+    }
+
+    // Propagate to each member of variant group
+    for (const member of group.members) {
+      const memberSuggested: Record<string, string> = {};
+      for (const col of member.remainingCols) {
+        const origKey = col.originalName;
+        const cleanKey = col.cleanName || getCleanAttributeName(origKey);
+        let val: string = res.suggestedValues[origKey] || res.suggestedValues[cleanKey] || '';
+
+        // Category-aware fallback for mandatory asterisked fields
+        if ((!val || val.trim() === '') && (col.isRequired || origKey.includes('*'))) {
+          const cleanCol = getCleanAttributeName(cleanKey).toLowerCase();
+          const dict =
+            dictionaryIndex[cleanCol] ||
+            Object.values(dictionaryIndex).find(
+              d => getCleanAttributeName(d.cleanAttributeName).toLowerCase() === cleanCol
+            );
+          if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
+            const fullContext = `${member.workingRow['Назва товару*\n[ua]'] || member.workingRow['Назва товару'] || ''} ${member.workingRow['Опис (text)\n[ua]'] || ''}`.toLowerCase();
+            val = resolveMandatoryFallback(origKey, col.type, dict.allowedValues, fullContext) || '';
+          }
+        }
+
+        if (val && val.trim() !== '') {
+          memberSuggested[origKey] = val;
+        }
       }
 
-      for (const member of group.members) {
-        // Filter suggestedValues so we only apply columns that were actually empty on this variant member
-        const memberSuggested: Record<string, string> = {};
-        for (const col of member.remainingCols) {
-          const origKey = col.originalName;
-          const cleanKey = col.cleanName || getCleanAttributeName(origKey);
-          let val: string = res.suggestedValues[origKey] || res.suggestedValues[cleanKey] || '';
-
-          // If mandatory field remains empty after web research, apply category-aware fallback
-          if ((!val || val.trim() === '') && (col.isRequired || origKey.includes('*'))) {
-            const cleanCol = getCleanAttributeName(cleanKey).toLowerCase();
-            const dict =
-              dictionaryIndex[cleanCol] ||
-              Object.values(dictionaryIndex).find(
-                d => getCleanAttributeName(d.cleanAttributeName).toLowerCase() === cleanCol
-              );
-            if (dict && dict.allowedValues && dict.allowedValues.length > 0) {
-              const fullContext = `${member.workingRow['Назва товару*\n[ua]'] || member.workingRow['Назва товару [ua]*'] || member.workingRow['Назва товару'] || ''} ${member.workingRow['Опис (text)\n[ua]'] || member.workingRow['Опис'] || ''}`.toLowerCase();
-              val = resolveMandatoryFallback(origKey, col.type, dict.allowedValues, fullContext) || '';
-            }
-          }
-
-          if (val && val.trim() !== '') {
-            memberSuggested[origKey] = val;
-          }
-        }
-
-        if (options?.onItemEnriched && (Object.keys(memberSuggested).length > 0 || (res.sources && res.sources.length > 0))) {
-          options.onItemEnriched(member.item, {
-            suggestedValues: memberSuggested,
-            explanations: res.explanations,
-            sources: res.sources,
-            fromCache: res.fromCache
-          });
-        }
+      if (options?.onItemEnriched && (Object.keys(memberSuggested).length > 0 || (res.sources && res.sources.length > 0))) {
+        options.onItemEnriched(member.item, {
+          suggestedValues: memberSuggested,
+          explanations: res.explanations,
+          sources: res.sources,
+          fromCache: res.fromCache
+        });
       }
     }
-  }
+
+    completedGroups++;
+    emitProgress(
+      `Етап 2/2: Точковий Google Grounding (група ${completedGroups}/${variantGroups.length}, 12 потоків)`
+    );
+  });
+
+  emitProgress('Точковий розшук у Google успішно завершено');
 
   return {
-    totalProcessed: items.length,
+    totalProcessed: targetItems.length,
     resolvedLocallyCount,
     resolvedFromCacheCount,
-    variantGroupsSearchedCount
+    variantGroupsSearchedCount,
+    savedApiCallsCount,
+    zeroAiCount,
+    seriesCacheHits
   };
 }

@@ -32,7 +32,7 @@ export interface EpicentrValueDiff {
   type: EpicentrColumnType;
   oldValue: string;
   newValue: string;
-  source: 'already_filled' | 'description' | 'photo' | 'internet_search' | 'xml' | 'other_column' | 'manual';
+  source: 'already_filled' | 'description' | 'photo' | 'internet_search' | 'xml' | 'other_column' | 'manual' | 'local_express' | 'series_cache';
   confidence: number;
   note?: string;
 }

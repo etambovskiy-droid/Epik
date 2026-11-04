@@ -104,6 +104,23 @@ export const INITIAL_RELEASES: ReleaseLogItem[] = [
       'Онбординг-гід швидкого старту для нових користувачів'
     ],
     featuresActivated: ['workspaces', 'batch_history', 'public_share']
+  },
+  {
+    version: 'v1.3.0',
+    title: 'Реліз: Пакетний селектор, масові дії та інспектор формули назв',
+    storyId: 'story-bulk-and-title-formula',
+    deployedAt: '2026-11-03T14:00:00Z',
+    changesSummary: [
+      'Пакетний вибір чекбоксами (Multi-select) та вибір діапазону Shift+Click у таблиці',
+      'Плаваюча панель масових дій (Bulk Toolbar) для вибраних товарів',
+      'Пакетне AI-дозаповнення тільки вибраних позицій у 12 потоків із Zero-AI відсіканням',
+      'Масове призначення значень характеристик із суворою PIM-валідацією довідника',
+      'Експорт тільки виділених товарів у чистий Excel зі збереженням структури',
+      'Інтерактивний інспектор формули назви Епіцентру (In-Table Title Formula Inspector)',
+      '1-Click AI Fix: автоматична нормалізація назв за формулою та видалення стоп-слів',
+      'Новий фільтр-пігулка "Помилки формули назви" для швидкої ізоляції проблемних карток'
+    ],
+    featuresActivated: ['bulk_multiselect', 'bulk_toolbar', 'title_formula_inspector', 'one_click_title_fix']
   }
 ];
 
@@ -154,7 +171,7 @@ export function getCurrentAppVersion(): string {
     const v = localStorage.getItem(STORAGE_APP_VERSION_KEY);
     if (v) return v;
   } catch {}
-  return 'v1.2.0';
+  return 'v1.3.0';
 }
 
 export function setCurrentAppVersion(v: string) {

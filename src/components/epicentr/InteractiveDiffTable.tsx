@@ -35,16 +35,31 @@ import {
   RefreshCw,
   Globe,
   Pencil,
-  X
+  Zap,
+  Clock,
+  X,
+  CheckSquare,
+  Square,
+  MinusSquare,
+  Sliders,
+  Wand2
 } from 'lucide-react';
-import { generateEpicentrExportWorkbook, findDictionaryAttr, sanitizeValueAgainstDictionary } from '../../services/epicentrEngine';
+import {
+  generateEpicentrExportWorkbook,
+  findDictionaryAttr,
+  sanitizeValueAgainstDictionary,
+  areAllMandatoryCharacteristicsFilled,
+  analyzeEpicentrTitleFormula,
+  autoFixEpicentrTitle
+} from '../../services/epicentrEngine';
 import { EpicentrDictionaryAttribute } from '../../types/epicentr';
 import {
   notifyMissingApiKey,
   enrichProductMandatoryWithAI,
   enrichProductsBatchWithAI,
   researchProductAttributesWithWebGrounding,
-  GroundedResearchResult
+  GroundedResearchResult,
+  BatchEnrichmentProgressMetrics
 } from '../../services/geminiFillingService';
 import { getStoredApiKey } from '../../services/aiApiKeyService';
 
@@ -76,7 +91,7 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<
-    'all' | 'mandatory' | 'unfilled' | 'agent_filled' | 'photo_filled' | 'lang_fixes' | 'brand_other'
+    'all' | 'mandatory' | 'unfilled' | 'agent_filled' | 'photo_filled' | 'lang_fixes' | 'brand_other' | 'invalid_titles'
   >('all');
   const [showOnlyMandatoryCols, setShowOnlyMandatoryCols] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
@@ -85,7 +100,21 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiProgressMessage, setAiProgressMessage] = useState<string | null>(null);
+  const [progressMetrics, setProgressMetrics] = useState<BatchEnrichmentProgressMetrics | null>(null);
   const [googleSheetExportOpen, setGoogleSheetExportOpen] = useState(false);
+
+  // Multi-select & Bulk Toolbar state
+  const [selectedRowIndices, setSelectedRowIndices] = useState<Set<number>>(new Set());
+  const [lastSelectedRowIdx, setLastSelectedRowIdx] = useState<number | null>(null);
+
+  // Bulk assignment modal state
+  const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
+  const [bulkAssignCol, setBulkAssignCol] = useState<string>('');
+  const [bulkAssignVal, setBulkAssignVal] = useState<string>('');
+
+  // Title Formula Inspector state
+  const [activeTitlePopoverRowIdx, setActiveTitlePopoverRowIdx] = useState<number | null>(null);
+  const [isBulkFixingTitles, setIsBulkFixingTitles] = useState(false);
 
   // Domain/Merchant Website Search state
   const [merchantDomain, setMerchantDomain] = useState('');
@@ -259,8 +288,191 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
     if (filterMode === 'brand_other') {
       return Boolean(r.isBrandOther);
     }
+    if (filterMode === 'invalid_titles') {
+      const curTitle = (titleUaCol ? r.updatedRow[titleUaCol.originalName] : undefined) || r.titleOriginal || '';
+      return !analyzeEpicentrTitleFormula(curTitle, r.brand, r.vendorCode).isValid;
+    }
     return true;
   });
+
+  // Multi-selection helpers
+  const allFilteredSelected =
+    filteredRows.length > 0 && filteredRows.every(r => selectedRowIndices.has(r.rowIdx));
+  const someFilteredSelected =
+    filteredRows.some(r => selectedRowIndices.has(r.rowIdx)) && !allFilteredSelected;
+
+  const handleToggleSelectAll = () => {
+    if (allFilteredSelected) {
+      const next = new Set(selectedRowIndices);
+      filteredRows.forEach(r => next.delete(r.rowIdx));
+      setSelectedRowIndices(next);
+    } else {
+      const next = new Set(selectedRowIndices);
+      filteredRows.forEach(r => next.add(r.rowIdx));
+      setSelectedRowIndices(next);
+    }
+  };
+
+  const handleSelectRow = (rowIdx: number, shiftKey: boolean) => {
+    const next = new Set(selectedRowIndices);
+    if (shiftKey && lastSelectedRowIdx !== null) {
+      const idxA = filteredRows.findIndex(r => r.rowIdx === lastSelectedRowIdx);
+      const idxB = filteredRows.findIndex(r => r.rowIdx === rowIdx);
+      if (idxA !== -1 && idxB !== -1) {
+        const start = Math.min(idxA, idxB);
+        const end = Math.max(idxA, idxB);
+        for (let i = start; i <= end; i++) {
+          next.add(filteredRows[i].rowIdx);
+        }
+        setSelectedRowIndices(next);
+        setLastSelectedRowIdx(rowIdx);
+        return;
+      }
+    }
+
+    if (next.has(rowIdx)) {
+      next.delete(rowIdx);
+    } else {
+      next.add(rowIdx);
+    }
+    setSelectedRowIndices(next);
+    setLastSelectedRowIdx(rowIdx);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedRowIndices(new Set());
+    setLastSelectedRowIdx(null);
+  };
+
+  const handleSelectInvalidTitles = () => {
+    const next = new Set(selectedRowIndices);
+    filteredRows.forEach(r => {
+      const curTitle = (titleUaCol ? r.updatedRow[titleUaCol.originalName] : undefined) || r.titleOriginal || '';
+      const analysis = analyzeEpicentrTitleFormula(curTitle, r.brand, r.vendorCode);
+      if (!analysis.isValid) {
+        next.add(r.rowIdx);
+      }
+    });
+    setSelectedRowIndices(next);
+  };
+
+  const handleSelectUnfilledMandatory = () => {
+    const next = new Set(selectedRowIndices);
+    filteredRows.forEach(r => {
+      if (!areAllMandatoryCharacteristicsFilled(r.updatedRow, columns)) {
+        next.add(r.rowIdx);
+      }
+    });
+    setSelectedRowIndices(next);
+  };
+
+  // 1-Click Single Title Fix
+  const handleFixSingleTitle = (pRow: EpicentrProductRow) => {
+    const targetCol = titleUaCol || columns.find(c => c.cleanName.toLowerCase().includes('назва'));
+    if (!targetCol) return;
+    const currentTitle = String(pRow.updatedRow[targetCol.originalName] || pRow.titleOriginal || '');
+    const fixed = autoFixEpicentrTitle(currentTitle, pRow.brand, pRow.vendorCode);
+    if (fixed && onUpdateCellValue) {
+      onUpdateCellValue(pRow.rowIdx, targetCol.originalName, fixed);
+      setNotificationToast({
+        message: `Назву товару "${pRow.id}" нормалізовано за формулою Епіцентру!`,
+        type: 'success'
+      });
+      setTimeout(() => setNotificationToast(null), 3000);
+    }
+    setActiveTitlePopoverRowIdx(null);
+  };
+
+  // Batch Title Fix for Selected Rows
+  const handleBatchFixTitlesForSelected = () => {
+    if (selectedRowIndices.size === 0) return;
+    setIsBulkFixingTitles(true);
+    let count = 0;
+    try {
+      const targetCol = titleUaCol || columns.find(c => c.cleanName.toLowerCase().includes('назва'));
+      if (!targetCol) return;
+
+      rows.forEach(r => {
+        if (selectedRowIndices.has(r.rowIdx)) {
+          const currentTitle = String(r.updatedRow[targetCol.originalName] || r.titleOriginal || '');
+          const fixed = autoFixEpicentrTitle(currentTitle, r.brand, r.vendorCode);
+          if (fixed && fixed !== currentTitle) {
+            if (onUpdateCellValue) {
+              onUpdateCellValue(r.rowIdx, targetCol.originalName, fixed);
+            }
+            count++;
+          }
+        }
+      });
+
+      setNotificationToast({
+        message: `Успішно нормалізовано за формулою Епіцентру: ${count} назв товарів!`,
+        type: 'success'
+      });
+      setTimeout(() => setNotificationToast(null), 4000);
+    } finally {
+      setIsBulkFixingTitles(false);
+    }
+  };
+
+  // Export Selected Rows to Excel
+  const handleExportSelectedExcel = () => {
+    try {
+      const selectedRows = rows.filter(r => selectedRowIndices.has(r.rowIdx));
+      if (selectedRows.length === 0) return;
+      const exportWb = generateEpicentrExportWorkbook(rawWorkbook, selectedRows, columns, dictionaryIndex);
+      const outName = originalFileName
+        ? `Вибрані_${selectedRows.length}_${originalFileName.replace(/\.(xlsx|xls|csv)$/i, '')}.xlsx`
+        : `Епіцентр_Вибрані_${selectedRows.length}_товарів.xlsx`;
+      XLSX.writeFile(exportWb, outName);
+      setNotificationToast({
+        message: `Експортовано ${selectedRows.length} вибраних товарів у файл ${outName}`,
+        type: 'success'
+      });
+      setTimeout(() => setNotificationToast(null), 3500);
+    } catch (err) {
+      console.error('Failed to export selected rows:', err);
+    }
+  };
+
+  // Bulk Assign Value to Selected Rows
+  const handleApplyBulkAssignment = () => {
+    if (!bulkAssignCol || !bulkAssignVal.trim() || selectedRowIndices.size === 0) return;
+    const col = columns.find(c => c.originalName === bulkAssignCol || c.cleanName === bulkAssignCol);
+    if (!col) return;
+
+    let sanitizedVal = bulkAssignVal.trim();
+    const dictAttr = dictionaryIndex ? findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName) : undefined;
+    if (dictAttr && dictAttr.allowedValues && dictAttr.allowedValues.length > 0) {
+      sanitizedVal = sanitizeValueAgainstDictionary(sanitizedVal, dictAttr.allowedValues, col.type === 'multiselect');
+      if (!sanitizedVal) {
+        setNotificationToast({
+          message: `Значення не відповідає довіднику Епіцентру для колонки "${col.cleanName}"`,
+          type: 'info'
+        });
+        setTimeout(() => setNotificationToast(null), 4000);
+        return;
+      }
+    }
+
+    let updatedCount = 0;
+    rows.forEach(r => {
+      if (selectedRowIndices.has(r.rowIdx)) {
+        if (onUpdateCellValue) {
+          onUpdateCellValue(r.rowIdx, col.originalName, sanitizedVal);
+          updatedCount++;
+        }
+      }
+    });
+
+    setIsBulkAssignOpen(false);
+    setBulkAssignVal('');
+    setNotificationToast({
+      message: `Призначено "${sanitizedVal}" для ${updatedCount} вибраних товарів у колонці "${col.cleanName}"`,
+      type: 'success'
+    });
+    setTimeout(() => setNotificationToast(null), 4000);
+  };
 
   // Quick Export to Excel .xlsx
   const handleExportExcel = () => {
@@ -386,9 +598,14 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
     selectedKeys: Record<string, boolean>;
   } | null>(null);
 
-  // 2-Step Cascading AI & Google Search Grounding filling with Variant Batching & LocalStorage Caching
-  const handleTriggerAiFilling = async (forceWebGrounding?: boolean) => {
-    const useGrounding = forceWebGrounding !== undefined ? forceWebGrounding : enableWebGrounding;
+  // 2-Step Cascading AI & Google Search Grounding filling with Concurrency Pool (12), Batching (5), Series Cache & Zero-AI Cutoff
+  const handleTriggerAiFilling = async (opts?: {
+    forceWebGrounding?: boolean;
+    onlyMandatory?: boolean;
+    targetRowIndices?: Set<number>;
+  }) => {
+    const useGrounding = opts?.forceWebGrounding !== undefined ? opts.forceWebGrounding : enableWebGrounding;
+    const onlyMandatory = Boolean(opts?.onlyMandatory);
 
     // Identify rows with empty mandatory or optional characteristic columns
     const fillableCols = columns.filter(c => {
@@ -408,34 +625,58 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
       }
       return true;
     });
-    const unfilledRows = rows
+
+    let unfilledRows = rows
       .map((r, idx) => ({ r, idx, updatedRow: r.updatedRow }))
       .filter(({ r }) => {
+        if (opts?.targetRowIndices && !opts.targetRowIndices.has(r.rowIdx)) {
+          return false;
+        }
         return fillableCols.some(c => {
           const val = r.updatedRow[c.originalName];
           return val === undefined || val === null || String(val).trim() === '';
         });
       });
 
+    if (onlyMandatory) {
+      unfilledRows = unfilledRows.filter(({ updatedRow }) => !areAllMandatoryCharacteristicsFilled(updatedRow, columns));
+    }
+
     if (unfilledRows.length === 0) {
-      setAiProgressMessage('Усі характеристики для показаних товарів вже заповнено!');
-      setTimeout(() => setAiProgressMessage(null), 3000);
+      setAiProgressMessage(
+        onlyMandatory
+          ? 'Усі обовʼязкові поля зі зірочкою (*) для показаних товарів вже заповнено!'
+          : 'Усі характеристики для показаних товарів вже заповнено!'
+      );
+      setTimeout(() => setAiProgressMessage(null), 3500);
       return;
     }
 
     setIsAiProcessing(true);
-    setAiProgressMessage(
-      useGrounding
-        ? `Етап 1/2: Локальне AI-дозаповнення перед розшуком (${unfilledRows.length} тов.)...`
-        : `Етап 1/2: Локальне AI-дозаповнення (${unfilledRows.length} тов.)...`
-    );
+    setProgressMetrics({
+      processed: 0,
+      total: unfilledRows.length,
+      speed: 0,
+      etaSeconds: 0,
+      savedApiCalls: 0,
+      zeroAiCount: 0,
+      seriesCacheHits: 0,
+      stage: useGrounding
+        ? `Підготовка до точкового Grounding (${unfilledRows.length} тов.)...`
+        : `Підготовка до експрес AI-обробки (${unfilledRows.length} тов.)...`
+    });
 
     try {
       const stats = await enrichProductsBatchWithAI(unfilledRows, columns, dictionaryIndex || {}, {
         useWebGrounding: useGrounding,
         merchantDomain,
         restrictToDomain,
-        batchSize: 4,
+        concurrency: 12,
+        itemsPerPrompt: 5,
+        onlyMandatoryUnfilledGrounding: onlyMandatory,
+        onProgressMetrics: (metrics) => {
+          setProgressMetrics(metrics);
+        },
         onStageUpdate: (msg) => {
           setAiProgressMessage(msg);
         },
@@ -463,23 +704,18 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
       });
 
       if (useGrounding) {
-        if (stats.variantGroupsSearchedCount === 0 && stats.resolvedFromCacheCount === 0) {
-          setAiProgressMessage(
-            `Усі поля (${stats.resolvedLocallyCount} тов.) заповнено на Етапі 1 локально — мережевий пошук не знадобився!`
-          );
-        } else {
-          setAiProgressMessage(
-            `Готово! Локально: ${stats.resolvedLocallyCount}, з кешу: ${stats.resolvedFromCacheCount}, груп у Google: ${stats.variantGroupsSearchedCount}`
-          );
-        }
+        setAiProgressMessage(
+          `Готово! Оброблено: ${stats.totalProcessed}, збережено API: ${stats.savedApiCallsCount} (Zero-AI: ${stats.zeroAiCount}, Кеш серій: ${stats.seriesCacheHits})`
+        );
       } else {
-        setAiProgressMessage('Успішно дозаповнено через Gemini!');
+        setAiProgressMessage(
+          `Експрес AI завершено! Оброблено: ${stats.totalProcessed}, Зекономлено запитів API: ${stats.savedApiCallsCount} (Zero-AI: ${stats.zeroAiCount}, Кеш серій: ${stats.seriesCacheHits})`
+        );
       }
-      setTimeout(() => setAiProgressMessage(null), 4000);
+      setTimeout(() => setAiProgressMessage(null), 5000);
     } catch (e: any) {
       console.warn('AI filling notice:', e);
       setAiProgressMessage('Оброблено за допомогою локального PIM-рушія Епіцентру');
-      setTimeout(() => setAiProgressMessage(null), 3000);
     } finally {
       setIsAiProcessing(false);
     }
@@ -584,6 +820,67 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
         </div>
       </div>
 
+      {/* Real-time Progress, Speed, ETA & Saved API Requests Card */}
+      {progressMetrics && (isAiProcessing || progressMetrics.processed > 0) && (
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 border border-blue-500/30 rounded-2xl p-4 text-white shadow-md space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-blue-300 shrink-0">
+                {isAiProcessing ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                )}
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-white flex items-center gap-2">
+                  <span>{progressMetrics.stage || 'Обробка товарів...'}</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/25 text-blue-300 border border-blue-400/30">
+                    12 потоків • 5 тов./запит
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-300">
+                  Оброблено <strong>{progressMetrics.processed}</strong> з {progressMetrics.total} товарів ({Math.min(100, Math.round((progressMetrics.processed / Math.max(1, progressMetrics.total)) * 100))}%)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 text-xs">
+              <div className="bg-white/10 px-2.5 py-1 rounded-lg backdrop-blur-xs border border-white/10 flex items-center gap-1.5" title="Поточна швидкість обробки">
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <span className="font-semibold text-white">{progressMetrics.speed} тов./сек</span>
+              </div>
+              {isAiProcessing && progressMetrics.etaSeconds > 0 && (
+                <div className="bg-white/10 px-2.5 py-1 rounded-lg backdrop-blur-xs border border-white/10 flex items-center gap-1.5" title="Орієнтовний час до завершення">
+                  <Clock className="w-3.5 h-3.5 text-blue-300" />
+                  <span className="font-semibold text-white">
+                    ETA: {Math.floor(progressMetrics.etaSeconds / 60) > 0 ? `${Math.floor(progressMetrics.etaSeconds / 60)} хв ` : ''}{progressMetrics.etaSeconds % 60} с
+                  </span>
+                </div>
+              )}
+              <div className="bg-emerald-500/20 px-2.5 py-1 rounded-lg border border-emerald-400/30 flex items-center gap-1.5 text-emerald-300" title="Зекономлено викликів Gemini API завдяки Zero-AI cutoff, пакетуванню по 5 та кешу серій">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Зекономлено API: <strong className="text-white">{progressMetrics.savedApiCalls}</strong> (Zero-AI: {progressMetrics.zeroAiCount}, Кеш: {progressMetrics.seriesCacheHits})</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Animated Progress Bar */}
+          <div className="space-y-1">
+            <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-amber-400 via-[#FF7A00] to-emerald-400 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.round((progressMetrics.processed / Math.max(1, progressMetrics.total)) * 100))}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-slate-400">
+              <span>{aiProgressMessage || 'Високопродуктивна паралельна обробка...'}</span>
+              <span>{isAiProcessing ? 'Обробка триває...' : 'Завершено'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Bar: Search, Filters, and Quick Export Buttons */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
         
@@ -607,47 +904,28 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
 
         {/* Right: Quick Export Buttons & AI Fill */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Web Grounding Toggle */}
-          <label
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer select-none transition-all ${
-              enableWebGrounding
-                ? 'bg-blue-50 border-blue-300 text-blue-900 shadow-2xs'
-                : 'bg-slate-100 border-slate-300 text-slate-600 hover:bg-slate-200'
-            }`}
-            title="Автоматичний пошук характеристик у Google (Gemini 3.8 Flash + Web Grounding), якщо даних немає у файлі"
-          >
-            <input
-              type="checkbox"
-              checked={enableWebGrounding}
-              onChange={(e) => setEnableWebGrounding(e.target.checked)}
-              className="w-3.5 h-3.5 rounded text-[#004BB7] focus:ring-0 cursor-pointer"
-            />
-            <Globe className="w-3.5 h-3.5 text-[#004BB7]" />
-            <span>Web Grounding</span>
-          </label>
-
-          {/* AI Fill with Gemini */}
+          {/* Primary Express AI (Without Grounding, 5-product batching, 12 concurrency) */}
           <button
             type="button"
-            onClick={() => handleTriggerAiFilling()}
+            onClick={() => handleTriggerAiFilling({ forceWebGrounding: false })}
             disabled={isAiProcessing}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-[#FF7A00] to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-            title="Заповнити пропущені обов'язкові поля за допомогою Google AI Studio (Gemini)"
+            title="⚡ Експрес AI: 12 паралельних потоків, 5 товарів на запит, Zero-AI локальне відсікання та кеш серій"
           >
-            <Sparkles className={`w-3.5 h-3.5 ${isAiProcessing && !enableWebGrounding ? 'animate-spin' : ''}`} />
-            <span>{isAiProcessing && !enableWebGrounding ? (aiProgressMessage || 'AI обробка...') : 'AI-дозаповнення'}</span>
+            <Zap className={`w-3.5 h-3.5 ${isAiProcessing && !enableWebGrounding ? 'animate-spin' : ''}`} />
+            <span>{isAiProcessing && !enableWebGrounding ? 'Експрес AI...' : '⚡ Експрес AI (Без Grounding)'}</span>
           </button>
 
-          {/* Dedicated Web Grounding Research Button */}
+          {/* Secondary Point Grounding: Exclusively for products with unfilled mandatory fields (*) */}
           <button
             type="button"
-            onClick={() => handleTriggerAiFilling(true)}
+            onClick={() => handleTriggerAiFilling({ forceWebGrounding: true, onlyMandatory: true })}
             disabled={isAiProcessing}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-[#004BB7] hover:from-blue-700 hover:to-[#003d99] text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-            title="Розшукати всі відсутні габарити, вік, стать, кількість гравців у Google Search (Gemini 3.8 Flash)"
+            title="🌐 Розшукати тільки порожні обов'язкові поля (*): запускає Google Search Grounding ВИКЛЮЧНО для товарів із незаповненими обов'язковими полями"
           >
             <Globe className={`w-3.5 h-3.5 ${isAiProcessing && enableWebGrounding ? 'animate-spin' : ''}`} />
-            <span>{isAiProcessing && enableWebGrounding ? (aiProgressMessage || 'Розшук в Google...') : 'Розшук у Google'}</span>
+            <span>{isAiProcessing && enableWebGrounding ? 'Точковий розшук...' : '🌐 Розшукати тільки порожні (*)'}</span>
           </button>
 
           {/* Export to Excel */}
@@ -868,6 +1146,32 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
           >
             Бренд "Інше" ({rows.filter(r => r.isBrandOther).length})
           </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterMode('invalid_titles')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+              filterMode === 'invalid_titles'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'bg-slate-100 text-rose-700 hover:bg-rose-50 border border-rose-200'
+            }`}
+            title="Товари, чиї назви не відповідають офіційному регламенту маркетплейсу Епіцентр"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+            <span>
+              Помилки формули назви (
+              {
+                rows.filter(r => {
+                  const curTitle =
+                    (titleUaCol ? r.updatedRow[titleUaCol.originalName] : undefined) ||
+                    r.titleOriginal ||
+                    '';
+                  return !analyzeEpicentrTitleFormula(curTitle, r.brand, r.vendorCode).isValid;
+                }).length
+              }
+              )
+            </span>
+          </button>
         </div>
 
         {/* Toggle Column View */}
@@ -925,6 +1229,18 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
         <table className="w-full text-left text-xs border-collapse">
           <thead className="bg-slate-100 sticky top-0 z-20 text-slate-700 font-bold border-b border-slate-300 shadow-2xs">
             <tr>
+              <th className="py-3 px-3 w-10 text-center">
+                <input
+                  type="checkbox"
+                  checked={allFilteredSelected}
+                  ref={el => {
+                    if (el) el.indeterminate = someFilteredSelected;
+                  }}
+                  onChange={handleToggleSelectAll}
+                  className="w-4 h-4 rounded text-[#004BB7] focus:ring-0 cursor-pointer"
+                  title={allFilteredSelected ? 'Зняти виділення з усіх' : 'Вибрати всі показані товари'}
+                />
+              </th>
               <th className="py-3 px-3 w-12 text-center text-slate-500 font-mono">#</th>
               <th className="py-3 px-3 w-16 text-center">1-е Фото</th>
               <th className="py-3 px-3 min-w-[120px]">
@@ -933,7 +1249,7 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                   <span>ID (Захищено)</span>
                 </div>
               </th>
-              <th className="py-3 px-3 min-w-[260px]">Назва товару [ua]*</th>
+              <th className="py-3 px-3 min-w-[280px]">Назва товару [ua]*</th>
               <th className="py-3 px-3 min-w-[120px]">Артикул*</th>
               
               {/* Dynamic Columns */}
@@ -977,9 +1293,22 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
           <tbody className="divide-y divide-slate-200 bg-white">
             {filteredRows.map((pRow, idx) => {
               const isExpanded = expandedRowIdx === pRow.rowIdx;
+              const isSelected = selectedRowIndices.has(pRow.rowIdx);
+
               return (
                 <React.Fragment key={pRow.id}>
-                  <tr className="hover:bg-blue-50/40 transition-colors">
+                  <tr className={`transition-colors ${isSelected ? 'bg-blue-50/80 border-l-4 border-l-[#004BB7]' : 'hover:bg-blue-50/40'}`}>
+                    {/* Row Checkbox */}
+                    <td className="py-2.5 px-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={e => handleSelectRow(pRow.rowIdx, (e.nativeEvent as MouseEvent).shiftKey)}
+                        className="w-4 h-4 rounded text-[#004BB7] focus:ring-0 cursor-pointer"
+                        title={`Вибрати товар #${idx + 1}`}
+                      />
+                    </td>
+
                     <td className="py-2.5 px-3 text-center text-slate-400 font-mono">
                       {idx + 1}
                     </td>
@@ -1013,8 +1342,8 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                       {pRow.id}
                     </td>
 
-                    {/* Title UA */}
-                    <td className="py-2.5 px-3">
+                    {/* Title UA with Interactive Formula Inspector */}
+                    <td className="py-2.5 px-3 min-w-[280px]">
                       <div className="font-semibold text-slate-900 leading-snug">
                         {(titleUaCol ? pRow.updatedRow[titleUaCol.originalName] : undefined) ||
                           pRow.titleFormattedUa ||
@@ -1026,6 +1355,133 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                           {pRow.titleOriginal}
                         </div>
                       )}
+
+                      {/* Formula Inspector Badge & 1-Click Fix */}
+                      {(() => {
+                        const curTitle = String(
+                          (titleUaCol ? pRow.updatedRow[titleUaCol.originalName] : undefined) ||
+                          pRow.titleFormattedUa ||
+                          pRow.titleOriginal ||
+                          ''
+                        );
+                        const formula = analyzeEpicentrTitleFormula(curTitle, pRow.brand, pRow.vendorCode);
+                        const isPopoverOpen = activeTitlePopoverRowIdx === pRow.rowIdx;
+
+                        return (
+                          <div className="mt-1.5 relative">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {formula.isValid ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  <span>Формула ОК ({formula.score}%)</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTitlePopoverRowIdx(isPopoverOpen ? null : pRow.rowIdx)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition-colors cursor-pointer shadow-2xs"
+                                  title="Натисніть для перегляду деталей формули та швидкого виправлення"
+                                >
+                                  <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                                  <span className="truncate max-w-[170px]">{formula.issues[0]}</span>
+                                  <span className="font-bold text-amber-700 font-mono">({formula.score}%)</span>
+                                </button>
+                              )}
+
+                              {!formula.isValid && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleFixSingleTitle(pRow)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-[10px] font-bold shadow-2xs transition-all cursor-pointer"
+                                  title="✨ 1-Click Fix: нормалізувати назву за формулою Епіцентру"
+                                >
+                                  <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                                  <span>1-Click Fix</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Detailed Formula Popover */}
+                            {isPopoverOpen && (
+                              <div className="absolute left-0 top-full mt-1.5 z-40 w-80 p-3.5 bg-white border border-slate-300 rounded-xl shadow-2xl text-xs space-y-2.5 animate-fadeIn">
+                                <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
+                                  <div className="flex items-center gap-1.5">
+                                    <Sparkles className="w-4 h-4 text-[#004BB7]" />
+                                    <span className="font-bold text-slate-800">Формула назви Епіцентру</span>
+                                  </div>
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      formula.score >= 80
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : formula.score >= 50
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-rose-100 text-rose-800'
+                                    }`}
+                                  >
+                                    {formula.score}/100 балів
+                                  </span>
+                                </div>
+
+                                <div className="space-y-1 text-[11px] text-slate-600">
+                                  <div className="flex items-center justify-between">
+                                    <span>Довжина ({formula.length}/150 симв.):</span>
+                                    <span className={formula.isLengthValid ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
+                                      {formula.isLengthValid ? '✓ В нормі' : '✗ Порушено'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span>Артикул у дужках (SKU):</span>
+                                    <span className={formula.hasSkuInBrackets ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
+                                      {formula.hasSkuInBrackets ? `✓ ${formula.skuFound}` : '✗ Відсутній'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span>Маркетингові стоп-слова:</span>
+                                    <span className={!formula.hasProhibitedWords ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
+                                      {!formula.hasProhibitedWords ? '✓ Відсутні' : `✗ ${formula.prohibitedWords.join(', ')}`}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span>Бренд у назві:</span>
+                                    <span className={formula.hasBrand ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>
+                                      {formula.hasBrand ? '✓ Присутній' : '⚠ Не вказано'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {formula.issues.length > 0 && (
+                                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-[11px] text-amber-900 space-y-0.5">
+                                    <div className="font-bold">Виявлені зауваження:</div>
+                                    <ul className="list-disc list-inside space-y-0.5 text-slate-700">
+                                      {formula.issues.map((iss, i) => (
+                                        <li key={i}>{iss}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                <div className="pt-1 flex items-center justify-between gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleFixSingleTitle(pRow)}
+                                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-[#004BB7] hover:bg-[#003d99] text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                                    <span>Нормалізувати зараз</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveTitlePopoverRowIdx(null)}
+                                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* SKU / Article */}
@@ -1421,6 +1877,205 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating Bottom Batch Action Bar */}
+      {selectedRowIndices.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-4xl w-[94%] bg-slate-900/95 backdrop-blur-md text-white border border-slate-700/80 rounded-2xl p-4 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-3 animate-slideUp">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#004BB7] to-indigo-600 flex items-center justify-center text-white shadow-md font-bold text-sm">
+              {selectedRowIndices.size}
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white flex items-center gap-2">
+                <span>Вибрано: <strong>{selectedRowIndices.size}</strong> з {rows.length} товарів</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold">
+                  Пакетні операції
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                <button
+                  type="button"
+                  onClick={handleSelectInvalidTitles}
+                  className="hover:text-amber-300 underline cursor-pointer"
+                >
+                  Вибрати з помилками формули
+                </button>
+                <span>•</span>
+                <button
+                  type="button"
+                  onClick={handleSelectUnfilledMandatory}
+                  className="hover:text-amber-300 underline cursor-pointer"
+                >
+                  Вибрати з порожніми (*)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Batch Title Formula Fix */}
+            <button
+              type="button"
+              onClick={handleBatchFixTitlesForSelected}
+              disabled={isBulkFixingTitles}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              title="Автоматично виправити назви за формулою Епіцентру для всіх вибраних товарів"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>{isBulkFixingTitles ? 'Виправлення...' : `Виправити назви (${selectedRowIndices.size})`}</span>
+            </button>
+
+            {/* Batch AI Enrichment */}
+            <button
+              type="button"
+              onClick={() => handleTriggerAiFilling({ forceWebGrounding: false, targetRowIndices: selectedRowIndices })}
+              disabled={isAiProcessing}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-[#FF7A00] hover:from-amber-600 hover:to-orange-600 text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              title="Запустити AI-дозаповнення тільки для вибраних товарів"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>{isAiProcessing ? 'AI обробка...' : `AI для вибраних (${selectedRowIndices.size})`}</span>
+            </button>
+
+            {/* Bulk Assign Value */}
+            <button
+              type="button"
+              onClick={() => setIsBulkAssignOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-xs font-bold shadow-xs transition-all cursor-pointer"
+              title="Призначити однакове значення характеристики для всіх вибраних товарів"
+            >
+              <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Призначити значення</span>
+            </button>
+
+            {/* Export Selected to Excel */}
+            <button
+              type="button"
+              onClick={handleExportSelectedExcel}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
+              title="Вивантажити Excel-файл тільки з вибраними товарами"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Експорт ({selectedRowIndices.size})</span>
+            </button>
+
+            {/* Clear Selection */}
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Зняти виділення"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Bulk Assign Value to Selected Rows */}
+      {isBulkAssignOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Sliders className="w-5 h-5 text-[#004BB7]" />
+                <h3 className="font-bold text-slate-900 text-sm">
+                  Призначити значення для {selectedRowIndices.size} товарів
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBulkAssignOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Оберіть колонку для заповнення:</label>
+                <select
+                  value={bulkAssignCol}
+                  onChange={e => {
+                    setBulkAssignCol(e.target.value);
+                    setBulkAssignVal('');
+                  }}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-[#004BB7]"
+                >
+                  <option value="">-- Оберіть колонку --</option>
+                  {columns
+                    .filter(c => !c.cleanName.toLowerCase().includes('id') && !c.cleanName.toLowerCase().includes('фото'))
+                    .map(col => (
+                      <option key={col.originalName} value={col.originalName}>
+                        {col.cleanName} {col.isRequired ? '(*)' : ''} ({col.type})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {bulkAssignCol && (() => {
+                const col = columns.find(c => c.originalName === bulkAssignCol);
+                const dictAttr = dictionaryIndex && col ? findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName) : undefined;
+
+                return (
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Значення {dictAttr && dictAttr.allowedValues.length > 0 ? '(Суворий PIM-довідник Епіцентру)' : ''}:
+                    </label>
+                    {dictAttr && dictAttr.allowedValues.length > 0 ? (
+                      <select
+                        value={bulkAssignVal}
+                        onChange={e => setBulkAssignVal(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-[#004BB7]"
+                      >
+                        <option value="">-- Оберіть значення з довідника --</option>
+                        {dictAttr.allowedValues.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="Введіть значення..."
+                        value={bulkAssignVal}
+                        onChange={e => setBulkAssignVal(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-[#004BB7]"
+                      />
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsBulkAssignOpen(false)}
+                className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium text-xs rounded-xl hover:bg-slate-100 cursor-pointer"
+              >
+                Скасувати
+              </button>
+              <button
+                type="button"
+                disabled={!bulkAssignCol || !bulkAssignVal.trim()}
+                onClick={handleApplyBulkAssignment}
+                className="px-4 py-2 bg-[#004BB7] hover:bg-[#003d99] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                Застосувати до {selectedRowIndices.size} товарів
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notification Toast */}
+      {notificationToast && (
+        <div className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-xl shadow-lg border flex items-center gap-2.5 text-xs animate-slideDown ${notificationToast.type === 'success' ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : 'bg-blue-50 border-blue-300 text-blue-900'}`}>
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="font-semibold">{notificationToast.message}</span>
         </div>
       )}
     </div>

@@ -2763,6 +2763,149 @@ export function formatEpicentrTitle(
   return title;
 }
 
+export interface TitleFormulaAnalysis {
+  isValid: boolean;
+  score: number;
+  length: number;
+  isLengthValid: boolean;
+  hasSkuInBrackets: boolean;
+  skuFound?: string;
+  hasBrand: boolean;
+  hasProhibitedWords: boolean;
+  prohibitedWords: string[];
+  isCapslock: boolean;
+  issues: string[];
+}
+
+/**
+ * Analyzes whether a product title adheres to Epicentr's official marketplace title formula:
+ * <Тип товару> <Особливість> <Бренд> <Модель> <Характеристика/Розмір> <Колір> (<Артикул>)
+ * Flags: prohibited marketing words, missing SKU in parentheses at end, length limits, brand omission, capslock.
+ */
+export function analyzeEpicentrTitleFormula(
+  title: string | undefined | null,
+  brand?: string,
+  _sku?: string
+): TitleFormulaAnalysis {
+  const cleanTitle = (title || '').trim();
+  const length = cleanTitle.length;
+  const isLengthValid = length >= 15 && length <= 150;
+
+  const prohibitedRegex = /(?:^|[^\p{L}\p{N}])(акція|акция|знижка|скидка|original|оригінал|оригинал|розпродаж|распродажа|уцінка|уценка|новинка|топ|хіт|хит|супер|super|дешево|дешевий|100%|sale|best|найкращ|лучш)(?:[^\p{L}\p{N}]|$)/giu;
+  const matches = Array.from(cleanTitle.matchAll(prohibitedRegex)).map(m => m[1]);
+  const prohibitedWords = Array.from(new Set(matches.map(w => w.toLowerCase())));
+  const hasProhibitedWords = prohibitedWords.length > 0;
+
+  const skuMatch = cleanTitle.match(/\(([^)]+)\)$/);
+  const hasSkuInBrackets = Boolean(skuMatch && skuMatch[1].trim().length > 0);
+  const skuFound = skuMatch ? skuMatch[1].trim() : undefined;
+
+  const cleanBrand = (brand || '').replace(/^інше$/i, '').trim().toLowerCase();
+  const hasBrand = cleanBrand ? cleanTitle.toLowerCase().includes(cleanBrand) : true;
+
+  const isCapslock = cleanTitle.length > 10 && cleanTitle === cleanTitle.toUpperCase() && /[А-ЯA-Z]/.test(cleanTitle);
+
+  const issues: string[] = [];
+  let score = 100;
+
+  if (cleanTitle.length === 0) {
+    issues.push('Назва товару порожня');
+    return {
+      isValid: false,
+      score: 0,
+      length: 0,
+      isLengthValid: false,
+      hasSkuInBrackets: false,
+      hasBrand: false,
+      hasProhibitedWords: false,
+      prohibitedWords: [],
+      isCapslock: false,
+      issues
+    };
+  }
+
+  if (length > 150) {
+    issues.push(`Довжина назви (${length} симв.) перевищує ліміт 150`);
+    score -= 30;
+  } else if (length < 15) {
+    issues.push(`Занадто коротка назва (${length} симв.)`);
+    score -= 15;
+  }
+
+  if (!hasSkuInBrackets) {
+    issues.push('Відсутній артикул у круглих дужках наприкінці: (АРТИКУЛ)');
+    score -= 35;
+  }
+
+  if (hasProhibitedWords) {
+    issues.push(`Містить заборонені маркетингові слова: ${prohibitedWords.join(', ')}`);
+    score -= 25;
+  }
+
+  if (isCapslock) {
+    issues.push('Назва повністю написана великими літерами (Caps Lock)');
+    score -= 25;
+  }
+
+  if (cleanBrand && !hasBrand) {
+    issues.push(`Бренд "${brand}" не вказано в назві`);
+    score -= 15;
+  }
+
+  score = Math.max(0, Math.min(100, score));
+  const isValid = issues.length === 0 && hasSkuInBrackets && isLengthValid && !hasProhibitedWords && !isCapslock;
+
+  return {
+    isValid,
+    score,
+    length,
+    isLengthValid,
+    hasSkuInBrackets,
+    skuFound,
+    hasBrand,
+    hasProhibitedWords,
+    prohibitedWords,
+    isCapslock,
+    issues
+  };
+}
+
+/**
+ * 1-Click heuristic fix for Epicentr title formula:
+ * Removes prohibited words, strips brackets, ensures brand & model formatting, and attaches SKU in brackets.
+ */
+export function autoFixEpicentrTitle(
+  currentTitle: string | undefined | null,
+  brand?: string,
+  sku?: string,
+  extra?: { productType?: string; model?: string; color?: string }
+): string {
+  let cleanTitle = (currentTitle || '').trim();
+  const cleanBrand = (brand || '').replace(/^інше$/i, '').trim();
+  const cleanSku = (sku || '').trim();
+
+  // If brand is present and completely absent from title, insert brand
+  if (cleanBrand && !cleanTitle.toLowerCase().includes(cleanBrand.toLowerCase())) {
+    const skuBracketMatch = cleanTitle.match(/\(([^)]+)\)$/);
+    if (skuBracketMatch) {
+      const base = cleanTitle.replace(/\(([^)]+)\)$/, '').trim();
+      cleanTitle = `${base} ${cleanBrand} (${skuBracketMatch[1]})`;
+    } else {
+      cleanTitle = `${cleanTitle} ${cleanBrand}`;
+    }
+  }
+
+  return formatEpicentrTitle({
+    rawTitle: cleanTitle,
+    brand: cleanBrand,
+    sku: cleanSku,
+    productType: extra?.productType,
+    model: extra?.model,
+    color: extra?.color,
+    lang: 'ua'
+  });
+}
+
 /**
  * Analyze first product photo, titles, descriptions, and structured parameters in the row.
  */
@@ -3173,6 +3316,144 @@ export function extractPlayersFromText(text: string): {
   }
 
   return {};
+}
+
+/**
+ * Extract series / model line key from brand, product title, and vendor code.
+ * Used for high-performance Series Level Caching across large catalogs (7000+ items).
+ * Example: "Mades Cosmetics Chapter Body Spray" -> "mades_cosmetics__chapter"
+ *          "Sony WH-1000XM4 Black" -> "sony__wh_1000xm4"
+ */
+export function extractProductSeriesKey(
+  brand?: string,
+  productTitle?: string,
+  vendorCode?: string
+): string {
+  const cleanBrand = (brand || '').replace(/^інше$/i, '').trim().toLowerCase();
+  let titleClean = (productTitle || '').toLowerCase().trim();
+
+  // Strip brand from title if present
+  if (cleanBrand && titleClean.includes(cleanBrand)) {
+    titleClean = titleClean.replace(cleanBrand, ' ').trim();
+  }
+
+  // Remove SKU / vendor code if present in title
+  if (vendorCode && vendorCode.length >= 3) {
+    titleClean = titleClean.replace(vendorCode.toLowerCase(), ' ').trim();
+  }
+
+  // Remove parenthesized content (sizes, SKUs, colors)
+  titleClean = titleClean.replace(/\([^)]*\)/g, ' ').trim();
+
+  // Remove generic stop-words
+  const stopWords = new Set([
+    'для', 'від', 'без', 'під', 'та', 'і', 'з', 'зі', 'із', 'в', 'у',
+    'набір', 'товар', 'штука', 'шт', 'новинка', 'оригінал', 'косметичний',
+    'подарунковий', 'жіночий', 'чоловічий', 'дитячий', 'унісекс',
+    'мл', 'г', 'кг', 'л', 'мм', 'см', 'м', 'black', 'white', 'чорний', 'білий'
+  ]);
+
+  // Product types and anatomy that should NOT be part of the series name
+  const productTypesAndAnatomy = new Set([
+    'body', 'hair', 'face', 'skin', 'hands', 'feet', 'lips',
+    'тіло', 'тіла', 'волосся', 'обличчя', 'шкіра', 'шкіри', 'руки', 'рук', 'рукам', 'ноги', 'ніг', 'ногам', 'губи', 'губ',
+    'спрей', 'міст', 'шампунь', 'кондиціонер', 'бальзам', 'крем', 'гель', 'лосьйон', 'олія', 'маска', 'сироватка', 'мило',
+    'парфумований', 'парфумована', 'туалетна', 'вода', 'духи',
+    'spray', 'mist', 'shampoo', 'conditioner', 'balm', 'cream', 'gel', 'lotion', 'oil', 'mask', 'serum', 'soap'
+  ]);
+
+  const rawTokens = titleClean
+    .split(/[\s,./\-_+]+/)
+    .filter(t => t.length > 0 && !stopWords.has(t));
+
+  const seriesTokens: string[] = [];
+  for (let i = 0; i < rawTokens.length; i++) {
+    const t = rawTokens[i];
+    if (productTypesAndAnatomy.has(t)) {
+      continue;
+    }
+    if (seriesTokens.length === 0) {
+      if (/^[a-zа-яіїєґ0-9]{2,}$/i.test(t)) {
+        seriesTokens.push(t);
+        // If next token is a number or sub-model (like "01", "02", "pro", "max", "ultra")
+        if (i + 1 < rawTokens.length) {
+          const next = rawTokens[i + 1];
+          if (/^\d{1,4}$/.test(next) || /^(pro|max|ultra|plus|mini|lite|fe|gt|se|neo)$/i.test(next)) {
+            seriesTokens.push(next);
+            i++;
+          }
+        }
+      }
+    } else if (seriesTokens.length < 3) {
+      if (!productTypesAndAnatomy.has(t) && !/^\d{3,}$/.test(t)) {
+        seriesTokens.push(t);
+      }
+    }
+    if (seriesTokens.length >= 2) break;
+  }
+
+  const seriesPart = seriesTokens.join('_');
+  const brandPart = (cleanBrand || 'brand').replace(/[\s,./\-_+]+/g, '_');
+
+  return `${brandPart}__${seriesPart || 'general'}`.replace(/[^a-zA-Z0-9а-яіїєґА-ЯІЇЄҐ_-]/g, '');
+}
+
+/**
+ * Checks whether a column represents a mandatory characteristic that requires filling.
+ * Excludes system/content/media columns (ID, Title, SKU, Price, Description, Photo, Availability, Category).
+ */
+export function isMandatoryCharacteristicColumn(col: EpicentrColumn): boolean {
+  if (!col) return false;
+  const cleanLower = (col.cleanName || col.originalName).toLowerCase().trim();
+  const origLower = col.originalName.toLowerCase().trim();
+
+  if (
+    cleanLower === 'id' ||
+    cleanLower.startsWith('id ') ||
+    cleanLower === 'артикул' ||
+    cleanLower === 'sku' ||
+    cleanLower.startsWith('назва товару') ||
+    cleanLower.startsWith('опис') ||
+    cleanLower === 'ціна' ||
+    cleanLower === 'наявність' ||
+    cleanLower === 'категорія' ||
+    cleanLower.includes('фото') ||
+    origLower.includes('фото') ||
+    cleanLower.includes('зображення') ||
+    cleanLower.includes('photo') ||
+    cleanLower.includes('image')
+  ) {
+    return false;
+  }
+
+  return Boolean(col.isRequired || col.originalName.includes('*') || (col.cleanName && col.cleanName.includes('*')));
+}
+
+/**
+ * Checks whether all mandatory characteristics for a product row have valid non-empty values.
+ * Used for Zero-AI cutoff (eliminates unnecessary Gemini / Grounding API calls for 7000+ catalogs).
+ */
+export function areAllMandatoryCharacteristicsFilled(
+  row: Record<string, any>,
+  columns: EpicentrColumn[]
+): boolean {
+  for (const col of columns) {
+    if (isMandatoryCharacteristicColumn(col)) {
+      const v1 = row[col.originalName];
+      const v2 = row[col.cleanName];
+      const normKey = normalizeEpicentrHeaderName(col.originalName);
+      const v3 = row[normKey];
+
+      const empty1 = v1 === undefined || v1 === null || String(v1).trim() === '' || String(v1).toLowerCase() === 'nan';
+      const empty2 = v2 === undefined || v2 === null || String(v2).trim() === '' || String(v2).toLowerCase() === 'nan';
+      const empty3 = v3 === undefined || v3 === null || String(v3).trim() === '' || String(v3).toLowerCase() === 'nan';
+
+      if (empty1 && empty2 && empty3) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 /**
@@ -4142,3 +4423,4 @@ export function generateEpicentrExportWorkbook(
 
   return wb;
 }
+

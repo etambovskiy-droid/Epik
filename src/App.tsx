@@ -9,6 +9,7 @@ import {
   EpicentrColumn,
   EpicentrDictionaryAttribute,
   EpicentrProductRow,
+  EpicentrValueDiff,
   ProcessSettings,
   ProcessingReportSummary
 } from './types/epicentr';
@@ -878,7 +879,9 @@ export function App() {
 
   // Update cell value handler for table edits and AI enrichment
   const handleUpdateCellValue = (rowIdx: number, columnName: string, newValue: string) => {
-    const col = columns.find(c => c.originalName === columnName);
+    const col = columns.find(c => c.originalName === columnName || c.cleanName === columnName);
+    const origColName = col ? col.originalName : columnName;
+    const cleanColName = col ? col.cleanName : columnName;
     let finalValue = newValue;
     if (col && (col.type === 'select' || col.type === 'multiselect') && newValue.trim() !== '') {
       const dictAttr = findDictionaryAttr(dictionaryIndex, col.originalName || col.cleanName);
@@ -891,22 +894,55 @@ export function App() {
     setProcessedRows(prev => {
       const updated = [...prev];
       if (updated[rowIdx]) {
-        updated[rowIdx] = {
-          ...updated[rowIdx],
-          updatedRow: {
-            ...updated[rowIdx].updatedRow,
-            [columnName]: finalValue
+        const cur = updated[rowIdx];
+        const newUpdatedRow = {
+          ...cur.updatedRow,
+          [origColName]: finalValue,
+          [cleanColName]: finalValue
+        };
+        const newDiffs = { ...(cur.diffs || {}) };
+        if (finalValue && finalValue.trim() !== '') {
+          const diffEntry: EpicentrValueDiff = {
+            colIndex: col?.colIndex ?? 0,
+            columnName: origColName,
+            isRequired: col?.isRequired ?? false,
+            type: col?.type ?? 'string',
+            oldValue: String(cur.updatedRow?.[origColName] || cur.updatedRow?.[cleanColName] || ''),
+            newValue: finalValue,
+            source: 'manual',
+            confidence: 1.0,
+            note: 'Заповнено користувачем вручну / масово'
+          };
+          newDiffs[origColName] = diffEntry;
+          if (cleanColName !== origColName) {
+            newDiffs[cleanColName] = diffEntry;
           }
+        }
+        const remainingUnfilled = (cur.unfilledRequiredFields || []).filter(f => {
+          const matched = columns.find(c => c.originalName === f || c.cleanName === f);
+          const oName = matched?.originalName || f;
+          const cName = matched?.cleanName || f;
+          const valInRow = newUpdatedRow[oName] || newUpdatedRow[cName];
+          return !valInRow || String(valInRow).trim() === '';
+        });
+
+        updated[rowIdx] = {
+          ...cur,
+          updatedRow: newUpdatedRow,
+          diffs: newDiffs,
+          unfilledRequiredFields: remainingUnfilled
         };
       }
       return updated;
     });
+
     setRawRows(prev => {
       const updated = [...prev];
       if (updated[rowIdx]) {
         updated[rowIdx] = {
           ...updated[rowIdx],
-          [columnName]: finalValue
+          [origColName]: finalValue,
+          [cleanColName]: finalValue
         };
       }
       return updated;
@@ -936,10 +972,10 @@ export function App() {
         }
       }
       if (finalVal) {
-        sanitizedUpdates[colName] = finalVal;
-        if (col && col.originalName !== colName) {
-          sanitizedUpdates[col.originalName] = finalVal;
-        }
+        const origCol = col?.originalName || colName;
+        const cleanCol = col?.cleanName || colName;
+        sanitizedUpdates[origCol] = finalVal;
+        sanitizedUpdates[cleanCol] = finalVal;
       }
     }
 
@@ -953,23 +989,48 @@ export function App() {
         const newDiffs = { ...(curRow.diffs || {}) };
 
         for (const [colName, val] of Object.entries(sanitizedUpdates)) {
-          const col = columns.find(c => c.originalName === colName);
-          newDiffs[colName] = {
+          const col = columns.find(c => c.originalName === colName || c.cleanName === colName);
+          const origKey = col?.originalName || colName;
+          const cleanKey = col?.cleanName || colName;
+
+          let valSource: EpicentrValueDiff['source'] = 'description';
+          if (sources && sources.length > 0) {
+            valSource = 'internet_search';
+          } else if (explanations?.[colName]?.toLowerCase().includes('фото')) {
+            valSource = 'photo';
+          } else if (explanations?.[colName]?.toLowerCase().includes('кеш') || explanations?.[colName]?.toLowerCase().includes('сері')) {
+            valSource = 'series_cache';
+          } else if (explanations?.[colName]?.toLowerCase().includes('експрес') || explanations?.[colName]?.toLowerCase().includes('pim')) {
+            valSource = 'local_express';
+          } else {
+            valSource = 'description';
+          }
+
+          const diffEntry: EpicentrValueDiff = {
             colIndex: col?.colIndex ?? 0,
-            columnName: colName,
+            columnName: origKey,
             isRequired: col?.isRequired ?? false,
             type: col?.type ?? 'string',
-            oldValue: String(curRow.updatedRow?.[colName] || ''),
+            oldValue: String(curRow.updatedRow?.[origKey] || curRow.updatedRow?.[cleanKey] || ''),
             newValue: val,
-            source: sources && sources.length > 0 ? 'internet_search' : 'already_filled',
+            source: valSource,
             confidence: 0.95,
-            note: explanations?.[colName] || 'AI-дозаповнення'
+            note: explanations?.[colName] || explanations?.[origKey] || explanations?.[cleanKey] || (sources && sources.length > 0 ? 'Знайдено через Google Grounding' : 'Заповнено агентом з довідника')
           };
+
+          newDiffs[origKey] = diffEntry;
+          if (cleanKey !== origKey) {
+            newDiffs[cleanKey] = diffEntry;
+          }
         }
 
-        const remainingUnfilled = (curRow.unfilledRequiredFields || []).filter(
-          f => !sanitizedUpdates[f]
-        );
+        const remainingUnfilled = (curRow.unfilledRequiredFields || []).filter(f => {
+          const matched = columns.find(c => c.originalName === f || c.cleanName === f);
+          const oName = matched?.originalName || f;
+          const cName = matched?.cleanName || f;
+          const valInRow = newUpdatedRow[oName] || newUpdatedRow[cName];
+          return !valInRow || String(valInRow).trim() === '';
+        });
 
         updated[rowIdx] = {
           ...curRow,

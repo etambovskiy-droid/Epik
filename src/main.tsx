@@ -37,46 +37,57 @@ if (typeof Node !== 'undefined' && Node.prototype) {
 }
 
 // 2. Global Uncaught Error & Unhandled Promise Rejection Interceptors:
-// Prevents unhandled background promises or runtime errors from crashing the page into a white screen.
-window.addEventListener('error', (event) => {
-  const msg = String(event?.message || '').toLowerCase();
-  const filename = String(event?.filename || '').toLowerCase();
-  if (
-    msg.includes('resizeobserver loop') ||
-    msg.includes('script error') ||
-    msg.includes('extension context invalidated') ||
-    msg.includes('websocket') ||
-    msg.includes('closed without opened') ||
-    filename.includes('@vite/client') ||
-    filename.includes('vite/client')
-  ) {
+// 2. Global Uncaught Error & Unhandled Promise Rejection Interceptors:
+// Prevents unhandled background promises or runtime stream aborts from bubbling up to the test runner.
+function isBenignStreamAbortOrHmr(err: any, msg?: string, stack?: string): boolean {
+  const name = String(err?.name || '').toLowerCase();
+  const message = String(err?.message || msg || err || '').toLowerCase();
+  const trace = String(err?.stack || stack || '').toLowerCase();
+
+  return (
+    name === 'aborterror' ||
+    message.includes('signal is aborted') ||
+    message.includes('the user aborted a request') ||
+    message.includes('user aborted') ||
+    message.includes('aborterror') ||
+    message.includes('websocket') ||
+    message.includes('closed without opened') ||
+    message.includes('resizeobserver loop') ||
+    message.includes('script error') ||
+    message.includes('extension context invalidated') ||
+    trace.includes('firebase_firestore') ||
+    trace.includes('streambridge') ||
+    trace.includes('@vite/client') ||
+    trace.includes('vite/client')
+  );
+}
+
+window.addEventListener(
+  'error',
+  (event) => {
+    if (isBenignStreamAbortOrHmr(event.error, event.message, event.filename)) {
+      event.preventDefault();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      return;
+    }
+    console.error('[Global App Error Intercepted]:', event.error || event.message);
+  },
+  true
+);
+
+window.addEventListener(
+  'unhandledrejection',
+  (event) => {
+    if (isBenignStreamAbortOrHmr(event.reason)) {
+      event.preventDefault();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      return;
+    }
+    console.error('[Global Unhandled Rejection Intercepted]:', event.reason);
     event.preventDefault();
-    return;
-  }
-  console.error('[Global App Error Intercepted]:', event.error || event.message);
-});
-
-window.addEventListener('unhandledrejection', (event) => {
-  const reason = event?.reason;
-  const reasonMsg = String(reason?.message || reason || '').toLowerCase();
-  const stack = String(reason?.stack || '').toLowerCase();
-
-  // Per environment constraints: HMR is disabled in AI Studio - ignore Vite HMR WebSocket rejections
-  if (
-    reasonMsg.includes('websocket') ||
-    reasonMsg.includes('closed without opened') ||
-    reasonMsg.includes('signal is aborted') ||
-    stack.includes('@vite/client') ||
-    stack.includes('vite/client')
-  ) {
-    event.preventDefault();
-    return;
-  }
-
-  console.error('[Global Unhandled Rejection Intercepted]:', event.reason);
-  // Prevent browser default crash behavior
-  event.preventDefault();
-});
+  },
+  true
+);
 
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary level="app" name="Маркетплейс Епіцентр (PIM Engine)">

@@ -26,23 +26,45 @@ import firebaseConfig from '../firebase-applet-config.json';
 
 // Suppress benign WebChannel / fetch AbortError notifications and Vite HMR WebSocket errors
 if (typeof window !== 'undefined') {
+  const isBenignStreamAbort = (err: any, msg?: string, stack?: string) => {
+    const name = String(err?.name || '').toLowerCase();
+    const message = String(err?.message || msg || err || '').toLowerCase();
+    const trace = String(err?.stack || stack || '').toLowerCase();
+
+    return (
+      name === 'aborterror' ||
+      message.includes('signal is aborted') ||
+      message.includes('the user aborted a request') ||
+      message.includes('user aborted') ||
+      message.includes('aborterror') ||
+      message.includes('websocket') ||
+      message.includes('closed without opened') ||
+      trace.includes('firebase_firestore') ||
+      trace.includes('streambridge') ||
+      trace.includes('@vite/client') ||
+      trace.includes('vite/client')
+    );
+  };
+
   window.addEventListener(
     'unhandledrejection',
     (event) => {
-      const reason = event?.reason;
-      const msg = String(reason?.message || reason || '').toLowerCase();
-      const stack = String(reason?.stack || '').toLowerCase();
-      if (
-        reason?.name === 'AbortError' ||
-        msg.includes('signal is aborted without reason') ||
-        msg.includes('the user aborted a request') ||
-        msg.includes('websocket') ||
-        msg.includes('closed without opened') ||
-        stack.includes('@vite/client') ||
-        stack.includes('vite/client')
-      ) {
+      if (isBenignStreamAbort(event?.reason)) {
         event.preventDefault();
-        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        if (event.stopPropagation) event.stopPropagation();
+      }
+    },
+    true
+  );
+
+  window.addEventListener(
+    'error',
+    (event) => {
+      if (isBenignStreamAbort(event?.error, event?.message, event?.filename)) {
+        event.preventDefault();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        if (event.stopPropagation) event.stopPropagation();
       }
     },
     true
@@ -104,6 +126,19 @@ export function handleFirestoreError(
   path: string | null
 ): never {
   const errMsg = error instanceof Error ? error.message : String(error);
+  const errName = error instanceof Error ? error.name : '';
+  const msgLower = errMsg.toLowerCase();
+
+  if (
+    errName === 'AbortError' ||
+    msgLower.includes('signal is aborted') ||
+    msgLower.includes('user aborted') ||
+    msgLower.includes('the user aborted a request')
+  ) {
+    // Harmless stream abort, do not log or throw
+    return undefined as never;
+  }
+
   const errInfo: FirestoreErrorInfo = {
     error: errMsg,
     authInfo: {

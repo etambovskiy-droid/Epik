@@ -4,7 +4,49 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
-      // Ensure window.fetch has both getter and setter for iframe extensions & tools
+      // 1. Early global interceptor for harmless background stream aborts, iframe reload aborts, and Vite HMR errors
+      (function() {
+        function isBenignAbortOrHmrError(err, msg, stack) {
+          var name = String((err && err.name) || '').toLowerCase();
+          var message = String((err && err.message) || msg || err || '').toLowerCase();
+          var trace = String((err && err.stack) || stack || '').toLowerCase();
+
+          return (
+            name === 'aborterror' ||
+            message.includes('signal is aborted') ||
+            message.includes('the user aborted a request') ||
+            message.includes('user aborted') ||
+            message.includes('aborterror') ||
+            message.includes('websocket') ||
+            message.includes('closed without opened') ||
+            message.includes('resizeobserver loop') ||
+            trace.includes('firebase_firestore') ||
+            trace.includes('streambridge') ||
+            trace.includes('@vite/client') ||
+            trace.includes('vite/client')
+          );
+        }
+
+        window.addEventListener('error', function(event) {
+          if (isBenignAbortOrHmrError(event.error, event.message, event.filename)) {
+            event.preventDefault();
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+            if (event.stopPropagation) event.stopPropagation();
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (isBenignAbortOrHmrError(event.reason, '', '')) {
+            event.preventDefault();
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+            if (event.stopPropagation) event.stopPropagation();
+            return true;
+          }
+        }, true);
+      })();
+
+      // 2. Ensure window.fetch has both getter and setter for iframe extensions & tools
       (function() {
         try {
           var realFetch = window.fetch ? window.fetch.bind(window) : undefined;

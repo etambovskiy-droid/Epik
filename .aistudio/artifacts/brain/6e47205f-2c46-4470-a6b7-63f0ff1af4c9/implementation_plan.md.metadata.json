@@ -1,6 +1,6 @@
 {
-  "summary":  "Документація переходу на прямі REST-запити до Google Generative Language API з браузера без відносних бекенд-маршрутів, усунення помилок 404 (Not Found) на Vercel та конфігурація Google Search Grounding на клієнті.",
-  "updatedAt":  "2026-11-02T13:05:52.303788472Z",
-  "requestFeedback":  true,
-  "userFacing":  true
+  "summary": "Діагностика та усунення 3 ключових причин порожнього експорту, відображення заповнених полів та роботи на Vercel",
+  "updatedAt": "2026-11-04T09:55:34.322955614Z",
+  "requestFeedback": true,
+  "userFacing": true
 }

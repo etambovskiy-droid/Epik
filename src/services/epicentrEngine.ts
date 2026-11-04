@@ -2637,7 +2637,8 @@ export function enforceDictionaryValue(
 
   // 3. Select without fixed dictionary
   if (colType === 'select') {
-    return null; // Strict rule: select without verified dictionary cannot accept arbitrary unverified text
+    // If no dictionary is loaded for this attribute, allow clean text as long as it's not a hex code or AI disclaimer
+    return cleaned || null;
   }
 
   // 4. ARRAY: Normalize delimiter to "; "
@@ -4215,10 +4216,20 @@ export function generateEpicentrExportWorkbook(
     }
 
     // 3. For cells that were originally EMPTY in the input Excel:
-    const hasExplicitUpdatedKey = Object.prototype.hasOwnProperty.call(pRow.updatedRow, col.originalName);
-    const candidateVal = hasExplicitUpdatedKey
-      ? pRow.updatedRow[col.originalName]
-      : '';
+    let candidateVal: any = pRow.updatedRow[col.originalName];
+    if (candidateVal === undefined || candidateVal === null || String(candidateVal).trim() === '') {
+      candidateVal = pRow.updatedRow[col.cleanName];
+    }
+    if (candidateVal === undefined || candidateVal === null || String(candidateVal).trim() === '') {
+      const normH = normalizeEpicentrHeaderName(col.originalName);
+      candidateVal = pRow.updatedRow[normH];
+    }
+    if ((candidateVal === undefined || candidateVal === null || String(candidateVal).trim() === '') && pRow.diffs) {
+      const d = pRow.diffs[col.originalName] || pRow.diffs[col.cleanName];
+      if (d && d.newValue !== undefined && d.newValue !== null && String(d.newValue).trim() !== '') {
+        candidateVal = d.newValue;
+      }
+    }
 
     if (candidateVal === undefined || candidateVal === null || String(candidateVal).trim() === '') {
       if ((col.isRequired || col.originalName.includes('*')) && dictionaryIndex) {
@@ -4249,25 +4260,27 @@ export function generateEpicentrExportWorkbook(
     if ((col.type === 'select' || col.type === 'multiselect') && dictionaryIndex) {
       const dictAttr = findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName);
       if (dictAttr && dictAttr.allowedValues.length > 0) {
-        return sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, col.type === 'multiselect');
+        const sanitized = sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, col.type === 'multiselect');
+        return sanitized || '';
       }
-      return '';
+      // If no dictionary attribute exists in index, preserve the valid filled value
+      return candStr;
     }
 
     if (col.type === 'multiselect') {
       const dictAttr = dictionaryIndex ? findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName) : undefined;
       if (dictAttr && dictAttr.allowedValues.length > 0) {
-        return sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, true);
+        return sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, true) || '';
       }
-      return '';
+      return candStr;
     }
 
     if (col.type === 'select') {
       const dictAttr = dictionaryIndex ? findDictionaryAttr(dictionaryIndex, col.cleanName || col.originalName) : undefined;
       if (dictAttr && dictAttr.allowedValues.length > 0) {
-        return sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, false);
+        return sanitizeValueAgainstDictionary(candStr, dictAttr.allowedValues, false) || '';
       }
-      return '';
+      return candStr;
     }
 
     return candidateVal;

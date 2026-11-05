@@ -346,6 +346,20 @@ function applyLocalPimExtraction(
       }
     }
 
+    // 2.1 Product Type / Kind fallback (when dictionary is missing or deterministic check was skipped)
+    if (!candidateVal && (normKey === 'вид' || normKey === 'тип засобу' || normKey.includes('тип засобу') || normKey.includes('тип продукту'))) {
+      const titleLower = `${titleUa} ${titleRu}`.toLowerCase();
+      if (titleLower.includes('шампун')) candidateVal = 'Шампунь';
+      else if (titleLower.includes('гель для душу')) candidateVal = 'Гель для душу';
+      else if (titleLower.includes('кондиціонер')) candidateVal = 'Кондиціонер';
+      else if (titleLower.includes('маска')) candidateVal = 'Маска';
+      else if (titleLower.includes('бальзам')) candidateVal = 'Бальзам';
+      else if (titleLower.includes('крем')) candidateVal = 'Крем';
+      else if (titleLower.includes('спрей')) candidateVal = 'Спрей';
+      else if (titleLower.includes('сироватка') || titleLower.includes('серум')) candidateVal = 'Сироватка';
+      else if (titleLower.includes('набір')) candidateVal = 'Косметичний набір';
+    }
+
     // 3. Enforce strict dictionary validation before recording
     if (candidateVal && String(candidateVal).trim()) {
       if (hasDict && dict && dict.allowedValues && dict.allowedValues.length > 0) {
@@ -808,11 +822,20 @@ export function applySeriesCacheToRow(
           cachedAttrs['країна-виробник'] ||
           cachedAttrs['країна реєстрації бренду'] ||
           cachedAttrs['країна'];
-      } else if (normKey === 'вид' || normKey.startsWith('вид')) {
+      } else if (
+        normKey === 'вид' ||
+        normKey.startsWith('вид') ||
+        normKey === 'тип засобу' ||
+        normKey.includes('тип засобу') ||
+        normKey.includes('тип продукту') ||
+        (normKey === 'тип' && !normKey.includes('шкір') && !normKey.includes('волос'))
+      ) {
         matchedVal =
           cachedAttrs['__type__'] ||
+          cachedAttrs['тип засобу'] ||
           cachedAttrs['вид'] ||
-          cachedAttrs['вид продукту'];
+          cachedAttrs['вид продукту'] ||
+          cachedAttrs['тип'];
       } else if (normKey.includes('стать')) {
         matchedVal =
           cachedAttrs['__gender__'] ||

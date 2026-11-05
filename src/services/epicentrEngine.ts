@@ -1152,9 +1152,18 @@ export function extractDeterministicMandatoryPimAttribute(
   };
 
   // -------------------------------------------------------------------------
-  // 1. ВИД* (Type)
+  // 1. ВИД* / ТИП ЗАСОБУ* (Type / Form / Product Category)
   // -------------------------------------------------------------------------
-  if (normKey === 'вид' || normKey.startsWith('вид')) {
+  const isTypeOrKind =
+    normKey === 'вид' ||
+    normKey.startsWith('вид') ||
+    normKey === 'тип засобу' ||
+    normKey.includes('тип засобу') ||
+    normKey.includes('тип продукту') ||
+    normKey === 'тип товару' ||
+    (normKey === 'тип' && !normKey.includes('шкір') && !normKey.includes('волос'));
+
+  if (isTypeOrKind) {
     // If title or description has "набір" / "набор" / "set"
     if (
       titleCombined.includes('набір') ||
@@ -1178,16 +1187,37 @@ export function extractDeterministicMandatoryPimAttribute(
       if (anySet) return anySet;
     }
 
-    // Specific product types if not set
-    const typeCandidates = [
-      'шампунь', 'кондиціонер', 'крем', 'сироватка', 'маска', 'гель для душу',
-      'гель', 'спрей', 'міст', 'бальзам', 'лосьйон', 'олія', 'пінка', 'скраб',
-      'мило', 'дезодорант', 'молочко', 'тонік', 'пілінг'
-    ];
-    for (const typeCand of typeCandidates) {
-      if (titleCombined.includes(typeCand) || textLower.includes(typeCand)) {
-        const m = findAllowed(typeCand);
-        if (m) return m;
+    // Universal Category-Agnostic Option Matcher across ANY product category
+    // (tools, electronics, plumbing, furniture, cosmetics, auto, clothing, appliances, garden, etc.):
+    const sortedTypeOptions = [...allowedValues]
+      .filter(v => v && !isInternalHexOrHashId(v) && !isAiDisclaimerOrServiceText(v))
+      .sort((a, b) => b.length - a.length);
+
+    // 1. First pass: Scan title (highest priority) for exact option or stem match
+    for (const opt of sortedTypeOptions) {
+      const optNorm = normalizeForDictionaryComparison(opt, 'exact');
+      if (!optNorm || optNorm.length < 2) continue;
+
+      const stem = optNorm.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою|ому|ів|ов|ев|евый|овый)$/i, '');
+      const escapedStem = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const reg = new RegExp(`(?<![а-яіїєґa-z0-9])${escapedStem}`, 'i');
+
+      if (reg.test(titleCombined)) {
+        return opt;
+      }
+    }
+
+    // 2. Second pass: Scan full text (description + specs)
+    for (const opt of sortedTypeOptions) {
+      const optNorm = normalizeForDictionaryComparison(opt, 'exact');
+      if (!optNorm || optNorm.length < 3) continue;
+
+      const stem = optNorm.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою|ому|ів|ов|ев|евый|овый)$/i, '');
+      const escapedStem = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const reg = new RegExp(`(?<![а-яіїєґa-z0-9])${escapedStem}`, 'i');
+
+      if (reg.test(textLower)) {
+        return opt;
       }
     }
   }
@@ -1478,22 +1508,36 @@ export function resolveMandatoryFallback(
     return matchSingleOptionAgainstAllowed(target, allowedValues);
   };
 
-  // 1. Вид* (Type)
-  if (normKey === 'вид' || normKey.startsWith('вид')) {
-    if (lowerContext.includes('набір') || lowerContext.includes('набор') || lowerContext.includes('set') || lowerContext.includes('косметик')) {
-      const match =
-        findAllowed('косметичний набір') ||
-        findAllowed('набір') ||
-        findAllowed('подарунковий набір') ||
-        findAllowed('набір косметики') ||
-        findAllowed('набір для догляду');
-      if (match) return match;
-    }
-    const anySet = allowedValues.find(v => /набір|набор|set/i.test(v) && !isInternalHexOrHashId(v));
-    if (anySet) return anySet;
+  // 1. Вид* / Тип засобу*
+  const isTypeFallback =
+    normKey === 'вид' ||
+    normKey.startsWith('вид') ||
+    normKey === 'тип засобу' ||
+    normKey.includes('тип засобу') ||
+    normKey.includes('тип продукту') ||
+    (normKey === 'тип' && !normKey.includes('шкір') && !normKey.includes('волос'));
 
-    const setDef = findAllowed('косметичний набір') || findAllowed('набір');
-    if (setDef) return setDef;
+  if (isTypeFallback) {
+    // 1. Dynamic scan of allowedValues against product context
+    const sortedAllowed = [...allowedValues]
+      .filter(v => v && !isInternalHexOrHashId(v) && !isAiDisclaimerOrServiceText(v))
+      .sort((a, b) => b.length - a.length);
+
+    for (const opt of sortedAllowed) {
+      const optNorm = normalizeForDictionaryComparison(opt, 'exact');
+      if (!optNorm || optNorm.length < 2) continue;
+      const stem = optNorm.replace(/(ий|ій|а|я|е|є|і|ї|ої|их|ім|им|ою|ому|ів|ов|ев|евый|овый)$/i, '');
+      const escapedStem = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const reg = new RegExp(`(?<![а-яіїєґa-z0-9])${escapedStem}`, 'i');
+      if (reg.test(lowerContext)) {
+        return opt;
+      }
+    }
+
+    if (lowerContext.includes('набір') || lowerContext.includes('набор') || lowerContext.includes('set')) {
+      const anySet = allowedValues.find(v => /набір|набор|set/i.test(v) && !isInternalHexOrHashId(v));
+      if (anySet) return anySet;
+    }
 
     const uni = findAllowed('універсальний');
     if (uni) return uni;
@@ -2700,8 +2744,10 @@ export function findDictionaryAttr(
     if (colFuzzy.includes('клас') && dFuzzy.includes('клас')) return true;
     if (colFuzzy.includes('одиниц') && dFuzzy.includes('одиниц')) return true;
     if (colFuzzy.includes('форма випуску') && dFuzzy.includes('форма випуску')) return true;
-    if (colFuzzy.includes('призначення') && dFuzzy.includes('призначення')) return true;
     if ((colFuzzy === 'вид' || colFuzzy.startsWith('вид')) && (dFuzzy === 'вид' || dFuzzy.startsWith('вид'))) return true;
+    const isProductTypeCol = (colFuzzy === 'вид' || colFuzzy === 'тип засобу' || colFuzzy === 'тип продукту' || colFuzzy === 'тип товару') && !colFuzzy.includes('волос') && !colFuzzy.includes('шкір');
+    const isProductTypeDict = (dFuzzy === 'вид' || dFuzzy === 'тип засобу' || dFuzzy === 'тип продукту' || dFuzzy === 'тип товару') && !dFuzzy.includes('волос') && !dFuzzy.includes('шкір');
+    if (isProductTypeCol && isProductTypeDict) return true;
     if (colFuzzy.includes('бренд') && dFuzzy.includes('бренд')) return true;
     return false;
   });
@@ -3293,7 +3339,7 @@ export function extractDimensionsFromText(text: string): {
     }
   } else {
     // 2. Check 2D pair: e.g. "Розмір: 30х40 см", "25 x 25 см"
-    const pairRegex = /(?:розмір[иа]?|габарит[иа]?|коробк[аи]|упаковк[аи]|пакуванн[яі]|формат)?[^0-9]{0,25}(\d+(?:[.,]\d+)?)\s*[xXхХ×*]\s*(\d+(?:[.,]\d+)?)\s*(мм|см|м|mm|cm)\b/i;
+    const pairRegex = /(?:розмір[иа]?|габарит[иа]?|коробк[аи]|упаковк[аи]|пакуванн[яі]|формат)?[^0-9]{0,25}(\d+(?:[.,]\d+)?)\s*[xXхХ×*]\s*(\d+(?:[.,]\d+)?)\s*(мм|см|м|mm|cm)(?![а-яіїєґёъыэa-zA-Z0-9])/i;
     const pairMatch = text.match(pairRegex);
     if (pairMatch) {
       const unit = pairMatch[3];
@@ -3308,25 +3354,25 @@ export function extractDimensionsFromText(text: string): {
   }
 
   // 3. Explicit labeled dimensions override if present in text
-  const heightMatch = text.match(/(?:висота|высота)(?:\s*упаковки|\s*коробки|\s*товару)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(мм|см|м|mm|cm)?/i);
+  const heightMatch = text.match(/(?:висота|высота)(?:\s*упаковки|\s*коробки|\s*товару)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(мм|см|м|mm|cm)?(?![а-яіїєґёъыэa-zA-Z0-9])/i);
   if (heightMatch) {
     const v = toMm(heightMatch[1], heightMatch[2]);
     if (v > 0) result.heightMm = v;
   }
 
-  const widthMatch = text.match(/(?:ширина)(?:\s*упаковки|\s*коробки|\s*товару)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(мм|см|м|mm|cm)?/i);
+  const widthMatch = text.match(/(?:ширина)(?:\s*упаковки|\s*коробки|\s*товару)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(мм|см|м|mm|cm)?(?![а-яіїєґёъыэa-zA-Z0-9])/i);
   if (widthMatch) {
     const v = toMm(widthMatch[1], widthMatch[2]);
     if (v > 0) result.widthMm = v;
   }
 
-  const depthMatch = text.match(/(?:глибина|глубина|товщина|толщина)(?:\s*упаковки|\s*коробки|\s*товару)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(мм|см|м|mm|cm)?/i);
+  const depthMatch = text.match(/(?:глибина|глубина|товщина|толщина)(?:\s*упаковки|\s*коробки|\s*товару)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(мм|см|м|mm|cm)?(?![а-яіїєґёъыэa-zA-Z0-9])/i);
   if (depthMatch) {
     const v = toMm(depthMatch[1], depthMatch[2]);
     if (v > 0) result.depthMm = v;
   }
 
-  const lengthMatch = text.match(/(?:довжина|длина)(?:\s*упаковки|\s*коробки|\s*товару)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(мм|см|м|mm|cm)?/i);
+  const lengthMatch = text.match(/(?:довжина|длина)(?:\s*упаковки|\s*коробки|\s*товару)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(мм|см|м|mm|cm)?(?![а-яіїєґёъыэa-zA-Z0-9])/i);
   if (lengthMatch) {
     const v = toMm(lengthMatch[1], lengthMatch[2]);
     if (v > 0) {
@@ -3358,14 +3404,14 @@ export function extractWeightGramsFromText(text: string): number | undefined {
   };
 
   // 1. Labeled weight: "Вага: 350 г", "Вага в упаковці: 0,45 кг", "Вес: 280 гр"
-  const labeledMatch = text.match(/(?:вага|вес|маса|масса)(?:\s*в\s*упаковці|\s*упаковки|\s*товару|\s*брутто|\s*нетто)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(кг|г|гр|грам|грами|грамів|kg|g)\b/i);
+  const labeledMatch = text.match(/(?:вага|вес|маса|масса)(?:\s*в\s*упаковці|\s*упаковки|\s*товару|\s*брутто|\s*нетто)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(кг|г|гр|грам|грами|грамів|kg|g)(?![а-яіїєґёъыэa-zA-Z0-9])/i);
   if (labeledMatch) {
     const w = parseWeight(labeledMatch[1], labeledMatch[2]);
     if (w && w >= 5 && w <= 200000) return w;
   }
 
   // 2. Unlabeled weight with explicit unit: "350 г", "420 гр", "0.5 кг"
-  const generalMatches = Array.from(text.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(кг|гр|грам|грами|грамів|г|kg)\b/gi));
+  const generalMatches = Array.from(text.matchAll(/(?:^|[^\p{L}\d])(\d+(?:[.,]\d+)?)\s*(кг|гр|грам|грами|грамів|г|kg)(?![а-яіїєґёъыэa-zA-Z0-9])/gui));
   for (const m of generalMatches) {
     const w = parseWeight(m[1], m[2]);
     if (w && w >= 10 && w <= 100000) {
@@ -3394,14 +3440,14 @@ export function extractVolumeMlFromText(text: string): number | undefined {
   };
 
   // 1. Labeled volume: "Об'єм: 400 мл", "Объем: 250 мл", "Об'єм: 1 л", "Об'єм товару: 500 мл"
-  const labeledMatch = text.match(/(?:об['’ʼ`]?єм|объем|емкость|місткість|мікрооб['’ʼ`]?єм)(?:\s*в\s*упаковці|\s*товару|\s*упаковки|\s*флакона|\s*банки)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(мл|ml|л|l|літрів|літра|литров|литра)\b/i);
+  const labeledMatch = text.match(/(?:об['’ʼ`]?єм|объем|емкость|місткість|мікрооб['’ʼ`]?єм)(?:\s*в\s*упаковці|\s*товару|\s*упаковки|\s*флакона|\s*банки)?[\s:=-]*(\d+(?:[.,]\d+)?)\s*(мл|ml|л|l|літрів|літра|литров|литра)(?![а-яіїєґёъыэa-zA-Z0-9])/i);
   if (labeledMatch) {
     const v = parseVol(labeledMatch[1], labeledMatch[2]);
     if (v && v >= 1 && v <= 50000) return v;
   }
 
   // 2. Unlabeled volume with explicit unit in title or text: "400 мл", "100 ml", "0.5 л", "500 мл"
-  const generalMatches = Array.from(text.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(мл|ml|л|l)\b/gi));
+  const generalMatches = Array.from(text.matchAll(/(?:^|[^\p{L}\d])(\d+(?:[.,]\d+)?)\s*(мл|ml|л|l)(?![а-яіїєґёъыэa-zA-Z0-9])/gui));
   for (const m of generalMatches) {
     const v = parseVol(m[1], m[2]);
     if (v && v >= 5 && v <= 20000) {
@@ -4206,6 +4252,22 @@ export function runEpicentrFillingEngine(
             if (labelNumMatch && labelNumMatch[1]) {
               candidateValue = labelNumMatch[1].replace(',', '.');
               note = 'Числове значення витягнуто з тексту опису';
+            }
+          }
+          // Product Type fallback when no dictionary is present
+          else if (!candidateValue && (normKeyNoUnit === 'вид' || normKeyNoUnit === 'тип засобу' || normKeyNoUnit.includes('тип засобу') || normKeyNoUnit.includes('тип продукту'))) {
+            const titleLower = `${visuals.titleUa} ${visuals.titleRu}`.toLowerCase();
+            if (titleLower.includes('шампун')) candidateValue = 'Шампунь';
+            else if (titleLower.includes('гель для душу')) candidateValue = 'Гель для душу';
+            else if (titleLower.includes('кондиціонер')) candidateValue = 'Кондиціонер';
+            else if (titleLower.includes('маска')) candidateValue = 'Маска';
+            else if (titleLower.includes('бальзам')) candidateValue = 'Бальзам';
+            else if (titleLower.includes('крем')) candidateValue = 'Крем';
+            else if (titleLower.includes('спрей')) candidateValue = 'Спрей';
+            else if (titleLower.includes('сироватка') || titleLower.includes('серум')) candidateValue = 'Сироватка';
+            else if (titleLower.includes('набір')) candidateValue = 'Косметичний набір';
+            if (candidateValue) {
+              note = 'Тип засобу визначено за назвою товару';
             }
           }
         }

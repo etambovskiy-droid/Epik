@@ -14,6 +14,7 @@ import {
   Filter,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   Info,
   ShieldCheck,
   Languages,
@@ -44,6 +45,8 @@ import {
   Sliders,
   Wand2
 } from 'lucide-react';
+import { ContextualFeedbackModal } from '../ContextualFeedbackModal';
+import { ContextSnapshot } from '../../types/feedback';
 import {
   generateEpicentrExportWorkbook,
   findDictionaryAttr,
@@ -145,6 +148,35 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
     message: string;
     type: 'success' | 'info';
   } | null>(null);
+
+  // Contextual feedback modal state
+  const [feedbackSnapshot, setFeedbackSnapshot] = useState<ContextSnapshot | null>(null);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+
+  const handleOpenFeedback = (
+    rowIdx: number,
+    colName: string,
+    colIndex: number,
+    rawValue: any,
+    parsedValue: any,
+    attributeId?: string,
+    allowedValuesSample?: string[],
+    errorMessage?: string
+  ) => {
+    setFeedbackSnapshot({
+      categoryId: '10542',
+      categoryName: 'Епіцентр Маркетплейс',
+      rowIndex: rowIdx,
+      columnIndex: colIndex,
+      columnName: colName,
+      attributeId,
+      rawValue,
+      parsedValue,
+      allowedValuesSample,
+      errorMessage
+    });
+    setIsFeedbackModalOpen(true);
+  };
 
   // Propagates a value to ALL empty cells in the specified column
   const handleApplyToAllEmpty = (colName: string, valueToApply: string) => {
@@ -1492,7 +1524,7 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                     {/* Dynamic Columns values with inline editing */}
                     {displayCols
                       .filter(c => !c.cleanName.toLowerCase().includes('назва') && !c.cleanName.toLowerCase().includes('артикул') && !c.cleanName.toLowerCase().includes('id') && !c.cleanName.toLowerCase().includes('фото') && !c.cleanName.toLowerCase().includes('опис'))
-                      .map(col => {
+                      .map((col, colIdx) => {
                         const val = pRow.updatedRow ? pRow.updatedRow[col.originalName] : undefined;
                         const diff = pRow.diffs ? pRow.diffs[col.originalName] : undefined;
                         const isMandatory = col.isRequired;
@@ -1581,7 +1613,29 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                                     </span>
                                   )}
                                 </div>
-                                <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover/cell:opacity-100 shrink-0 transition-opacity" />
+                                <div className="flex items-center gap-1 opacity-0 group-hover/cell:opacity-100 shrink-0 transition-opacity">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenFeedback(
+                                        pRow.rowIdx,
+                                        col.cleanName || col.originalName,
+                                        colIdx,
+                                        pRow.originalRow ? pRow.originalRow[col.originalName] : undefined,
+                                        val,
+                                        dictAttr?.attributeName,
+                                        dictAttr?.allowedValues?.slice(0, 10),
+                                        isEmpty && isMandatory ? 'Обов’язкове поле порожнє' : undefined
+                                      );
+                                    }}
+                                    className="p-0.5 rounded text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                                    title="Повідомити про помилку / відкрити фідбек для цієї комірки"
+                                  >
+                                    <AlertCircle className="w-3 h-3 text-amber-500" />
+                                  </button>
+                                  <Pencil className="w-3 h-3 text-slate-400" />
+                                </div>
                               </div>
                             )}
                           </td>
@@ -2078,6 +2132,20 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
           <span className="font-semibold">{notificationToast.message}</span>
         </div>
       )}
+
+      {/* Contextual Cell Feedback Modal */}
+      <ContextualFeedbackModal
+        isOpen={isFeedbackModalOpen}
+        onClose={() => setIsFeedbackModalOpen(false)}
+        context={feedbackSnapshot}
+        onSubmitted={() => {
+          setNotificationToast({
+            message: 'Фідбек по комірці успішно надіслано розробникам!',
+            type: 'success'
+          });
+          setTimeout(() => setNotificationToast(null), 3500);
+        }}
+      />
     </div>
   );
 };

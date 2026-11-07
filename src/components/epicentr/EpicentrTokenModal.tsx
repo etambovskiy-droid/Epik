@@ -91,6 +91,11 @@ export const EpicentrTokenModal: React.FC<EpicentrTokenModalProps> = ({
           onTokenUpdated(token.trim());
         }
       }
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        message: err?.message || 'Помилка тестування підключення до Merchant API'
+      });
     } finally {
       setIsTesting(false);
     }

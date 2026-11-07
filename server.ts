@@ -35,7 +35,8 @@ async function startServer() {
     try {
       const targetUrl = `https://merchant-api.epicentrm.com.ua${req.url}`;
       const headers: Record<string, string> = {
-        Accept: 'application/json'
+        Accept: 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 EpicentrPimClient/1.0'
       };
       if (req.headers.authorization) {
         headers.Authorization = req.headers.authorization;
@@ -758,6 +759,54 @@ ${attributesPromptSection}
         res.status(500).json({ error: error?.message || 'Gemini direct request failed' });
       }
     }
+  });
+
+  // In-memory feedback store for contextual cell issues
+  const inMemoryFeedbackStore: any[] = [];
+
+  // 9. Feedback API
+  app.post('/api/feedback', (req, res) => {
+    try {
+      const payload = req.body;
+      if (!payload || !payload.id || !payload.type || !payload.comment || !payload.context) {
+        res.status(400).json({
+          error: 'Invalid feedback payload',
+          message: 'Поля id, type, comment та context є обов’язковими'
+        });
+        return;
+      }
+
+      // Store in memory
+      inMemoryFeedbackStore.unshift({
+        ...payload,
+        receivedAt: new Date().toISOString()
+      });
+
+      // Keep last 200 items in memory
+      if (inMemoryFeedbackStore.length > 200) {
+        inMemoryFeedbackStore.pop();
+      }
+
+      console.log(`[Feedback Log] New feedback ${payload.id} received for category ${payload.context?.categoryName} (${payload.type})`);
+      res.status(201).json({
+        success: true,
+        id: payload.id,
+        message: 'Звіт успішно збережено'
+      });
+    } catch (err: any) {
+      console.error('[Feedback Error]:', err);
+      res.status(500).json({
+        error: 'Feedback processing failed',
+        message: err?.message || 'Помилка збереження фідбеку'
+      });
+    }
+  });
+
+  app.get('/api/feedback', (_req, res) => {
+    res.json({
+      total: inMemoryFeedbackStore.length,
+      items: inMemoryFeedbackStore
+    });
   });
 
   // Vite middleware for development, static serving for production

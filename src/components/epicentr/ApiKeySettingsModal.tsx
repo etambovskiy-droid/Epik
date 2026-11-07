@@ -195,6 +195,11 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
       if (res.success && epicentrToken.trim()) {
         epicentrMerchantApi.saveToken(epicentrToken, activeStoreId);
       }
+    } catch (err: any) {
+      setEpicentrTestResult({
+        success: false,
+        message: err?.message || 'Непередбачена помилка під час перевірки токена'
+      });
     } finally {
       setIsTestingEpicentr(false);
     }

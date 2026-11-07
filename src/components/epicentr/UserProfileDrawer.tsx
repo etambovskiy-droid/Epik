@@ -139,6 +139,11 @@ export const UserProfileDrawer: React.FC<UserProfileDrawerProps> = ({
       if (res.success && merchantToken.trim()) {
         epicentrMerchantApi.saveToken(merchantToken);
       }
+    } catch (err: any) {
+      setTokenResult({
+        success: false,
+        message: err?.message || 'Помилка перевірки токена'
+      });
     } finally {
       setIsTestingToken(false);
     }

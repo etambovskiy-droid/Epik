@@ -5,6 +5,9 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  sendPasswordResetEmail,
+  confirmPasswordReset,
+  verifyPasswordResetCode,
   User as FirebaseUser
 } from 'firebase/auth';
 import {
@@ -91,6 +94,7 @@ function initDb(): Firestore {
 export const db = initDb();
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export { sendPasswordResetEmail, confirmPasswordReset, verifyPasswordResetCode };
 
 export enum OperationType {
   CREATE = 'create',

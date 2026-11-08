@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { authService, UserProfile } from '../../services/authService';
 import { LoginView } from './LoginView';
 import { PendingApprovalView } from './PendingApprovalView';
 import { AdminApprovalHandler } from './AdminApprovalHandler';
+import { ResetPasswordModal } from './ResetPasswordModal';
 import { AlertCircle, LogOut } from 'lucide-react';
 
 interface AuthGuardProps {
@@ -16,11 +17,32 @@ interface AuthGuardProps {
   onOpenAdminUsers?: () => void;
 }
 
+function extractTokenFromLocation(): string | null {
+  if (typeof window === 'undefined') return null;
+  // 1. Check standard URL search query params
+  const searchParams = new URLSearchParams(window.location.search);
+  const searchToken = searchParams.get('resetToken') || searchParams.get('oobCode');
+  if (searchToken) return searchToken;
+
+  // 2. Check hash in case of hash navigation
+  if (window.location.hash.includes('resetToken=')) {
+    const hashPart = window.location.hash.split('?')[1] || window.location.hash.slice(1);
+    const hashParams = new URLSearchParams(hashPart);
+    return hashParams.get('resetToken') || hashParams.get('oobCode');
+  }
+
+  return null;
+}
+
 export const AuthGuard: React.FC<AuthGuardProps> = ({
   children,
   onUserChanged
 }) => {
   const [user, setUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
+
+  // Global URL password reset listener (active regardless of whether user is already logged in or not)
+  const [urlResetToken, setUrlResetToken] = useState<string | null>(() => extractTokenFromLocation());
+  const [isUrlResetModalOpen, setIsUrlResetModalOpen] = useState<boolean>(() => Boolean(extractTokenFromLocation()));
 
   useEffect(() => {
     const unsubscribe = authService.subscribe((updatedUser) => {
@@ -30,11 +52,52 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
     return () => unsubscribe();
   }, [onUserChanged]);
 
+  // Check URL token on popstate or navigation
+  useEffect(() => {
+    const checkToken = () => {
+      const token = extractTokenFromLocation();
+      if (token) {
+        setUrlResetToken(token);
+        setIsUrlResetModalOpen(true);
+      }
+    };
+    window.addEventListener('popstate', checkToken);
+    return () => window.removeEventListener('popstate', checkToken);
+  }, []);
+
+  const handleCloseResetModal = useCallback(() => {
+    setIsUrlResetModalOpen(false);
+    setUrlResetToken(null);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('resetToken');
+      url.searchParams.delete('oobCode');
+      window.history.replaceState({}, document.title, url.pathname + (url.search ? url.search : ''));
+    }
+  }, []);
+
+  const handlePasswordResetSuccess = useCallback((_resetEmail: string) => {
+    // When password is changed from email link, log out active session so user re-authenticates with new password
+    authService.logout();
+    setUser(null);
+    handleCloseResetModal();
+  }, [handleCloseResetModal]);
+
+  const globalResetModal = (
+    <ResetPasswordModal
+      isOpen={isUrlResetModalOpen}
+      onClose={handleCloseResetModal}
+      initialToken={urlResetToken}
+      onPasswordResetSuccess={handlePasswordResetSuccess}
+    />
+  );
+
   // 1. Not Authenticated -> Show full-screen Login / Register View
   if (!user) {
     return (
       <>
         <AdminApprovalHandler onApprovalComplete={() => setUser(authService.getCurrentUser())} />
+        {globalResetModal}
         <LoginView onSuccess={(newUser) => setUser(newUser)} />
       </>
     );
@@ -45,6 +108,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
     return (
       <>
         <AdminApprovalHandler onApprovalComplete={() => setUser(authService.getCurrentUser())} />
+        {globalResetModal}
         <PendingApprovalView
           user={user}
           onStatusUpdated={(updated) => setUser(updated)}
@@ -58,6 +122,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
   if (user.status === 'rejected') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 flex flex-col justify-center items-center p-4">
+        {globalResetModal}
         <div className="w-full max-w-md bg-slate-900 border border-rose-800/80 rounded-3xl p-8 shadow-2xl text-slate-100 text-center space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
             <AlertCircle className="w-8 h-8" />
@@ -96,6 +161,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({
   return (
     <>
       <AdminApprovalHandler onApprovalComplete={() => setUser(authService.getCurrentUser())} />
+      {globalResetModal}
       {children}
     </>
   );

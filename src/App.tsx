@@ -64,6 +64,7 @@ import { UserProfileDrawer } from './components/epicentr/UserProfileDrawer';
 import { ImageStudioModal } from './components/epicentr/ImageStudioModal';
 import { SearchGroundingModal } from './components/epicentr/SearchGroundingModal';
 import { GeminiChatbotDrawer } from './components/epicentr/GeminiChatbotDrawer';
+import { DemoRestrictionModal } from './components/epicentr/DemoRestrictionModal';
 import { authService, UserProfile } from './services/authService';
 import { canAccessFeature, getDemoRestrictionMessage } from './services/permissionService';
 import {
@@ -73,7 +74,7 @@ import {
 } from './firebase';
 import { getCurrentAppVersion } from './services/userStoryEngine';
 import { EngineErrorEvent } from './types/epicentr';
-import { getStoredApiKey } from './services/aiApiKeyService';
+import { getStoredApiKey, hasUserApiKey } from './services/aiApiKeyService';
 import { MISSING_API_KEY_EVENT } from './services/geminiFillingService';
 
 // Icons
@@ -286,6 +287,22 @@ export function App() {
     return false;
   });
 
+  // Demo Restriction Modal State
+  const [isDemoRestrictionOpen, setIsDemoRestrictionOpen] = useState(false);
+  const [demoRestrictedFeature, setDemoRestrictedFeature] = useState<string>('Ця функція');
+
+  const handleDemoRestricted = (featureName: string) => {
+    setDemoRestrictedFeature(featureName);
+    setIsDemoRestrictionOpen(true);
+  };
+
+  const handleRegisterFromDemo = () => {
+    setIsDemoRestrictionOpen(false);
+    authService.logout();
+    setCurrentUser(null);
+    setIsAuthModalOpen(true);
+  };
+
   // Google AI Studio API Key State (localStorage: "epic_ai_key")
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [hasCustomApiKey, setHasCustomApiKey] = useState<boolean>(() => !!getStoredApiKey());
@@ -294,7 +311,7 @@ export function App() {
 
   const handleOpenApiKeyModal = () => {
     if (!canAccessFeature('CONFIGURE_API_KEYS', currentUser)) {
-      alert(getDemoRestrictionMessage('Керування API-ключами'));
+      handleDemoRestricted('Керування API-ключами');
       return;
     }
     setMissingKeyWarning(null);
@@ -303,10 +320,57 @@ export function App() {
 
   const handleOpenEpicentrTokenModal = () => {
     if (!canAccessFeature('CONFIGURE_API_KEYS', currentUser)) {
-      alert(getDemoRestrictionMessage('Керування токеном Merchant API'));
+      handleDemoRestricted('Керування токеном Merchant API');
       return;
     }
     setIsEpicentrTokenModalOpen(true);
+  };
+
+  const handleOpenImageStudio = () => {
+    if (!canAccessFeature('IMAGE_STUDIO', currentUser)) {
+      handleDemoRestricted('ШІ-Фотостудія (Gemini Nano Banana)');
+      return;
+    }
+    if (!hasUserApiKey()) {
+      setMissingKeyWarning('Для використання ШІ-Фотостудії потрібен власний Google AI Studio API Key.');
+      setIsApiKeyModalOpen(true);
+      return;
+    }
+    setIsImageStudioOpen(true);
+  };
+
+  const handleOpenSearchGrounding = () => {
+    if (!canAccessFeature('SEARCH_GROUNDING', currentUser)) {
+      handleDemoRestricted('Google Search Grounding (Пошук характеристик)');
+      return;
+    }
+    if (!hasUserApiKey()) {
+      setMissingKeyWarning('Для пошуку актуальних характеристик через Google Search потрібен власний Google AI Studio API Key.');
+      setIsApiKeyModalOpen(true);
+      return;
+    }
+    setIsSearchGroundingOpen(true);
+  };
+
+  const handleOpenChatbot = () => {
+    if (!canAccessFeature('GEMINI_CHATBOT', currentUser)) {
+      handleDemoRestricted('ШІ-Консультант (Gemini)');
+      return;
+    }
+    if (!hasUserApiKey()) {
+      setMissingKeyWarning('Для спілкування з ШІ-Консультантом потрібен власний Google AI Studio API Key.');
+      setIsApiKeyModalOpen(true);
+      return;
+    }
+    setIsChatbotOpen(true);
+  };
+
+  const handleOpenXmlConverter = () => {
+    if (!canAccessFeature('XML_CONVERTER', currentUser)) {
+      handleDemoRestricted('Конвертація XML фідів Prom / Rozetka');
+      return;
+    }
+    setActiveTab('converter');
   };
 
   // Auto-Save State & Debounced serialization (3 seconds after last change)
@@ -706,6 +770,10 @@ export function App() {
 
   // Add a new store and switch to its isolated workspace
   const handleAddStore = (storeName: string) => {
+    if (!canAccessFeature('ADD_CUSTOM_STORE', currentUser)) {
+      handleDemoRestricted('Додавання нових магазинів');
+      return;
+    }
     if (rawRows.length > 0 && currentShop?.id) {
       saveAutoSaveSession(
         {
@@ -1107,15 +1175,16 @@ export function App() {
           isAutoSaving={isAutoSaving}
           hasPendingChanges={hasPendingChanges}
           onManualSave={handleManualSave}
-          onOpenXmlConverter={() => setActiveTab('converter')}
+          onOpenXmlConverter={handleOpenXmlConverter}
           isXmlConverterActive={activeTab === 'converter'}
           currentUser={currentUser}
           onOpenAuthModal={() => setIsAuthModalOpen(true)}
           onOpenProfileDrawer={() => setIsProfileDrawerOpen(true)}
-          onOpenImageStudio={() => setIsImageStudioOpen(true)}
-          onOpenSearchGrounding={() => setIsSearchGroundingOpen(true)}
-          onOpenChatbot={() => setIsChatbotOpen(true)}
+          onOpenImageStudio={handleOpenImageStudio}
+          onOpenSearchGrounding={handleOpenSearchGrounding}
+          onOpenChatbot={handleOpenChatbot}
           onOpenAdminUsers={() => setIsAdminUsersModalOpen(true)}
+          onDemoRestricted={handleDemoRestricted}
         />
 
       {/* Main Content Area */}
@@ -1375,6 +1444,7 @@ export function App() {
                   dictionaryIndex={dictionaryIndex}
                   onViewTable={() => setActiveTab('table')}
                   onViewErrors={() => setActiveTab('monitor')}
+                  onDemoRestricted={handleDemoRestricted}
                 />
               </ErrorBoundary>
             )}
@@ -1393,6 +1463,7 @@ export function App() {
                   }}
                   onUpdateCellValue={handleUpdateCellValue}
                   onUpdateRowValues={handleUpdateRowValues}
+                  onDemoRestricted={handleDemoRestricted}
                 />
               </ErrorBoundary>
             )}
@@ -1423,8 +1494,9 @@ export function App() {
                   currentUser={currentUser}
                   onProceedToClarification={() => setIsClarificationOpen(true)}
                   onOpenShare={() => setIsShareOpen(true)}
-                  onOpenXmlConverter={() => setActiveTab('converter')}
+                  onOpenXmlConverter={handleOpenXmlConverter}
                   onOpenEpicentrTokenModal={handleOpenEpicentrTokenModal}
+                  onDemoRestricted={handleDemoRestricted}
                 />
               </ErrorBoundary>
             )}
@@ -1445,8 +1517,9 @@ export function App() {
               currentUser={currentUser}
               onProceedToClarification={() => setIsClarificationOpen(true)}
               onOpenShare={() => setIsShareOpen(true)}
-              onOpenXmlConverter={() => setActiveTab('converter')}
+              onOpenXmlConverter={handleOpenXmlConverter}
               onOpenEpicentrTokenModal={handleOpenEpicentrTokenModal}
+              onDemoRestricted={handleDemoRestricted}
             />
           </ErrorBoundary>
         )}
@@ -1663,7 +1736,7 @@ export function App() {
       {!isChatbotOpen && (
         <button
           type="button"
-          onClick={() => setIsChatbotOpen(true)}
+          onClick={handleOpenChatbot}
           className="fixed bottom-5 right-5 z-40 flex items-center gap-2 px-4 py-3 rounded-2xl bg-gradient-to-r from-[#004BB7] to-[#FF6B00] hover:from-blue-700 hover:to-[#e66000] text-white font-extrabold text-xs shadow-xl border border-white/20 transition-transform hover:scale-105 cursor-pointer"
           title="Відкрити ШІ-Консультанта Епіцентру"
         >
@@ -1671,11 +1744,20 @@ export function App() {
           <span>ШІ-Консультант Gemini</span>
         </button>
       )}
+
       {/* Super Admin Users Management Modal */}
       <AdminUsersModal
         isOpen={isAdminUsersModalOpen}
         onClose={() => setIsAdminUsersModalOpen(false)}
         onUserUpdated={() => setCurrentUser(authService.getCurrentUser())}
+      />
+
+      {/* Demo Mode Restriction Modal (Default Deny Sandbox Guard) */}
+      <DemoRestrictionModal
+        isOpen={isDemoRestrictionOpen}
+        onClose={() => setIsDemoRestrictionOpen(false)}
+        featureName={demoRestrictedFeature}
+        onRegisterClick={handleRegisterFromDemo}
       />
     </div>
     </AuthGuard>

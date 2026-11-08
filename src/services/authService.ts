@@ -12,6 +12,7 @@ import {
   syncFirebaseUserProfile,
   signOutFirebase,
   handleFirestoreError,
+  sendPasswordResetEmail,
   OperationType
 } from '../firebase';
 
@@ -656,37 +657,32 @@ export class AuthService {
         return { success: false, error: 'Введіть коректні email та пароль' };
       }
 
-      // Special Super Admin password check
+      const accounts = this.getAccounts();
+      const account = accounts[cleanEmail];
+
+      if (account) {
+        if (account.passwordHash !== cleanPassword) {
+          return { success: false, error: 'Невірний пароль. Спробуйте ще раз або відновіть доступ' };
+        }
+        const normalized = normalizeUserProfile(account.user);
+        this.persistUser(normalized);
+        return { success: true, user: normalized, status: normalized.status };
+      }
+
+      // Fallback for default hardcoded accounts if not yet customized in accounts storage
       if (cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase() && cleanPassword === SUPER_ADMIN_PASSWORD) {
         const adminUser = normalizeUserProfile(SUPER_ADMIN_USER);
         this.persistUser(adminUser);
         return { success: true, user: adminUser, status: 'approved' };
       }
 
-      const accounts = this.getAccounts();
-      const account = accounts[cleanEmail];
-
-      if (!account) {
-        if (cleanEmail === DEFAULT_DEMO_USER.email.toLowerCase() && cleanPassword === DEFAULT_DEMO_PASSWORD) {
-          const demoUser = normalizeUserProfile(DEFAULT_DEMO_USER);
-          this.persistUser(demoUser);
-          return { success: true, user: demoUser, status: 'approved' };
-        }
-        return { success: false, error: 'Користувача з такою електронною поштою не знайдено' };
+      if (cleanEmail === DEFAULT_DEMO_USER.email.toLowerCase() && cleanPassword === DEFAULT_DEMO_PASSWORD) {
+        const demoUser = normalizeUserProfile(DEFAULT_DEMO_USER);
+        this.persistUser(demoUser);
+        return { success: true, user: demoUser, status: 'approved' };
       }
 
-      if (account.passwordHash !== cleanPassword) {
-        return { success: false, error: 'Невірний пароль. Спробуйте ще раз або відновіть доступ' };
-      }
-
-      const normalized = normalizeUserProfile(account.user);
-      this.persistUser(normalized);
-
-      return {
-        success: true,
-        user: normalized,
-        status: normalized.status
-      };
+      return { success: false, error: 'Користувача з такою електронною поштою не знайдено' };
     } catch (err: any) {
       return {
         success: false,
@@ -797,8 +793,6 @@ export class AuthService {
   public async requestPasswordReset(email: string): Promise<{
     success: boolean;
     message: string;
-    token?: string;
-    resetUrl?: string;
     expiresIn?: number;
     error?: string;
   }> {
@@ -839,41 +833,21 @@ export class AuthService {
         }
       }
 
-      // Generate 60-second token
-      const token = `rst_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      const expiresAt = Date.now() + 60 * 1000; // 60s TTL
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-      const resetUrl = `${origin}?resetToken=${token}`;
-
-      // Save token in localStorage
-      try {
-        const storedTokensStr = localStorage.getItem('epicentr_reset_tokens');
-        const tokens: Record<string, { email: string; expiresAt: number; token: string }> = storedTokensStr
-          ? JSON.parse(storedTokensStr)
-          : {};
-        tokens[token] = { email: cleanEmail, expiresAt, token };
-        localStorage.setItem('epicentr_reset_tokens', JSON.stringify(tokens));
-      } catch (err) {
-        console.warn('Failed to save reset token to storage:', err);
-      }
-
-      // Dispatch to server endpoint
+      // Dispatch to server backend (server generates and registers 60s token, dispatches via Resend API)
       try {
         await fetch('/api/auth/request-password-reset', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: cleanEmail, token, expiresAt })
+          body: JSON.stringify({ email: cleanEmail })
         });
       } catch {
         // continue
       }
 
+      // ZERO IN-APP LEAK: Never return token or resetUrl to the browser
       return {
         success: true,
-        message: 'Лист із посиланням для зміни пароля надіслано. Посилання активне рівно 1 хвилину (60 сек).',
-        token,
-        resetUrl,
-        expiresIn: 60
+        message: 'Лист із захищеним посиланням для зміни пароля надіслано на вашу електронну пошту. Будь ласка, перевірте поштову скриньку (та папку Спам).'
       };
     } catch (err: any) {
       return {
@@ -882,6 +856,43 @@ export class AuthService {
         error: 'SERVER_ERROR'
       };
     }
+  }
+
+  /**
+   * Asynchronously verify password reset token via server or local cache
+   */
+  public async verifyResetTokenAsync(token: string): Promise<{
+    valid: boolean;
+    email?: string;
+    remainingSeconds: number;
+    error?: string;
+  }> {
+    if (!token) return { valid: false, remainingSeconds: 0, error: 'Токен відсутній' };
+
+    // 1. Authoritative server check (cross-device/tab support)
+    try {
+      const resp = await fetch('/api/auth/verify-reset-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      const data = await resp.json();
+      if (resp.ok && data.valid) {
+        return {
+          valid: true,
+          email: data.email,
+          remainingSeconds: data.remainingSeconds || 60
+        };
+      }
+      if (resp.status === 410) {
+        return { valid: false, remainingSeconds: 0, error: 'Час дії посилання (60 сек) вичерпано. Згенеруйте нове.' };
+      }
+    } catch {
+      // fallback
+    }
+
+    // 2. Fallback to local cache verification
+    return this.verifyResetToken(token);
   }
 
   /**
@@ -928,15 +939,6 @@ export class AuthService {
     newPass: string,
     confirmPass: string
   ): Promise<{ success: boolean; message: string; error?: string }> {
-    const verification = this.verifyResetToken(token);
-    if (!verification.valid || !verification.email) {
-      return {
-        success: false,
-        message: verification.error || 'Час дії посилання (60 сек) вичерпано. Згенеруйте новий запит на зміну пароля.',
-        error: 'TOKEN_EXPIRED'
-      };
-    }
-
     const cleanNewPass = (newPass || '').trim();
     const cleanConfirmPass = (confirmPass || '').trim();
 
@@ -956,23 +958,91 @@ export class AuthService {
       };
     }
 
-    const accounts = this.getAccounts();
-    const emailKey = verification.email.toLowerCase();
-    const account = accounts[emailKey];
-
-    if (!account) {
+    if (!token) {
       return {
         success: false,
-        message: 'Обліковий запис користувача не знайдено',
-        error: 'USER_NOT_FOUND'
+        message: 'Токен скидання пароля відсутній',
+        error: 'INVALID_TOKEN'
       };
     }
 
-    // Update password
-    account.passwordHash = cleanNewPass;
-    this.saveAccounts(accounts);
+    let resolvedEmail: string | undefined;
 
-    // Invalidate token
+    // 1. Submit reset directly to backend server (which authoritative owns the 60-second memory tokens)
+    try {
+      const resp = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword: cleanNewPass })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        return {
+          success: false,
+          message: data.error || data.message || 'Посилання для скидання пароля не знайдено або його час (60 сек) вичерпано',
+          error: resp.status === 410 ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN'
+        };
+      }
+      resolvedEmail = data.email;
+    } catch {
+      // 2. Fallback to local cache verification if backend is temporarily unreachable
+      const localVerification = this.verifyResetToken(token);
+      if (!localVerification.valid || !localVerification.email) {
+        return {
+          success: false,
+          message: localVerification.error || 'Час дії посилання (60 сек) вичерпано. Згенеруйте новий запит на зміну пароля.',
+          error: 'TOKEN_EXPIRED'
+        };
+      }
+      resolvedEmail = localVerification.email;
+    }
+
+    // 3. Sync new password in local accounts cache so user can immediately log in in this or new tabs
+    if (resolvedEmail) {
+      const emailKey = resolvedEmail.toLowerCase().trim();
+      const accounts = this.getAccounts();
+      if (accounts[emailKey]) {
+        accounts[emailKey].passwordHash = cleanNewPass;
+      } else if (emailKey === SUPER_ADMIN_EMAIL.toLowerCase()) {
+        accounts[emailKey] = {
+          user: { ...SUPER_ADMIN_USER },
+          passwordHash: cleanNewPass
+        };
+      } else if (emailKey === DEFAULT_DEMO_USER.email.toLowerCase()) {
+        accounts[emailKey] = {
+          user: { ...DEFAULT_DEMO_USER },
+          passwordHash: cleanNewPass
+        };
+      } else {
+        const storeId = `store_${Date.now()}`;
+        const sCode = generateSellerCode();
+        accounts[emailKey] = {
+          user: {
+            id: `usr_${Date.now()}`,
+            email: emailKey,
+            name: emailKey.split('@')[0],
+            shopName: 'Мій Магазин',
+            sellerCode: sCode,
+            role: 'seller',
+            status: 'approved',
+            activeStoreId: storeId,
+            stores: [{
+              id: storeId,
+              name: 'Мій Магазин',
+              sellerCode: sCode,
+              createdAt: new Date().toISOString(),
+              isVerified: true,
+              subscriptionTier: 'pro'
+            }],
+            createdAt: new Date().toISOString()
+          },
+          passwordHash: cleanNewPass
+        };
+      }
+      this.saveAccounts(accounts);
+    }
+
+    // 4. Invalidate local token cache if present
     try {
       const storedTokensStr = localStorage.getItem('epicentr_reset_tokens');
       if (storedTokensStr) {
@@ -980,17 +1050,6 @@ export class AuthService {
         delete tokens[token];
         localStorage.setItem('epicentr_reset_tokens', JSON.stringify(tokens));
       }
-    } catch {
-      // continue
-    }
-
-    // Notify backend
-    try {
-      await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, newPassword: cleanNewPass })
-      });
     } catch {
       // continue
     }

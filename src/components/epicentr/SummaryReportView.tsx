@@ -30,6 +30,8 @@ import {
   EpicentrDictionaryAttribute
 } from '../../types/epicentr';
 import { generateEpicentrExportWorkbook } from '../../services/epicentrEngine';
+import { authService } from '../../services/authService';
+import { canAccessFeature } from '../../services/permissionService';
 
 interface SummaryReportViewProps {
   report: ProcessingReportSummary;
@@ -40,6 +42,7 @@ interface SummaryReportViewProps {
   dictionaryIndex?: Record<string, EpicentrDictionaryAttribute>;
   onViewTable: () => void;
   onViewErrors?: () => void;
+  onDemoRestricted?: (featureName: string) => void;
 }
 
 export const SummaryReportView: React.FC<SummaryReportViewProps> = ({
@@ -50,13 +53,21 @@ export const SummaryReportView: React.FC<SummaryReportViewProps> = ({
   originalFileName,
   dictionaryIndex,
   onViewTable,
-  onViewErrors
+  onViewErrors,
+  onDemoRestricted
 }) => {
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [copiedSuccess, setCopiedSuccess] = useState(false);
 
   // Download filled Excel workbook
   const handleDownload = () => {
+    const curUser = authService.getCurrentUser();
+    if (!canAccessFeature('EXPORT_CATALOG_FILE', curUser)) {
+      if (onDemoRestricted) {
+        onDemoRestricted('Експорт заповненого Excel-файлу');
+      }
+      return;
+    }
     try {
       const exportWb = generateEpicentrExportWorkbook(rawWorkbook, processedRows, columns, dictionaryIndex);
       const outName = originalFileName

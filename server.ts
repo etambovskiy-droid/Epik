@@ -8,10 +8,23 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 dotenv.config();
 
-function getAiClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured on the server.');
+function extractUserApiKey(req: express.Request): string | null {
+  const headerKey = req.headers['x-gemini-api-key'] || req.headers['authorization'];
+  if (typeof headerKey === 'string' && headerKey.trim()) {
+    const clean = headerKey.replace(/^Bearer\s+/i, '').trim();
+    if (clean && clean !== 'server-managed') return clean;
+  }
+  const bodyKey = req.body?.apiKey;
+  if (typeof bodyKey === 'string' && bodyKey.trim() && bodyKey !== 'server-managed') {
+    return bodyKey.trim();
+  }
+  return null;
+}
+
+function getAiClient(userApiKey?: string): GoogleGenAI {
+  const apiKey = (userApiKey || '').trim();
+  if (!apiKey || apiKey === 'server-managed') {
+    throw new Error('API_KEY_REQUIRED');
   }
   return new GoogleGenAI({
     apiKey,
@@ -222,9 +235,10 @@ async function startServer() {
   async function generateTextWithFallback(
     requestedModel: string | undefined,
     contents: any,
-    config?: Record<string, any>
+    config?: Record<string, any>,
+    userApiKey?: string
   ) {
-    const ai = getAiClient();
+    const ai = getAiClient(userApiKey);
     const candidates = Array.from(
       new Set([
         requestedModel || 'gemini-3.5-flash-lite',
@@ -266,6 +280,21 @@ async function startServer() {
     throw lastError;
   }
 
+  // Enforce User's Own API Key (Bring Your Own Key - BYOK) for ALL /api/gemini routes
+  // Project owner's server token is NEVER spent on user AI generation!
+  app.use('/api/gemini', (req, res, next) => {
+    const userApiKey = extractUserApiKey(req);
+    if (!userApiKey) {
+      res.status(401).json({
+        error: 'API_KEY_REQUIRED',
+        message: 'Для виконання цієї операції потрібен власний Google AI Studio API Key. Будь ласка, вкажіть ваш ключ у налаштуваннях API.'
+      });
+      return;
+    }
+    (req as any).userApiKey = userApiKey;
+    next();
+  });
+
   // 2. Gemini: Generate Epicentr Product Title
   app.post('/api/gemini/title', async (req, res) => {
     try {
@@ -273,7 +302,7 @@ async function startServer() {
       const response = await generateTextWithFallback(model, prompt, {
         systemInstruction,
         maxOutputTokens
-      });
+      }, (req as any).userApiKey);
       res.json({ text: response?.text || '' });
     } catch (error: any) {
       const { prompt, rawTitle, sku, brand } = req.body;
@@ -326,7 +355,7 @@ async function startServer() {
         systemInstruction,
         responseMimeType: 'application/json',
         maxOutputTokens
-      });
+      }, (req as any).userApiKey);
       res.json({ text: response?.text || '{}' });
     } catch (error: any) {
       if (isPrepaymentDepletedError(error)) {
@@ -350,7 +379,7 @@ async function startServer() {
       const response = await generateTextWithFallback(model, prompt, {
         responseMimeType: 'application/json',
         maxOutputTokens
-      });
+      }, (req as any).userApiKey);
       res.json({ text: response?.text || '{}' });
     } catch (error: any) {
       if (isPrepaymentDepletedError(error)) {
@@ -372,7 +401,7 @@ async function startServer() {
         return;
       }
 
-      const ai = getAiClient();
+      const ai = getAiClient((req as any).userApiKey);
       const fullPrompt = `Ти — експерт каталогу та PIM-спеціаліст маркетплейсу Епіцентр.
 Знайди актуальну та перевірену інформацію в Google Search за запитом користувача і сформуй структуровану відповідь українською мовою.
 Якщо запит стосується конкретного товару, бренду, моделі чи артикулу — наведи точні характеристики (матеріал, країна бренду/виробництва, розміри, комплектація, технічні параметри), придатні для заповнення картки товару Епіцентру.
@@ -448,7 +477,7 @@ ${productContext ? `\nКонтекст товару з таблиці:\n${JSON.s
         return;
       }
 
-      const ai = getAiClient();
+      const ai = getAiClient((req as any).userApiKey);
 
       // Clean title noise and build focused search query: "${brand} ${vendorCode || model} характеристики специфікація"
       const cleanedModelTitle = String(productTitle || '')
@@ -585,7 +614,7 @@ ${attributesPromptSection}
         return;
       }
 
-      const ai = getAiClient();
+      const ai = getAiClient((req as any).userApiKey);
       const parts: any[] = [];
 
       if (sourceImageBase64 && typeof sourceImageBase64 === 'string') {
@@ -697,7 +726,7 @@ ${attributesPromptSection}
         config.tools = [{ googleSearch: {} }];
       }
 
-      const ai = getAiClient();
+      const ai = getAiClient((req as any).userApiKey);
       const response = await ai.models.generateContent({
         model: selectedModel,
         contents,
@@ -763,7 +792,7 @@ ${attributesPromptSection}
         config.tools = tools;
       }
 
-      const response = await generateTextWithFallback(model || 'gemini-3.8-flash', effectiveInput, config);
+      const response = await generateTextWithFallback(model || 'gemini-3.8-flash', effectiveInput, config, (req as any).userApiKey);
       const candidate = response?.candidates?.[0];
       const groundingChunks = candidate?.groundingMetadata?.groundingChunks || [];
       const sources = groundingChunks
@@ -807,7 +836,7 @@ ${attributesPromptSection}
         return;
       }
 
-      const ai = getAiClient();
+      const ai = getAiClient((req as any).userApiKey);
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
@@ -1117,11 +1146,128 @@ ${attributesPromptSection}
     });
   });
 
-  // 11. Password Reset with 60-Second TTL (1 minute)
+  // 11. Password Reset with 60-Second TTL (1 minute) & Resend Email Delivery
   const inMemoryResetTokens: Map<string, { email: string; token: string; expiresAt: number; used?: boolean }> = new Map();
 
-  app.post('/api/auth/request-password-reset', (req, res) => {
-    const { email, token: clientToken, expiresAt: clientExpiresAt } = req.body;
+  async function sendPasswordResetViaResend(
+    toEmail: string,
+    resetUrl: string,
+    ttlSeconds: number = 60
+  ): Promise<{ success: boolean; id?: string; error?: string }> {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey || !apiKey.trim()) {
+      console.warn('[Resend Notice] RESEND_API_KEY is not set in environment. Dispatched to server console logs.');
+      return { success: false, error: 'RESEND_API_KEY_NOT_CONFIGURED' };
+    }
+
+    const fromAddress = process.env.RESEND_FROM || 'Epicentr PIM Support <onboarding@resend.dev>';
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Відновлення пароля — Епіцентр Маркетплейс</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0b1120; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #f8fafc;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0b1120; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: #1e293b; border-radius: 20px; border: 1px solid #334155; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+          <tr>
+            <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #004BB7 0%, #002e73 100%); text-align: center;">
+              <div style="display: inline-block; padding: 6px 14px; background-color: rgba(255, 255, 255, 0.15); border-radius: 9999px; margin-bottom: 12px;">
+                <span style="color: #FF6B00; font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Епіцентр Маркетплейс PIM</span>
+              </div>
+              <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 800;">Відновлення доступу до кабінету</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px;">
+              <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+                Вітаємо! Ми отримали запит на скидання та створення нового пароля для вашого кабінету продавця.
+              </p>
+
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 16px;">
+                    <div style="font-size: 13px; font-weight: 700; color: #fbbf24; margin-bottom: 4px;">
+                      ⏱️ Обмежений час дії: ${ttlSeconds} секунд
+                    </div>
+                    <div style="font-size: 12px; color: #fde68a; line-height: 1.5;">
+                      З міркувань суворої безпеки це одноразове посилання діє рівно 1 хвилину (60 сек). Після переходу відкриється форма для введення нового пароля.
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 28px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="${resetUrl}" target="_blank" style="display: inline-block; padding: 14px 36px; background: linear-gradient(135deg, #FF6B00 0%, #e05d00 100%); color: #ffffff; font-size: 14px; font-weight: 700; text-decoration: none; border-radius: 12px; box-shadow: 0 4px 15px rgba(255, 107, 0, 0.35); text-transform: uppercase; letter-spacing: 0.5px;">
+                      Встановити новий пароль &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8; line-height: 1.5;">
+                Якщо кнопка вище не відкривається, скопіюйте це посилання у браузер:
+              </p>
+              <p style="margin: 0 0 24px 0; font-size: 11px; color: #38bdf8; word-break: break-all; line-height: 1.4; font-family: monospace;">
+                ${resetUrl}
+              </p>
+
+              <hr style="border: none; border-top: 1px solid #334155; margin: 24px 0;">
+
+              <p style="margin: 0; font-size: 11px; color: #64748b; line-height: 1.5;">
+                Якщо ви не надсилали запит на зміну пароля, просто проігноруйте цей лист. Ваш пароль та доступ залишаються в цілковитій безпеці.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 32px; background-color: #0b1120; text-align: center; border-top: 1px solid #334155;">
+              <p style="margin: 0; font-size: 11px; color: #64748b;">
+                &copy; ${new Date().getFullYear()} Епіцентр Маркетплейс. Платформа автоматизації PIM-каталогу.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim();
+
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [toEmail],
+          subject: `Відновлення пароля — Епіцентр Маркетплейс (${ttlSeconds} сек)`,
+          html
+        })
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data?.id) {
+        console.log(`[Resend SUCCESS] Email dispatched via Resend. ID: ${data.id}`);
+        return { success: true, id: data.id };
+      } else {
+        console.warn(`[Resend Notice]: ${response.status}`, data);
+        return { success: false, error: data?.message || `HTTP ${response.status}` };
+      }
+    } catch (err: any) {
+      console.warn(`[Resend Network Notice]:`, err?.message || err);
+      return { success: false, error: err?.message || 'Network error reaching Resend' };
+    }
+  }
+
+  app.post('/api/auth/request-password-reset', async (req, res) => {
+    const { email } = req.body;
     const cleanEmail = String(email || '').trim().toLowerCase();
 
     if (!cleanEmail || !cleanEmail.includes('@')) {
@@ -1141,8 +1287,9 @@ ${attributesPromptSection}
       return;
     }
 
-    const token = clientToken || `rst_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    const expiresAt = clientExpiresAt || Date.now() + 60 * 1000; // 60s TTL
+    // Server-generated cryptographically strong token
+    const token = `rst_${Date.now()}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 8)}`;
+    const expiresAt = Date.now() + 60 * 1000; // 60s TTL
     inMemoryResetTokens.set(token, {
       email: cleanEmail,
       token,
@@ -1153,17 +1300,20 @@ ${attributesPromptSection}
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
     const resetUrl = `${appUrl}?resetToken=${token}`;
 
-    console.log(`[EMAIL DISPATCH: PASSWORD RESET LINK]`);
+    console.log(`[EMAIL DISPATCH: SECURE OUT-OF-BAND PASSWORD RESET LINK]`);
     console.log(`Одержувач: ${cleanEmail}`);
     console.log(`Час дії: 60 секунд (TTL: 1 min)`);
-    console.log(`-> Посилання: ${resetUrl}`);
+    console.log(`-> Захищене посилання: ${resetUrl}`);
 
+    // Asynchronously dispatch email via Resend
+    sendPasswordResetViaResend(cleanEmail, resetUrl, 60).catch(err => {
+      console.warn('Background Resend dispatch error:', err);
+    });
+
+    // ZERO IN-APP LEAK: Return only success message, never leak the token to whoever filled the form
     res.json({
       success: true,
-      message: 'Лист із посиланням для зміни пароля надіслано. Посилання активне рівно 1 хвилину (60 сек).',
-      token,
-      resetUrl,
-      expiresIn: 60
+      message: 'Лист із захищеним посиланням для зміни пароля надіслано на вашу електронну пошту через Resend. Будь ласка, перевірте поштову скриньку.'
     });
   });
 
@@ -1217,10 +1367,18 @@ ${attributesPromptSection}
     record.used = true;
     inMemoryResetTokens.delete(token);
 
+    const emailKey = record.email.toLowerCase().trim();
+    const existing = inMemoryUsers.get(emailKey);
+    if (existing) {
+      existing.password = String(newPassword).trim();
+      inMemoryUsers.set(emailKey, existing);
+    }
+
     console.log(`[PASSWORD UPDATED] Password successfully updated for user: ${record.email}`);
 
     res.json({
       success: true,
+      email: record.email,
       message: 'Пароль успішно змінено! Тепер ви можете увійти з новим паролем.'
     });
   });

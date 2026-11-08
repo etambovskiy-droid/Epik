@@ -7,18 +7,17 @@ import { getStoredApiKey, testApiKeyConnection } from './aiApiKeyService';
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 
-export function getEffectiveApiKey(_storeId?: string): string | null {
-  // All Gemini API calls are managed server-side via process.env.GEMINI_API_KEY
-  return 'server-managed';
+export function getEffectiveApiKey(storeId?: string): string | null {
+  return getStoredApiKey(storeId);
 }
 
 /**
- * Tests Gemini API connection via server endpoint.
+ * Tests Gemini API connection via server endpoint with provided user key.
  */
 export async function testGeminiApiKeyDirect(
   apiKey?: string
 ): Promise<{ success: boolean; message: string; modelUsed?: string }> {
-  const res = await testApiKeyConnection(apiKey || 'server-managed');
+  const res = await testApiKeyConnection(apiKey);
   return {
     success: res.success,
     message: res.message,
@@ -47,17 +46,34 @@ export interface DirectGeminiResult {
 
 /**
  * Server-side proxied Gemini API call.
- * Eliminates direct browser API key exposure and ensures uninterrupted access.
+ * Uses strictly the user's provided API key (Bring Your Own Key - BYOK).
  */
 export async function callGeminiDirect(
   prompt: string,
   options?: DirectGeminiOptions
 ): Promise<DirectGeminiResult> {
+  const userApiKey = (options?.apiKey || getStoredApiKey(options?.storeId) || '').trim();
+  if (!userApiKey) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('epic_ai_missing_key_warning', {
+          detail: { action: 'ШІ-генерація та мапінг' }
+        })
+      );
+    }
+    return {
+      text: '',
+      sources: [],
+      error: 'Для виконання операції потрібен власний Google AI Studio API Key. Будь ласка, вкажіть ваш ключ у налаштуваннях API.'
+    };
+  }
+
   const model = options?.model || DEFAULT_GEMINI_MODEL;
 
   const requestBody: any = {
     prompt,
     model,
+    apiKey: userApiKey,
     maxOutputTokens: options?.maxOutputTokens || 350
   };
 
@@ -81,7 +97,8 @@ export async function callGeminiDirect(
     const response = await fetch('/api/gemini/direct', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-gemini-api-key': userApiKey
       },
       body: JSON.stringify(requestBody)
     });
@@ -95,11 +112,26 @@ export async function callGeminiDirect(
         errDetail = await response.text();
       }
 
+      if (response.status === 401) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('epic_ai_missing_key_warning', {
+              detail: { action: 'Перевірка API-ключа' }
+            })
+          );
+        }
+        return {
+          text: '',
+          sources: [],
+          error: 'Потрібно вказати власний Google AI Studio API Key у налаштуваннях API.'
+        };
+      }
+
       if (response.status === 402) {
         return {
           text: '',
           sources: [],
-          error: 'Кредити Gemini API вичерпано. Локальний PIM-рушій автоматично підхопив обробку.'
+          error: 'Кредити вашого Gemini API вичерпано. Локальний PIM-рушій автоматично підхопив обробку.'
         };
       }
       if (response.status === 429) {
@@ -134,6 +166,7 @@ export async function callGeminiDirect(
 
 /**
  * Server-side proxied Gemini Image Generation (gemini-nano-banana-2.1).
+ * Requires user's own Google AI Studio API Key.
  */
 export async function generateImageDirect(options: {
   prompt: string;
@@ -144,18 +177,34 @@ export async function generateImageDirect(options: {
   apiKey?: string;
   storeId?: string;
 }): Promise<{ imageUrl?: string; textComment?: string; error?: string }> {
+  const userApiKey = (options?.apiKey || getStoredApiKey(options?.storeId) || '').trim();
+  if (!userApiKey) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('epic_ai_missing_key_warning', {
+          detail: { action: 'ШІ-Фотостудія' }
+        })
+      );
+    }
+    return {
+      error: 'Для використання ШІ-Фотостудії потрібен власний Google AI Studio API Key.'
+    };
+  }
+
   try {
     const response = await fetch('/api/gemini/image', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-gemini-api-key': userApiKey
       },
       body: JSON.stringify({
         prompt: options.prompt,
         aspectRatio: options.aspectRatio || '1:1',
         imageSize: options.imageSize || '1K',
         sourceImageBase64: options.sourceImageBase64,
-        sourceImageMimeType: options.sourceImageMimeType
+        sourceImageMimeType: options.sourceImageMimeType,
+        apiKey: userApiKey
       })
     });
 
@@ -165,6 +214,14 @@ export async function generateImageDirect(options: {
         imageUrl: data.imageUrl,
         textComment: data.textComment || 'Зображення успішно згенеровано'
       };
+    }
+
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('epic_ai_missing_key_warning', {
+          detail: { action: 'ШІ-Фотостудія' }
+        })
+      );
     }
 
     return {
@@ -179,20 +236,37 @@ export async function generateImageDirect(options: {
 
 /**
  * Server-Sent Events (SSE) streaming helper for real-time text generation.
+ * Requires user's own Google AI Studio API Key.
  */
 export async function streamGeminiDirect(
   prompt: string,
   options?: DirectGeminiOptions,
   onChunk?: (chunkText: string) => void
 ): Promise<string> {
+  const userApiKey = (options?.apiKey || getStoredApiKey(options?.storeId) || '').trim();
+  if (!userApiKey) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('epic_ai_missing_key_warning', {
+          detail: { action: 'ШІ-генерація' }
+        })
+      );
+    }
+    throw new Error('Для виконання генерації тексту потрібен власний Google AI Studio API Key.');
+  }
+
   const response = await fetch('/api/gemini/stream', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-gemini-api-key': userApiKey
+    },
     body: JSON.stringify({
       prompt,
       model: options?.model || DEFAULT_GEMINI_MODEL,
       systemInstruction: options?.systemInstruction,
-      maxOutputTokens: options?.maxOutputTokens || 1000
+      maxOutputTokens: options?.maxOutputTokens || 1000,
+      apiKey: userApiKey
     })
   });
 
@@ -235,7 +309,8 @@ export async function streamGeminiDirect(
  * Establishes a WebSocket connection to Gemini Live API bridge on the server.
  */
 export function connectGeminiLive(): WebSocket {
+  const userApiKey = getStoredApiKey() || '';
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const url = `${protocol}//${window.location.host}/api/gemini/live`;
+  const url = `${protocol}//${window.location.host}/api/gemini/live?apiKey=${encodeURIComponent(userApiKey)}`;
   return new WebSocket(url);
 }

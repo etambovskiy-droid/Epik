@@ -16,7 +16,6 @@ import {
   ArrowRight,
   RefreshCw,
   X,
-  ExternalLink,
   ShieldCheck
 } from 'lucide-react';
 import { authService } from '../../services/authService';
@@ -39,7 +38,6 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
   const [step, setStep] = useState<'request' | 'sent' | 'reset' | 'success'>('request');
   const [email, setEmail] = useState(initialEmail);
   const [token, setToken] = useState<string | null>(initialToken);
-  const [resetUrl, setResetUrl] = useState<string | null>(null);
 
   // New password fields
   const [newPassword, setNewPassword] = useState('');
@@ -55,28 +53,38 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // If initialToken was passed, jump straight to 'reset' mode
+  // If initialToken was passed or present in URL (via email link), verify and jump to 'reset' mode
   useEffect(() => {
-    if (initialToken) {
-      setToken(initialToken);
-      const verification = authService.verifyResetToken(initialToken);
-      if (verification.valid) {
-        setStep('reset');
-        setRemainingSeconds(verification.remainingSeconds);
-        setIsExpired(false);
-        if (verification.email) setEmail(verification.email);
-      } else {
-        setStep('reset');
-        setIsExpired(true);
-        setRemainingSeconds(0);
-        setErrorMessage(verification.error || 'Час дії посилання вичерпано');
-      }
-    } else {
+    let isMounted = true;
+    const effectiveToken = initialToken || (typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('resetToken') || new URLSearchParams(window.location.search).get('oobCode')) : null);
+
+    if (effectiveToken && isOpen) {
+      setToken(effectiveToken);
+      setIsLoading(true);
+      authService.verifyResetTokenAsync(effectiveToken).then((verification) => {
+        if (!isMounted) return;
+        setIsLoading(false);
+        if (verification.valid) {
+          setStep('reset');
+          setRemainingSeconds(verification.remainingSeconds);
+          setIsExpired(false);
+          if (verification.email) setEmail(verification.email);
+        } else {
+          setStep('reset');
+          setIsExpired(true);
+          setRemainingSeconds(0);
+          setErrorMessage(verification.error || 'Час дії посилання вичерпано або токен недійсний');
+        }
+      });
+    } else if (isOpen && !effectiveToken) {
       setStep('request');
       setToken(null);
       setRemainingSeconds(60);
       setIsExpired(false);
     }
+    return () => {
+      isMounted = false;
+    };
   }, [initialToken, isOpen]);
 
   // Active 60-second timer countdown ticker
@@ -99,7 +107,14 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Step 1: Request reset email
+  const handleModalClose = () => {
+    if (step === 'success') {
+      onPasswordResetSuccess?.(email);
+    }
+    onClose();
+  };
+
+  // Step 1: Request reset email (Zero In-App Token Leak: server dispatches out-of-band email)
   const handleRequestReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -107,10 +122,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
 
     try {
       const res = await authService.requestPasswordReset(email);
-      if (res.success && res.token) {
-        setToken(res.token);
-        setResetUrl(res.resetUrl || null);
-        setRemainingSeconds(res.expiresIn || 60);
+      if (res.success) {
         setIsExpired(false);
         setStep('sent');
       } else {
@@ -120,21 +132,6 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
       setErrorMessage(err?.message || 'Помилка звернення до сервера');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // Step 2 -> Transition to Reset form
-  const handleOpenResetForm = () => {
-    if (token) {
-      const verification = authService.verifyResetToken(token);
-      if (verification.valid) {
-        setStep('reset');
-        setRemainingSeconds(verification.remainingSeconds);
-        setIsExpired(false);
-      } else {
-        setIsExpired(true);
-        setErrorMessage('Час дії посилання (60 сек) вичерпано');
-      }
     }
   };
 
@@ -168,7 +165,6 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
       const res = await authService.resetPasswordWithToken(token, newPassword, confirmPassword);
       if (res.success) {
         setStep('success');
-        onPasswordResetSuccess?.(email);
       } else {
         setErrorMessage(res.message);
       }
@@ -198,7 +194,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleModalClose}
             className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -254,86 +250,39 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
           </form>
         )}
 
-        {/* Mode B: Link Sent & 60s Countdown Notice */}
+        {/* Mode B: Link Sent & Out-of-Band Delivery Notification (Zero in-app token leak) */}
         {step === 'sent' && (
           <div className="mt-5 space-y-4">
             <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-700/50 text-xs text-emerald-200 space-y-2">
               <div className="flex items-center gap-2 font-bold text-emerald-300 text-sm">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <span>Посилання згенеровано!</span>
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                <span>Запит успішно оброблено!</span>
               </div>
               <p>
-                Лист із посиланням надіслано на <strong className="font-mono text-white">{email}</strong>.
+                Лист із захищеним посиланням надіслано на вашу електронну пошту.
               </p>
             </div>
 
-            {/* Live 60s Countdown Widget */}
-            <div className={`p-4 rounded-2xl border transition-all ${
-              isExpired
-                ? 'bg-rose-950/30 border-rose-700/50'
-                : 'bg-slate-950 border-amber-500/40 shadow-inner'
-            }`}>
-              <div className="flex items-center justify-between text-xs mb-2">
-                <span className="flex items-center gap-1.5 text-slate-300 font-semibold">
-                  <Clock className={`w-4 h-4 ${isExpired ? 'text-rose-400' : 'text-amber-400 animate-pulse'}`} />
-                  <span>{isExpired ? 'Час вичерпано:' : 'Час дії посилання:'}</span>
-                </span>
-                <span className={`font-mono text-sm font-bold ${
-                  isExpired ? 'text-rose-400' : remainingSeconds <= 15 ? 'text-rose-400 animate-pulse' : 'text-amber-400'
-                }`}>
-                  {remainingSeconds} сек
-                </span>
+            <div className="p-4 rounded-2xl bg-blue-950/40 border border-blue-700/50 text-xs text-blue-200 space-y-2.5">
+              <div className="flex items-center gap-2 text-amber-300 font-semibold">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Захист від несанкціонованого доступу</span>
               </div>
-
-              {/* Progress bar */}
-              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                <div
-                  className={`h-full transition-all duration-1000 ${
-                    isExpired
-                      ? 'bg-rose-600'
-                      : remainingSeconds <= 15
-                      ? 'bg-rose-500'
-                      : 'bg-gradient-to-r from-amber-500 to-amber-400'
-                  }`}
-                  style={{ width: `${timerPercent}%` }}
-                />
-              </div>
-
-              {isExpired ? (
-                <p className="text-[11px] text-rose-300 mt-2">
-                  Термін дії 60 секунд минув. З міркувань безпеки згенеруйте нове посилання.
-                </p>
-              ) : (
-                <p className="text-[11px] text-slate-400 mt-2">
-                  Посилання стане недійсним після закінчення таймера.
-                </p>
-              )}
+              <p className="text-slate-300 leading-relaxed">
+                З міркувань безпеки зміна пароля можлива <strong>виключно через перехід за персональним посиланням із листа</strong>, надісланого до вашої поштової скриньки.
+              </p>
+              <p className="text-slate-400 text-[11px] leading-relaxed">
+                Будь ласка, відкрийте вашу пошту (перевірте також папку «Спам») та перейдіть за посиланням протягом <strong>60 секунд</strong>.
+              </p>
             </div>
 
-            {/* Test Shortcut button */}
-            {!isExpired ? (
-              <button
-                type="button"
-                onClick={handleOpenResetForm}
-                className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Перейти до зміни пароля зараз</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setStep('request');
-                  setIsExpired(false);
-                  setRemainingSeconds(60);
-                }}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Запитати нове посилання</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+            >
+              Зрозуміло, перевіряю пошту
+            </button>
           </div>
         )}
 
@@ -481,7 +430,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleModalClose}
               className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
             >
               Перейти до форми входу

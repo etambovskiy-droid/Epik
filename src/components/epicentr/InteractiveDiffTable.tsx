@@ -82,6 +82,7 @@ interface InteractiveDiffTableProps {
     sources?: { uri: string; title: string }[],
     explanations?: Record<string, string>
   ) => void;
+  onDemoRestricted?: (featureName: string) => void;
 }
 
 export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
@@ -92,7 +93,8 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   dictionaryIndex,
   onOpenApiKeySettings,
   onUpdateCellValue,
-  onUpdateRowValues
+  onUpdateRowValues,
+  onDemoRestricted
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<
@@ -451,6 +453,19 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
 
   // Export Selected Rows to Excel
   const handleExportSelectedExcel = () => {
+    const curUser = authService.getCurrentUser();
+    if (!canAccessFeature('EXPORT_CATALOG_FILE', curUser)) {
+      if (onDemoRestricted) {
+        onDemoRestricted('Експорт вибраних рядків Excel');
+      } else {
+        setNotificationToast({
+          message: getDemoRestrictionMessage('Експорт заповненого Excel'),
+          type: 'info'
+        });
+        setTimeout(() => setNotificationToast(null), 5000);
+      }
+      return;
+    }
     try {
       const selectedRows = rows.filter(r => selectedRowIndices.has(r.rowIdx));
       if (selectedRows.length === 0) return;
@@ -512,11 +527,15 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   const handleExportExcel = () => {
     const curUser = authService.getCurrentUser();
     if (!canAccessFeature('EXPORT_CATALOG_FILE', curUser)) {
-      setNotificationToast({
-        message: getDemoRestrictionMessage('Експорт заповненого Excel'),
-        type: 'info'
-      });
-      setTimeout(() => setNotificationToast(null), 5000);
+      if (onDemoRestricted) {
+        onDemoRestricted('Експорт заповненого Excel-файлу');
+      } else {
+        setNotificationToast({
+          message: getDemoRestrictionMessage('Експорт заповненого Excel'),
+          type: 'info'
+        });
+        setTimeout(() => setNotificationToast(null), 5000);
+      }
       return;
     }
     try {
@@ -537,11 +556,15 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   const handleExportCsv = () => {
     const curUser = authService.getCurrentUser();
     if (!canAccessFeature('EXPORT_CATALOG_FILE', curUser)) {
-      setNotificationToast({
-        message: getDemoRestrictionMessage('Експорт у форматі CSV'),
-        type: 'info'
-      });
-      setTimeout(() => setNotificationToast(null), 5000);
+      if (onDemoRestricted) {
+        onDemoRestricted('Експорт у форматі CSV');
+      } else {
+        setNotificationToast({
+          message: getDemoRestrictionMessage('Експорт у форматі CSV'),
+          type: 'info'
+        });
+        setTimeout(() => setNotificationToast(null), 5000);
+      }
       return;
     }
     try {

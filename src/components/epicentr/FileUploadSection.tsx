@@ -82,6 +82,7 @@ interface FileUploadSectionProps {
   onOpenShare?: () => void;
   onOpenXmlConverter?: () => void;
   onOpenEpicentrTokenModal?: () => void;
+  onDemoRestricted?: (featureName: string) => void;
 }
 
 export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
@@ -99,7 +100,8 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   onProceedToClarification,
   onOpenShare,
   onOpenXmlConverter,
-  onOpenEpicentrTokenModal
+  onOpenEpicentrTokenModal,
+  onDemoRestricted
 }) => {
   const [dragActiveTemplate, setDragActiveTemplate] = useState(false);
   const [dragActivePhotos, setDragActivePhotos] = useState(false);
@@ -140,7 +142,11 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   // Handle template file upload preserving exact cell comments, exact header \n, and original sheet names
   const handleTemplateFile = (file: File) => {
     if (!canUploadOwnFiles) {
-      setDemoNotice(getDemoRestrictionMessage('Завантаження власних прайсів'));
+      if (onDemoRestricted) {
+        onDemoRestricted('Завантаження власного прайс-листа Excel');
+      } else {
+        setDemoNotice(getDemoRestrictionMessage('Завантаження власних прайсів'));
+      }
       return;
     }
     const reader = new FileReader();
@@ -171,6 +177,14 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
   // Handle photos drag & drop (multiple images or ZIP archive)
   const handlePhotosFiles = (files: FileList | File[]) => {
+    if (!canUploadOwnFiles) {
+      if (onDemoRestricted) {
+        onDemoRestricted('Завантаження фотографій або ZIP-архівів');
+      } else {
+        setDemoNotice(getDemoRestrictionMessage('Завантаження фотографій'));
+      }
+      return;
+    }
     const newPhotos: UploadedPhotoItem[] = [];
     const fileArray = Array.from(files);
 
@@ -201,6 +215,14 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
   // Handle dictionary file upload with IndexedDB caching and chunked async execution
   const handleDictFile = async (file: File) => {
+    if (!canUploadOwnFiles) {
+      if (onDemoRestricted) {
+        onDemoRestricted('Завантаження файлу довідника характеристик');
+      } else {
+        setDemoNotice(getDemoRestrictionMessage('Завантаження довідника характеристик'));
+      }
+      return;
+    }
     try {
       const cacheKey = generateDictionaryCacheKey(file);
 
@@ -444,7 +466,8 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               e.preventDefault();
               setDragActiveTemplate(false);
               if (!canUploadOwnFiles) {
-                setDemoNotice(getDemoRestrictionMessage('Завантаження власних прайсів'));
+                if (onDemoRestricted) onDemoRestricted('Завантаження власного прайс-листа Excel');
+                else setDemoNotice(getDemoRestrictionMessage('Завантаження власних прайсів'));
                 return;
               }
               if (e.dataTransfer.files && e.dataTransfer.files[0]) {
@@ -453,7 +476,8 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             }}
             onClick={() => {
               if (!canUploadOwnFiles) {
-                setDemoNotice(getDemoRestrictionMessage('Завантаження власних прайсів'));
+                if (onDemoRestricted) onDemoRestricted('Завантаження власного прайс-листа Excel');
+                else setDemoNotice(getDemoRestrictionMessage('Завантаження власних прайсів'));
                 return;
               }
               templateInputRef.current?.click();
@@ -526,39 +550,60 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
           {/* 2. Drag & Drop: Product Photos (Drag & Drop images or ZIP) */}
           <div
-            onDragOver={(e) => { e.preventDefault(); setDragActivePhotos(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (canUploadOwnFiles) setDragActivePhotos(true);
+            }}
             onDragLeave={() => setDragActivePhotos(false)}
             onDrop={(e) => {
               e.preventDefault();
               setDragActivePhotos(false);
+              if (!canUploadOwnFiles) {
+                if (onDemoRestricted) onDemoRestricted('Завантаження фотографій або ZIP-архівів');
+                else setDemoNotice(getDemoRestrictionMessage('Завантаження фотографій'));
+                return;
+              }
               if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                 handlePhotosFiles(e.dataTransfer.files);
               }
             }}
-            onClick={() => photosInputRef.current?.click()}
+            onClick={() => {
+              if (!canUploadOwnFiles) {
+                if (onDemoRestricted) onDemoRestricted('Завантаження фотографій або ZIP-архівів');
+                else setDemoNotice(getDemoRestrictionMessage('Завантаження фотографій'));
+                return;
+              }
+              photosInputRef.current?.click();
+            }}
             className={`p-5 rounded-xl border-2 border-dashed transition-all cursor-pointer text-center flex flex-col items-center justify-center min-h-[210px] relative group ${
-              dragActivePhotos
+              !canUploadOwnFiles
+                ? 'bg-slate-50/80 border-slate-300 opacity-90 hover:border-amber-400 hover:bg-amber-50/30'
+                : dragActivePhotos
                 ? 'bg-amber-50 border-[#FF7A00] ring-4 ring-amber-100 scale-[1.01]'
                 : uploadedPhotos.length > 0
                 ? 'bg-amber-50/40 border-amber-300 hover:border-[#FF7A00]'
                 : 'bg-white border-slate-300 hover:border-[#FF7A00] hover:bg-slate-50/70 shadow-xs'
             }`}
           >
-            <input
-              ref={photosInputRef}
-              type="file"
-              accept="image/*,.zip"
-              multiple
-              className="hidden"
-              onChange={(e) => e.target.files && handlePhotosFiles(e.target.files)}
-            />
+            {canUploadOwnFiles && (
+              <input
+                ref={photosInputRef}
+                type="file"
+                accept="image/*,.zip"
+                multiple
+                className="hidden"
+                onChange={(e) => e.target.files && handlePhotosFiles(e.target.files)}
+              />
+            )}
 
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 transition-colors ${
-              uploadedPhotos.length > 0
+              !canUploadOwnFiles
+                ? 'bg-amber-100/60 text-[#FF7A00]'
+                : uploadedPhotos.length > 0
                 ? 'bg-amber-100 text-[#FF7A00]'
                 : 'bg-slate-100 text-slate-600 group-hover:bg-amber-100 group-hover:text-[#FF7A00]'
             }`}>
-              <Camera className="w-6 h-6" />
+              {!canUploadOwnFiles ? <Lock className="w-6 h-6 text-[#FF7A00]" /> : <Camera className="w-6 h-6" />}
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -566,7 +611,11 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             </div>
 
             <div className="mt-1.5 text-xs text-slate-600 max-w-[210px]">
-              {uploadedPhotos.length > 0 ? (
+              {!canUploadOwnFiles ? (
+                <span className="text-amber-800 font-medium">
+                  Завантаження фото заблоковано в Демо.
+                </span>
+              ) : uploadedPhotos.length > 0 ? (
                 <div className="space-y-1.5">
                   <div className="font-semibold text-amber-900 flex items-center justify-center gap-1">
                     <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
@@ -597,45 +646,70 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               )}
             </div>
 
-            <span className="mt-3 text-[10px] px-2 py-0.5 rounded font-semibold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
-              Колір та візерунок за 1-м фото
+            <span className={`mt-3 text-[10px] px-2 py-0.5 rounded font-semibold uppercase tracking-wider ${
+              !canUploadOwnFiles
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                : 'bg-amber-50 text-amber-800 border border-amber-200'
+            }`}>
+              {!canUploadOwnFiles ? '🔒 Демо-Sandbox' : 'Колір та візерунок за 1-м фото'}
             </span>
           </div>
 
           {/* 3. Drag & Drop: Values Dictionary */}
           <div
-            onDragOver={(e) => { e.preventDefault(); setDragActiveDict(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (canUploadOwnFiles) setDragActiveDict(true);
+            }}
             onDragLeave={() => setDragActiveDict(false)}
             onDrop={(e) => {
               e.preventDefault();
               setDragActiveDict(false);
+              if (!canUploadOwnFiles) {
+                if (onDemoRestricted) onDemoRestricted('Завантаження файлу довідника характеристик');
+                else setDemoNotice(getDemoRestrictionMessage('Завантаження довідника'));
+                return;
+              }
               if (e.dataTransfer.files && e.dataTransfer.files[0]) {
                 handleDictFile(e.dataTransfer.files[0]);
               }
             }}
-            onClick={() => dictInputRef.current?.click()}
+            onClick={() => {
+              if (!canUploadOwnFiles) {
+                if (onDemoRestricted) onDemoRestricted('Завантаження файлу довідника характеристик');
+                else setDemoNotice(getDemoRestrictionMessage('Завантаження довідника'));
+                return;
+              }
+              dictInputRef.current?.click();
+            }}
             className={`p-5 rounded-xl border-2 border-dashed transition-all cursor-pointer text-center flex flex-col items-center justify-center min-h-[210px] relative group ${
-              dragActiveDict
+              !canUploadOwnFiles
+                ? 'bg-slate-50/80 border-slate-300 opacity-90 hover:border-amber-400 hover:bg-amber-50/30'
+                : dragActiveDict
                 ? 'bg-emerald-50 border-emerald-500 ring-4 ring-emerald-100 scale-[1.01]'
                 : dictionaryFileName
                 ? 'bg-emerald-50/40 border-emerald-300 hover:border-emerald-500'
                 : 'bg-white border-slate-300 hover:border-emerald-500 hover:bg-slate-50/70 shadow-xs'
             }`}
           >
-            <input
-              ref={dictInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv,.json"
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && handleDictFile(e.target.files[0])}
-            />
+            {canUploadOwnFiles && (
+              <input
+                ref={dictInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv,.json"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleDictFile(e.target.files[0])}
+              />
+            )}
 
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 transition-colors ${
-              dictionaryFileName
+              !canUploadOwnFiles
+                ? 'bg-amber-100/60 text-[#FF7A00]'
+                : dictionaryFileName
                 ? 'bg-emerald-100 text-emerald-700'
                 : 'bg-slate-100 text-slate-600 group-hover:bg-emerald-100 group-hover:text-emerald-700'
             }`}>
-              <Book className="w-6 h-6" />
+              {!canUploadOwnFiles ? <Lock className="w-6 h-6 text-[#FF7A00]" /> : <Book className="w-6 h-6" />}
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -643,7 +717,11 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               <span className="text-[#FF7A00] font-black">*</span>
             </div>
 
-            {dictProgress ? (
+            {!canUploadOwnFiles ? (
+              <div className="mt-1.5 text-xs text-amber-800 font-medium max-w-[210px]">
+                Довідники вбудовано в демо-вибірку.
+              </div>
+            ) : dictProgress ? (
               <div className="w-full px-2 space-y-2 mt-2">
                 <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-800">
                   <span className="flex items-center gap-1.5 truncate">
@@ -678,18 +756,30 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               </div>
             )}
 
-            <span className="mt-3 text-[10px] px-2 py-0.5 rounded font-semibold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-              Обов'язковий файл
+            <span className={`mt-3 text-[10px] px-2 py-0.5 rounded font-semibold uppercase tracking-wider ${
+              !canUploadOwnFiles
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                : 'bg-slate-100 text-slate-600 border border-slate-200'
+            }`}>
+              {!canUploadOwnFiles ? '🔒 Демо-Sandbox' : "Обов'язковий файл"}
             </span>
           </div>
 
           {/* 4. Drag & Drop: XML Feed (Optional) */}
           <div
-            onDragOver={(e) => { e.preventDefault(); setDragActiveXml(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (canUploadOwnFiles) setDragActiveXml(true);
+            }}
             onDragLeave={() => setDragActiveXml(false)}
             onDrop={(e) => {
               e.preventDefault();
               setDragActiveXml(false);
+              if (!canUploadOwnFiles) {
+                if (onDemoRestricted) onDemoRestricted('Завантаження XML/YML фідів');
+                else setDemoNotice(getDemoRestrictionMessage('Завантаження XML фідів'));
+                return;
+              }
               if (e.dataTransfer.files && e.dataTransfer.files[0]) {
                 const file = e.dataTransfer.files[0];
                 const reader = new FileReader();
@@ -701,55 +791,72 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                 reader.readAsText(file);
               }
             }}
-            onClick={() => xmlInputRef.current?.click()}
+            onClick={() => {
+              if (!canUploadOwnFiles) {
+                if (onDemoRestricted) onDemoRestricted('Завантаження XML/YML фідів');
+                else setDemoNotice(getDemoRestrictionMessage('Завантаження XML фідів'));
+                return;
+              }
+              xmlInputRef.current?.click();
+            }}
             className={`p-5 rounded-xl border-2 border-dashed transition-all cursor-pointer text-center flex flex-col items-center justify-center min-h-[210px] relative group ${
-              dragActiveXml
+              !canUploadOwnFiles
+                ? 'bg-slate-50/80 border-slate-300 opacity-90 hover:border-amber-400 hover:bg-amber-50/30'
+                : dragActiveXml
                 ? 'bg-purple-50 border-purple-500 ring-4 ring-purple-100 scale-[1.01]'
                 : xmlFileName
                 ? 'bg-purple-50/40 border-purple-300 hover:border-purple-500'
                 : 'bg-white border-slate-300 hover:border-purple-500 hover:bg-slate-50/70 shadow-xs'
             }`}
           >
-            <input
-              ref={xmlInputRef}
-              type="file"
-              accept=".xml"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files?.[0]) {
-                  const file = e.target.files[0];
-                  const reader = new FileReader();
-                  reader.onload = (ev) => {
-                    if (onLoadXml && ev.target?.result) {
-                      onLoadXml(String(ev.target.result), file.name);
-                    }
-                  };
-                  reader.readAsText(file);
-                }
-              }}
-            />
+            {canUploadOwnFiles && (
+              <input
+                ref={xmlInputRef}
+                type="file"
+                accept=".xml"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      if (onLoadXml && ev.target?.result) {
+                        onLoadXml(String(ev.target.result), file.name);
+                      }
+                    };
+                    reader.readAsText(file);
+                  }
+                }}
+              />
+            )}
 
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 transition-colors ${
-              xmlFileName
+              !canUploadOwnFiles
+                ? 'bg-amber-100/60 text-[#FF7A00]'
+                : xmlFileName
                 ? 'bg-purple-100 text-purple-700'
                 : 'bg-slate-100 text-slate-600 group-hover:bg-purple-100 group-hover:text-purple-700'
             }`}>
-              <CodeXml className="w-6 h-6" />
+              {!canUploadOwnFiles ? <Lock className="w-6 h-6 text-[#FF7A00]" /> : <CodeXml className="w-6 h-6" />}
             </div>
 
             <div className="flex items-center gap-1.5">
-              <span className="font-bold text-slate-900 text-sm">4. XML фід товарів</span>
+              <span className="font-bold text-slate-900 text-sm">4. XML-фід для збагачення</span>
             </div>
 
             <div className="mt-1.5 text-xs text-slate-600 max-w-[210px]">
-              {xmlFileName ? (
+              {!canUploadOwnFiles ? (
+                <span className="text-amber-800 font-medium">
+                  Збагачення з XML заблоковано в Демо.
+                </span>
+              ) : xmlFileName ? (
                 <div className="font-semibold text-purple-700 flex items-center justify-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5 text-purple-600" />
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
                   <span className="truncate max-w-[170px]">{xmlFileName}</span>
                 </div>
               ) : (
                 <span className="text-slate-500">
-                  Prom, Hotline, Rozetka XML фід (опціонально)
+                  Опціонально: автопідтягування описів та параметрів
                 </span>
               )}
             </div>
@@ -777,11 +884,14 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               )}
             </div>
 
-            <span className="mt-2 text-[10px] px-2 py-0.5 rounded font-semibold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-              Додаткове джерело
+            <span className={`mt-3 text-[10px] px-2 py-0.5 rounded font-semibold uppercase tracking-wider ${
+              !canUploadOwnFiles
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                : 'bg-purple-50 text-purple-800 border border-purple-200'
+            }`}>
+              {!canUploadOwnFiles ? '🔒 Демо-Sandbox' : 'Додаткове джерело'}
             </span>
           </div>
-
         </div>
       </div>
 

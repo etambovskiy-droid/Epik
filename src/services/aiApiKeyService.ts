@@ -59,66 +59,47 @@ export function getStoreApiKey(storeId?: string): string | null {
 
 export function getStoredApiKey(storeId?: string): string | null {
   const storeKey = getStoreApiKey(storeId);
-  if (storeKey) return storeKey;
+  if (storeKey && storeKey !== 'server-managed') return storeKey;
 
   const globalKey = getGlobalApiKey();
-  if (globalKey) return globalKey;
+  if (globalKey && globalKey !== 'server-managed') return globalKey;
 
   if (typeof window !== 'undefined') {
     try {
       const fallback = localStorage.getItem('gemini_api_key');
-      if (fallback && fallback.trim()) return fallback.trim();
+      if (fallback && fallback.trim() && fallback.trim() !== 'server-managed') {
+        return fallback.trim();
+      }
     } catch {
       // ignore
     }
   }
 
-  try {
-    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-    if (envKey && typeof envKey === 'string' && envKey.trim()) {
-      return envKey.trim();
-    }
-  } catch {
-    // ignore
-  }
+  // Strictly NO fallback to server-managed: users must supply their own key
+  return null;
+}
 
-  // Fallback to server-managed key
-  return 'server-managed';
+export function hasUserApiKey(storeId?: string): boolean {
+  return Boolean(getStoredApiKey(storeId));
 }
 
 export function getDefaultEnvApiKey(): string | null {
-  try {
-    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-    if (envKey && typeof envKey === 'string' && envKey.trim()) {
-      return envKey.trim();
-    }
-  } catch {
-    // ignore
-  }
   return null;
 }
 
 export function getActiveApiKey(storeId?: string): {
   key: string | null;
-  source: 'store' | 'custom' | 'env' | 'none';
+  source: 'store' | 'custom' | 'none';
 } {
   const storeKey = getStoreApiKey(storeId);
-  if (storeKey) {
+  if (storeKey && storeKey !== 'server-managed') {
     return { key: storeKey, source: 'store' };
   }
   const globalKey = getGlobalApiKey();
-  if (globalKey) {
+  if (globalKey && globalKey !== 'server-managed') {
     return { key: globalKey, source: 'custom' };
   }
-  try {
-    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-    if (envKey && typeof envKey === 'string' && envKey.trim()) {
-      return { key: envKey.trim(), source: 'env' };
-    }
-  } catch {
-    // ignore
-  }
-  return { key: 'server-managed', source: 'env' };
+  return { key: null, source: 'none' };
 }
 
 export function saveApiKey(
@@ -168,7 +149,7 @@ export function removeApiKey(
 }
 
 export function maskApiKey(key: string | null): string {
-  if (!key || key === 'server-managed') return 'GEMINI_SERVER_MANAGED';
+  if (!key || key === 'server-managed') return 'Ключ не встановлено';
   if (key.length <= 10) return '••••••••';
   return `${key.slice(0, 6)}••••${key.slice(-4)}`;
 }
@@ -181,17 +162,27 @@ export function validateApiKeyFormat(_key: string): {
   return { isValid: true };
 }
 
-export async function testApiKeyConnection(_key?: string): Promise<{ success: boolean; message: string }> {
+export async function testApiKeyConnection(keyToTest?: string): Promise<{ success: boolean; message: string }> {
+  const effectiveKey = (keyToTest || getStoredApiKey() || '').trim();
+  if (!effectiveKey) {
+    return {
+      success: false,
+      message: 'Вкажіть API-ключ перед перевіркою з’єднання.'
+    };
+  }
+
   try {
     const response = await fetch('/api/gemini/direct', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-gemini-api-key': effectiveKey
       },
       body: JSON.stringify({
         prompt: 'Ping test. Reply with OK.',
         model: 'gemini-3.8-flash',
-        maxOutputTokens: 10
+        maxOutputTokens: 10,
+        apiKey: effectiveKey
       })
     });
 

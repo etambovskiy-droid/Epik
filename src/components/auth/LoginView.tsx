@@ -44,19 +44,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Password reset state
+  // Password reset request modal state (URL token reset is handled globally by AuthGuard)
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
-  const [resetTokenFromUrl, setResetTokenFromUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const urlParams = new URLSearchParams(window.location.search);
-    const rToken = urlParams.get('resetToken');
-    if (rToken) {
-      setResetTokenFromUrl(rToken);
-      setIsResetModalOpen(true);
-    }
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -308,17 +297,13 @@ export const LoginView: React.FC<LoginViewProps> = ({
       {/* Password Reset Modal with 60s TTL */}
       <ResetPasswordModal
         isOpen={isResetModalOpen}
-        onClose={() => {
-          setIsResetModalOpen(false);
-          setResetTokenFromUrl(null);
-        }}
-        initialToken={resetTokenFromUrl}
+        onClose={() => setIsResetModalOpen(false)}
+        initialToken={null}
         initialEmail={email}
         onPasswordResetSuccess={(resetEmail) => {
           setEmail(resetEmail);
           setMode('login');
           setIsResetModalOpen(false);
-          setResetTokenFromUrl(null);
         }}
       />
     </div>

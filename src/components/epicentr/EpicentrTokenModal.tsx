@@ -185,7 +185,7 @@ export const EpicentrTokenModal: React.FC<EpicentrTokenModalProps> = ({
         {/* Test Result Feedback */}
         {testResult && (
           <div
-            className={`mt-4 p-3 rounded-xl border text-xs flex items-start gap-2.5 ${
+            className={`mt-4 p-3.5 rounded-xl border text-xs flex items-start gap-2.5 transition-all ${
               testResult.success
                 ? 'bg-emerald-950/40 border-emerald-700/60 text-emerald-300'
                 : 'bg-rose-950/40 border-rose-700/60 text-rose-300'
@@ -196,12 +196,20 @@ export const EpicentrTokenModal: React.FC<EpicentrTokenModalProps> = ({
             ) : (
               <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
             )}
-            <div className="space-y-1">
-              <p className="font-medium">{testResult.message}</p>
+            <div className="space-y-1.5 flex-1 min-w-0">
+              <p className="font-medium leading-relaxed break-words">{testResult.message}</p>
               {testResult.source && (
                 <p className="text-[11px] opacity-80 font-mono">
                   Канал з'єднання: {testResult.source === 'direct' ? 'Direct Client Fetch' : 'CORS Proxy Layer'}
                 </p>
+              )}
+              {!testResult.success && testResult.message.includes('404') && (
+                <div className="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-200 text-[11px] leading-normal">
+                  <p className="font-semibold text-amber-300 mb-0.5">💡 Підказка для Vercel / Production:</p>
+                  <p>
+                    У проєкті додано конфігурацію <code className="font-mono text-amber-400">vercel.json</code>. Після повторного деплою запити автоматично проксіюватимуться через Vercel Edge. Тим часом повноцінно діє автономний PIM-каталог (2200+ категорій).
+                  </p>
+                </div>
               )}
             </div>
           </div>

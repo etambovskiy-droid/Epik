@@ -218,6 +218,39 @@ export class EpicentrMerchantApiService {
   }
 
   /**
+   * Safely extract a human-readable string from any error payload
+   */
+  private extractErrorMessage(jsonPayload: any, fallbackText: string): string {
+    if (!jsonPayload) return fallbackText;
+    if (typeof jsonPayload === 'string') return jsonPayload.trim() || fallbackText;
+    if (typeof jsonPayload === 'object') {
+      if (typeof jsonPayload.message === 'string' && jsonPayload.message.trim()) {
+        return jsonPayload.message.trim();
+      }
+      if (typeof jsonPayload.error === 'string' && jsonPayload.error.trim()) {
+        return jsonPayload.error.trim();
+      }
+      if (jsonPayload.error && typeof jsonPayload.error === 'object') {
+        if (typeof jsonPayload.error.message === 'string' && jsonPayload.error.message.trim()) {
+          return jsonPayload.error.message.trim();
+        }
+        if (typeof jsonPayload.error.code === 'string') {
+          return `Код помилки: ${jsonPayload.error.code}`;
+        }
+        try {
+          return JSON.stringify(jsonPayload.error);
+        } catch {
+          // ignore stringify errors
+        }
+      }
+      if (typeof jsonPayload.title === 'string' && jsonPayload.title.trim()) {
+        return jsonPayload.title.trim();
+      }
+    }
+    return fallbackText;
+  }
+
+  /**
    * Core request dispatcher with server proxy and resilient error parsing
    */
   private async executeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<{ data: T; source: 'proxy' | 'fallback' }> {
@@ -241,8 +274,12 @@ export class EpicentrMerchantApiService {
       });
 
       let jsonPayload: any = null;
+      let rawText = '';
       try {
-        jsonPayload = await res.json();
+        rawText = await res.text();
+        if (rawText) {
+          jsonPayload = JSON.parse(rawText);
+        }
       } catch {
         // Not a JSON response
       }
@@ -251,8 +288,18 @@ export class EpicentrMerchantApiService {
         return { data: jsonPayload as T, source: 'proxy' };
       }
 
+      const host = typeof window !== 'undefined' ? window.location.host : '';
+
+      if (res.status === 404) {
+        const detail = this.extractErrorMessage(
+          jsonPayload,
+          `Ендпоінт /api/epicentr-proxy не знайдено на ${host || 'сервері'}. Перевірте наявність vercel.json або запуск backend-проксі.`
+        );
+        throw new Error(`Проксі не налаштовано (404): ${detail}`);
+      }
+
       if (res.status === 401 || res.status === 403) {
-        const detail = jsonPayload?.message || jsonPayload?.error || 'Токен недійсний або не наданий.';
+        const detail = this.extractErrorMessage(jsonPayload, 'Токен недійсний або не має дозволу на операцію.');
         throw new Error(`Помилка авторизації Merchant API (${res.status}): ${detail}`);
       }
 
@@ -261,7 +308,7 @@ export class EpicentrMerchantApiService {
       }
 
       if (!res.ok) {
-        const msg = jsonPayload?.message || jsonPayload?.error || `Сервер повернув статус ${res.status}`;
+        const msg = this.extractErrorMessage(jsonPayload, rawText || `Сервер повернув статус ${res.status}`);
         throw new Error(`Помилка Merchant API: ${msg}`);
       }
 

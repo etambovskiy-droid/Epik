@@ -82,7 +82,8 @@ export function getStoredApiKey(storeId?: string): string | null {
     // ignore
   }
 
-  return null;
+  // Fallback to server-managed key
+  return 'server-managed';
 }
 
 export function getDefaultEnvApiKey(): string | null {
@@ -117,7 +118,7 @@ export function getActiveApiKey(storeId?: string): {
   } catch {
     // ignore
   }
-  return { key: null, source: 'none' };
+  return { key: 'server-managed', source: 'env' };
 }
 
 export function saveApiKey(
@@ -180,78 +181,50 @@ export function validateApiKeyFormat(_key: string): {
   return { isValid: true };
 }
 
-export async function testApiKeyConnection(key: string): Promise<{ success: boolean; message: string }> {
-  const trimmed = (key || '').trim();
-  if (!trimmed) {
-    return {
-      success: false,
-      message: 'Ключ API не вказано. Будь ласка, введіть валідний Google AI Studio API Key.'
-    };
-  }
-
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(trimmed)}`;
-
+export async function testApiKeyConnection(_key?: string): Promise<{ success: boolean; message: string }> {
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch('/api/gemini/direct', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': trimmed
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: 'Ping test. Reply with OK.' }]
-          }
-        ],
-        generationConfig: {
-          maxOutputTokens: 10,
-          temperature: 0.1
-        }
+        prompt: 'Ping test. Reply with OK.',
+        model: 'gemini-3.8-flash',
+        maxOutputTokens: 10
       })
     });
 
     if (response.ok) {
       return {
         success: true,
-        message: "З'єднання успішно підтверджено! Модель gemini-3.5-flash-lite працює."
+        message: "З'єднання з сервером Gemini API підтверджено! Модель gemini-3.8-flash працює коректно."
       };
     }
 
     let errorDetail = '';
     try {
       const errJson = await response.json();
-      errorDetail = errJson?.error?.message || '';
+      errorDetail = errJson?.message || errJson?.error || '';
     } catch {
-      // ignore
+      errorDetail = await response.text();
     }
 
-    if (response.status === 400 || response.status === 403) {
+    if (response.status === 402) {
       return {
         success: false,
-        message: `Недійсний API Key або доступ заблоковано Google AI Studio (${response.status})${
-          errorDetail ? `: ${errorDetail}` : ''
-        }`
-      };
-    }
-
-    if (response.status === 429) {
-      return {
-        success: false,
-        message: `Перевищено ліміт запитів Gemini API (429 Rate limit / Quota exceeded)${
-          errorDetail ? `: ${errorDetail}` : ''
-        }`
+        message: 'Кредити Gemini API вичерпано. Локальний PIM-рушій та правила Епіцентру активні.'
       };
     }
 
     return {
       success: false,
-      message: `Google API повернув помилку HTTP ${response.status}${errorDetail ? `: ${errorDetail}` : ''}`
+      message: `Сервер повернув помилку HTTP ${response.status}${errorDetail ? `: ${errorDetail}` : ''}`
     };
   } catch (error: any) {
     return {
       success: false,
-      message: `Помилка мережевого з'єднання з Google Generative Language API: ${error?.message || error}`
+      message: `Помилка мережевого з'єднання з сервером: ${error?.message || error}`
     };
   }
 }

@@ -24,6 +24,10 @@ export interface MerchantStore {
   subscriptionTier?: 'free' | 'pro' | 'enterprise';
 }
 
+export const SUPER_ADMIN_EMAIL = 'e.tambovskiy@gmail.com';
+
+export type UserApprovalStatus = 'approved' | 'pending_approval' | 'rejected';
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -32,9 +36,15 @@ export interface UserProfile {
   sellerCode: string;
   phone?: string;
   role: 'seller' | 'admin' | 'manager';
+  status: UserApprovalStatus;
+  approvalToken?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  adminNotes?: string;
   avatarUrl?: string;
   createdAt: string;
   isFirebaseUser?: boolean;
+  isDemo?: boolean;
   stores: MerchantStore[];
   activeStoreId: string;
 }
@@ -70,14 +80,30 @@ export const DEFAULT_DEMO_STORES: MerchantStore[] = [
   }
 ];
 
+export const SUPER_ADMIN_USER: UserProfile = {
+  id: 'usr_super_admin_tambovskiy',
+  email: SUPER_ADMIN_EMAIL,
+  name: 'Евгеній Тамбовський',
+  shopName: 'Головний Адміністратор Епіцентр PIM',
+  sellerCode: 'EP-ADMIN-01',
+  phone: '+380 (50) 000-00-00',
+  role: 'admin',
+  status: 'approved',
+  createdAt: '2026-01-01T00:00:00Z',
+  stores: DEFAULT_DEMO_STORES,
+  activeStoreId: 'shop-electronics'
+};
+
 export const DEFAULT_DEMO_USER: UserProfile = {
   id: 'usr_seller_demo_01',
   email: 'seller@epicentr.ua',
-  name: 'Олександр Мельник',
-  shopName: 'Епіцентр Постач Трейд',
-  sellerCode: 'EP-89214',
+  name: 'Олександр Мельник (Демо-доступ)',
+  shopName: 'Епіцентр Демо-Маркет (Sandbox)',
+  sellerCode: 'EP-DEMO',
   phone: '+380 (67) 123-45-67',
   role: 'seller',
+  status: 'approved',
+  isDemo: true,
   avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?autoformat&fit=crop&w=200&q=80',
   createdAt: '2026-01-15T10:00:00Z',
   stores: DEFAULT_DEMO_STORES,
@@ -85,6 +111,7 @@ export const DEFAULT_DEMO_USER: UserProfile = {
 };
 
 const DEFAULT_DEMO_PASSWORD = 'epicentr2026';
+const SUPER_ADMIN_PASSWORD = 'adminTambovskiy2026!';
 
 interface StoredAccount {
   user: UserProfile;
@@ -101,8 +128,11 @@ export function normalizeUserProfile(raw: Partial<UserProfile> | null | undefine
     return { ...DEFAULT_DEMO_USER, stores: [...DEFAULT_DEMO_STORES] };
   }
 
-  const fallbackShopName = (raw.shopName || '').trim() || DEFAULT_DEMO_USER.shopName;
-  const fallbackSellerCode = (raw.sellerCode || '').trim() || generateSellerCode();
+  const rawEmail = (raw.email || '').trim().toLowerCase();
+  const isSuperAdmin = rawEmail === SUPER_ADMIN_EMAIL.toLowerCase();
+
+  const fallbackShopName = (raw.shopName || '').trim() || (isSuperAdmin ? SUPER_ADMIN_USER.shopName : DEFAULT_DEMO_USER.shopName);
+  const fallbackSellerCode = (raw.sellerCode || '').trim() || (isSuperAdmin ? 'EP-ADMIN-01' : generateSellerCode());
   const createdAt = raw.createdAt || new Date().toISOString();
 
   let stores: MerchantStore[] = Array.isArray(raw.stores)
@@ -110,7 +140,9 @@ export function normalizeUserProfile(raw: Partial<UserProfile> | null | undefine
     : [];
 
   if (stores.length === 0) {
-    if (raw.id === DEFAULT_DEMO_USER.id || raw.email === DEFAULT_DEMO_USER.email) {
+    if (isSuperAdmin) {
+      stores = [...DEFAULT_DEMO_STORES];
+    } else if (raw.id === DEFAULT_DEMO_USER.id || rawEmail === DEFAULT_DEMO_USER.email) {
       stores = [...DEFAULT_DEMO_STORES];
     } else {
       stores = [
@@ -131,17 +163,36 @@ export function normalizeUserProfile(raw: Partial<UserProfile> | null | undefine
     stores.find(s => s.name === raw.shopName) ||
     stores[0];
 
+  // Role and approval status resolution
+  const resolvedRole = isSuperAdmin ? 'admin' : (raw.role || 'seller');
+  const resolvedStatus: UserApprovalStatus = isSuperAdmin
+    ? 'approved'
+    : (rawEmail === DEFAULT_DEMO_USER.email.toLowerCase() ? 'approved' : (raw.status || 'pending_approval'));
+
+  const isDemo = Boolean(
+    raw.isDemo ||
+    rawEmail === DEFAULT_DEMO_USER.email.toLowerCase() ||
+    raw.id === DEFAULT_DEMO_USER.id ||
+    raw.sellerCode === 'EP-DEMO'
+  );
+
   return {
     id: raw.id || `usr_${Date.now()}`,
-    email: raw.email || DEFAULT_DEMO_USER.email,
-    name: raw.name || DEFAULT_DEMO_USER.name,
+    email: raw.email || (isSuperAdmin ? SUPER_ADMIN_EMAIL : DEFAULT_DEMO_USER.email),
+    name: raw.name || (isSuperAdmin ? SUPER_ADMIN_USER.name : DEFAULT_DEMO_USER.name),
     shopName: activeStore.name,
     sellerCode: activeStore.sellerCode,
     phone: raw.phone,
-    role: raw.role || 'seller',
+    role: resolvedRole,
+    status: resolvedStatus,
+    approvalToken: raw.approvalToken,
+    approvedAt: raw.approvedAt,
+    rejectedAt: raw.rejectedAt,
+    adminNotes: raw.adminNotes,
     avatarUrl: raw.avatarUrl,
     createdAt,
     isFirebaseUser: Boolean(raw.isFirebaseUser),
+    isDemo,
     stores,
     activeStoreId: activeStore.id
   };
@@ -167,15 +218,39 @@ export class AuthService {
   private initStorage(): void {
     try {
       const existingAccountsStr = localStorage.getItem(REGISTERED_USERS_STORAGE_KEY);
-      if (!existingAccountsStr) {
-        const initialAccounts: Record<string, StoredAccount> = {
-          [DEFAULT_DEMO_USER.email.toLowerCase()]: {
-            user: DEFAULT_DEMO_USER,
-            passwordHash: DEFAULT_DEMO_PASSWORD
-          }
-        };
-        localStorage.setItem(REGISTERED_USERS_STORAGE_KEY, JSON.stringify(initialAccounts));
+      let accounts: Record<string, StoredAccount> = {};
+      if (existingAccountsStr) {
+        try {
+          accounts = JSON.parse(existingAccountsStr);
+        } catch {
+          accounts = {};
+        }
       }
+
+      // Ensure Super Admin account is pre-seeded
+      if (!accounts[SUPER_ADMIN_EMAIL.toLowerCase()]) {
+        accounts[SUPER_ADMIN_EMAIL.toLowerCase()] = {
+          user: SUPER_ADMIN_USER,
+          passwordHash: SUPER_ADMIN_PASSWORD
+        };
+      } else {
+        // Ensure role & status are always admin & approved
+        accounts[SUPER_ADMIN_EMAIL.toLowerCase()].user = {
+          ...accounts[SUPER_ADMIN_EMAIL.toLowerCase()].user,
+          role: 'admin',
+          status: 'approved'
+        };
+      }
+
+      // Ensure Default Demo Seller is available
+      if (!accounts[DEFAULT_DEMO_USER.email.toLowerCase()]) {
+        accounts[DEFAULT_DEMO_USER.email.toLowerCase()] = {
+          user: DEFAULT_DEMO_USER,
+          passwordHash: DEFAULT_DEMO_PASSWORD
+        };
+      }
+
+      localStorage.setItem(REGISTERED_USERS_STORAGE_KEY, JSON.stringify(accounts));
 
       const savedUserStr = localStorage.getItem(AUTH_USER_STORAGE_KEY);
       if (savedUserStr) {
@@ -189,13 +264,13 @@ export class AuthService {
         if (explicitLogout) {
           this.currentUser = null;
         } else {
-          this.currentUser = DEFAULT_DEMO_USER;
-          localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(DEFAULT_DEMO_USER));
+          // If no user is logged in, start with null so Auth Guard asks for authentication
+          this.currentUser = null;
         }
       }
     } catch (e) {
       console.warn('Failed to initialize auth storage:', e);
-      this.currentUser = DEFAULT_DEMO_USER;
+      this.currentUser = null;
     }
   }
 
@@ -403,18 +478,189 @@ export class AuthService {
   }
 
   /**
+   * Check if user is Super Administrator
+   */
+  public isSuperAdmin(user?: UserProfile | null): boolean {
+    const target = user || this.getCurrentUser();
+    if (!target) return false;
+    return (target.email || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+  }
+
+  /**
+   * Check if user is approved to access full PIM platform
+   */
+  public isApproved(user?: UserProfile | null): boolean {
+    const target = user || this.getCurrentUser();
+    if (!target) return false;
+    if (this.isSuperAdmin(target)) return true;
+    return target.status === 'approved';
+  }
+
+  /**
+   * Check if user is pending admin approval
+   */
+  public isPending(user?: UserProfile | null): boolean {
+    const target = user || this.getCurrentUser();
+    if (!target) return false;
+    return target.status === 'pending_approval';
+  }
+
+  /**
+   * Check if user was rejected
+   */
+  public isRejected(user?: UserProfile | null): boolean {
+    const target = user || this.getCurrentUser();
+    if (!target) return false;
+    return target.status === 'rejected';
+  }
+
+  /**
+   * 1-Click Super Admin Login (for project owner e.tambovskiy@gmail.com)
+   */
+  public async loginAsSuperAdmin(): Promise<{ success: boolean; user: UserProfile }> {
+    const adminUser = normalizeUserProfile(SUPER_ADMIN_USER);
+    this.persistUser(adminUser);
+    return { success: true, user: adminUser };
+  }
+
+  /**
+   * Get all registered users (for Admin Dashboard)
+   */
+  public getAllUsers(): UserProfile[] {
+    const accounts = this.getAccounts();
+    return Object.values(accounts).map(acc => normalizeUserProfile(acc.user));
+  }
+
+  /**
+   * Get pending approval users
+   */
+  public getPendingUsers(): UserProfile[] {
+    return this.getAllUsers().filter(u => u.status === 'pending_approval');
+  }
+
+  /**
+   * Admin approves a user (by email or approval token)
+   */
+  public async approveUser(emailOrToken: string): Promise<{ success: boolean; message: string; user?: UserProfile }> {
+    const cleanKey = (emailOrToken || '').trim().toLowerCase();
+    const accounts = this.getAccounts();
+
+    let targetEmail: string | null = null;
+    if (accounts[cleanKey]) {
+      targetEmail = cleanKey;
+    } else {
+      for (const [em, acc] of Object.entries(accounts)) {
+        if (acc.user.approvalToken === emailOrToken || acc.user.id === emailOrToken) {
+          targetEmail = em;
+          break;
+        }
+      }
+    }
+
+    if (!targetEmail || !accounts[targetEmail]) {
+      return { success: false, message: 'Користувача з таким ідентифікатором або токеном не знайдено' };
+    }
+
+    const updatedUser: UserProfile = {
+      ...accounts[targetEmail].user,
+      status: 'approved',
+      approvedAt: new Date().toISOString()
+    };
+
+    accounts[targetEmail].user = updatedUser;
+    this.saveAccounts(accounts);
+
+    // If current logged-in user is the one approved, refresh session
+    if (this.currentUser && this.currentUser.email.toLowerCase() === targetEmail.toLowerCase()) {
+      this.persistUser(updatedUser);
+    }
+
+    // Sync with backend API
+    try {
+      await fetch('/api/admin/approve-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': SUPER_ADMIN_EMAIL
+        },
+        body: JSON.stringify({ email: targetEmail, adminEmail: SUPER_ADMIN_EMAIL })
+      });
+    } catch {
+      // continue
+    }
+
+    return {
+      success: true,
+      message: `Користувача ${updatedUser.name} (${updatedUser.shopName}) успішно схвалено. Доступ відкрито!`,
+      user: updatedUser
+    };
+  }
+
+  /**
+   * Admin rejects a user
+   */
+  public async rejectUser(email: string, reason?: string): Promise<{ success: boolean; message: string; user?: UserProfile }> {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const accounts = this.getAccounts();
+
+    if (!accounts[cleanEmail]) {
+      return { success: false, message: 'Користувача не знайдено' };
+    }
+
+    const updatedUser: UserProfile = {
+      ...accounts[cleanEmail].user,
+      status: 'rejected',
+      rejectedAt: new Date().toISOString(),
+      adminNotes: reason || 'Заявку відхилено адміністратором'
+    };
+
+    accounts[cleanEmail].user = updatedUser;
+    this.saveAccounts(accounts);
+
+    if (this.currentUser && this.currentUser.email.toLowerCase() === cleanEmail) {
+      this.persistUser(updatedUser);
+    }
+
+    try {
+      await fetch('/api/admin/reject-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-email': SUPER_ADMIN_EMAIL
+        },
+        body: JSON.stringify({ email: cleanEmail, reason, adminEmail: SUPER_ADMIN_EMAIL })
+      });
+    } catch {
+      // continue
+    }
+
+    return {
+      success: true,
+      message: `Заявку користувача ${updatedUser.name} відхилено.`,
+      user: updatedUser
+    };
+  }
+
+  /**
    * Log in user with email and password
    */
   public async login(
     email: string,
     password: string
-  ): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+  ): Promise<{ success: boolean; user?: UserProfile; error?: string; status?: UserApprovalStatus }> {
     try {
       const cleanEmail = (email || '').trim().toLowerCase();
       const cleanPassword = (password || '').trim();
 
       if (!cleanEmail || !cleanPassword) {
         return { success: false, error: 'Введіть коректні email та пароль' };
+      }
+
+      // Special Super Admin password check
+      if (cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase() && cleanPassword === SUPER_ADMIN_PASSWORD) {
+        const adminUser = normalizeUserProfile(SUPER_ADMIN_USER);
+        this.persistUser(adminUser);
+        return { success: true, user: adminUser, status: 'approved' };
       }
 
       const accounts = this.getAccounts();
@@ -424,7 +670,7 @@ export class AuthService {
         if (cleanEmail === DEFAULT_DEMO_USER.email.toLowerCase() && cleanPassword === DEFAULT_DEMO_PASSWORD) {
           const demoUser = normalizeUserProfile(DEFAULT_DEMO_USER);
           this.persistUser(demoUser);
-          return { success: true, user: demoUser };
+          return { success: true, user: demoUser, status: 'approved' };
         }
         return { success: false, error: 'Користувача з такою електронною поштою не знайдено' };
       }
@@ -435,7 +681,12 @@ export class AuthService {
 
       const normalized = normalizeUserProfile(account.user);
       this.persistUser(normalized);
-      return { success: true, user: normalized };
+
+      return {
+        success: true,
+        user: normalized,
+        status: normalized.status
+      };
     } catch (err: any) {
       return {
         success: false,
@@ -454,14 +705,14 @@ export class AuthService {
   }
 
   /**
-   * Register new seller account with mandatory store name
+   * Register new seller account with mandatory store name & admin approval flow
    */
   public async register(
     name: string,
     email: string,
     password: string,
     shopName: string
-  ): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+  ): Promise<{ success: boolean; user?: UserProfile; error?: string; status?: UserApprovalStatus }> {
     try {
       const cleanName = (name || '').trim();
       const cleanEmail = (email || '').trim().toLowerCase();
@@ -478,8 +729,13 @@ export class AuthService {
         return { success: false, error: 'Користувач з таким email вже зареєстрований' };
       }
 
-      const sellerCode = generateSellerCode();
+      const isSuperAdmin = cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase();
+      const status: UserApprovalStatus = isSuperAdmin ? 'approved' : 'pending_approval';
+      const role = isSuperAdmin ? 'admin' : 'seller';
+      const sellerCode = isSuperAdmin ? 'EP-ADMIN-01' : generateSellerCode();
+      const approvalToken = `appr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
       const nowIso = new Date().toISOString();
+
       const initialStore: MerchantStore = {
         id: `store_${Date.now()}`,
         name: cleanShop,
@@ -495,7 +751,9 @@ export class AuthService {
         email: cleanEmail,
         shopName: cleanShop,
         sellerCode,
-        role: 'seller',
+        role,
+        status,
+        approvalToken,
         createdAt: nowIso,
         stores: [initialStore],
         activeStoreId: initialStore.id
@@ -508,7 +766,22 @@ export class AuthService {
       this.saveAccounts(accounts);
       this.persistUser(newUser);
 
-      return { success: true, user: newUser };
+      // Asynchronously notify backend of registration
+      try {
+        fetch('/api/auth/notify-registration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user: newUser, approvalToken })
+        }).catch(() => {});
+      } catch {
+        // ignore
+      }
+
+      return {
+        success: true,
+        user: newUser,
+        status
+      };
     } catch (err: any) {
       return {
         success: false,
@@ -518,25 +791,214 @@ export class AuthService {
   }
 
   /**
-   * Request password reset (simulated)
+   * Request password reset with strictly 60 seconds TTL (1 minute)
+   * Only permitted for approved merchants or Super Admin
    */
-  public async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
+  public async requestPasswordReset(email: string): Promise<{
+    success: boolean;
+    message: string;
+    token?: string;
+    resetUrl?: string;
+    expiresIn?: number;
+    error?: string;
+  }> {
     try {
       const cleanEmail = (email || '').trim().toLowerCase();
       if (!cleanEmail || !cleanEmail.includes('@')) {
-        return { success: false, message: 'Введіть коректну адресу електронної пошти' };
+        return { success: false, message: 'Введіть коректну адресу електронної пошти', error: 'INVALID_EMAIL' };
+      }
+
+      const accounts = this.getAccounts();
+      const account = accounts[cleanEmail];
+
+      if (!account) {
+        return {
+          success: false,
+          message: 'Користувача з такою електронною поштою не зареєстровано в системі',
+          error: 'USER_NOT_FOUND'
+        };
+      }
+
+      const user = account.user;
+
+      // Security check: Must be approved or super_admin
+      if (user.role !== 'admin' && user.status !== 'approved') {
+        if (user.status === 'pending_approval') {
+          return {
+            success: false,
+            message: 'Ваш обліковий запис очікує підтвердження адміністратором. Скидання пароля можливе лише для схвалених користувачів.',
+            error: 'PENDING_APPROVAL'
+          };
+        }
+        if (user.status === 'rejected') {
+          return {
+            success: false,
+            message: 'Реєстрацію цього акаунта було відхилено адміністратором. Скидання пароля заблоковано.',
+            error: 'REJECTED_USER'
+          };
+        }
+      }
+
+      // Generate 60-second token
+      const token = `rst_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const expiresAt = Date.now() + 60 * 1000; // 60s TTL
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      const resetUrl = `${origin}?resetToken=${token}`;
+
+      // Save token in localStorage
+      try {
+        const storedTokensStr = localStorage.getItem('epicentr_reset_tokens');
+        const tokens: Record<string, { email: string; expiresAt: number; token: string }> = storedTokensStr
+          ? JSON.parse(storedTokensStr)
+          : {};
+        tokens[token] = { email: cleanEmail, expiresAt, token };
+        localStorage.setItem('epicentr_reset_tokens', JSON.stringify(tokens));
+      } catch (err) {
+        console.warn('Failed to save reset token to storage:', err);
+      }
+
+      // Dispatch to server endpoint
+      try {
+        await fetch('/api/auth/request-password-reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, token, expiresAt })
+        });
+      } catch {
+        // continue
       }
 
       return {
         success: true,
-        message: `Інструкцію для скидання пароля надіслано на ${cleanEmail}. Перевірте поштову скриньку.`
+        message: 'Лист із посиланням для зміни пароля надіслано. Посилання активне рівно 1 хвилину (60 сек).',
+        token,
+        resetUrl,
+        expiresIn: 60
       };
     } catch (err: any) {
       return {
         success: false,
-        message: err?.message || 'Помилка запиту на відновлення пароля'
+        message: err?.message || 'Помилка запиту на відновлення пароля',
+        error: 'SERVER_ERROR'
       };
     }
+  }
+
+  /**
+   * Verify password reset token status and calculate remaining seconds
+   */
+  public verifyResetToken(token: string): {
+    valid: boolean;
+    email?: string;
+    remainingSeconds: number;
+    error?: string;
+  } {
+    if (!token) return { valid: false, remainingSeconds: 0, error: 'Токен відсутній' };
+
+    try {
+      const storedTokensStr = localStorage.getItem('epicentr_reset_tokens');
+      const tokens: Record<string, { email: string; expiresAt: number; token: string }> = storedTokensStr
+        ? JSON.parse(storedTokensStr)
+        : {};
+      const record = tokens[token];
+
+      if (!record) {
+        return { valid: false, remainingSeconds: 0, error: 'Посилання для скидання пароля не знайдено або воно вже використано' };
+      }
+
+      const now = Date.now();
+      const remainingMs = record.expiresAt - now;
+
+      if (remainingMs <= 0) {
+        return { valid: false, remainingSeconds: 0, error: 'Час дії посилання (60 сек) вичерпано. Згенеруйте нове посилання.' };
+      }
+
+      const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+      return { valid: true, email: record.email, remainingSeconds };
+    } catch {
+      return { valid: false, remainingSeconds: 0, error: 'Помилка перевірки токена' };
+    }
+  }
+
+  /**
+   * Submit new password with validated 60-second token
+   */
+  public async resetPasswordWithToken(
+    token: string,
+    newPass: string,
+    confirmPass: string
+  ): Promise<{ success: boolean; message: string; error?: string }> {
+    const verification = this.verifyResetToken(token);
+    if (!verification.valid || !verification.email) {
+      return {
+        success: false,
+        message: verification.error || 'Час дії посилання (60 сек) вичерпано. Згенеруйте новий запит на зміну пароля.',
+        error: 'TOKEN_EXPIRED'
+      };
+    }
+
+    const cleanNewPass = (newPass || '').trim();
+    const cleanConfirmPass = (confirmPass || '').trim();
+
+    if (cleanNewPass.length < 6) {
+      return {
+        success: false,
+        message: 'Новий пароль повинен містити не менше 6 символів',
+        error: 'SHORT_PASSWORD'
+      };
+    }
+
+    if (cleanNewPass !== cleanConfirmPass) {
+      return {
+        success: false,
+        message: 'Паролі не збігаються. Будь ласка, перевірте правильність введення',
+        error: 'PASSWORDS_MISMATCH'
+      };
+    }
+
+    const accounts = this.getAccounts();
+    const emailKey = verification.email.toLowerCase();
+    const account = accounts[emailKey];
+
+    if (!account) {
+      return {
+        success: false,
+        message: 'Обліковий запис користувача не знайдено',
+        error: 'USER_NOT_FOUND'
+      };
+    }
+
+    // Update password
+    account.passwordHash = cleanNewPass;
+    this.saveAccounts(accounts);
+
+    // Invalidate token
+    try {
+      const storedTokensStr = localStorage.getItem('epicentr_reset_tokens');
+      if (storedTokensStr) {
+        const tokens = JSON.parse(storedTokensStr);
+        delete tokens[token];
+        localStorage.setItem('epicentr_reset_tokens', JSON.stringify(tokens));
+      }
+    } catch {
+      // continue
+    }
+
+    // Notify backend
+    try {
+      await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword: cleanNewPass })
+      });
+    } catch {
+      // continue
+    }
+
+    return {
+      success: true,
+      message: 'Пароль успішно оновлено! Тепер ви можете увійти до кабінету з новим паролем.'
+    };
   }
 
   /**

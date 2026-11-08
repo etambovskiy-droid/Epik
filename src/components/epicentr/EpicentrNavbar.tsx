@@ -64,6 +64,7 @@ interface EpicentrNavbarProps {
   onOpenImageStudio?: () => void;
   onOpenSearchGrounding?: () => void;
   onOpenChatbot?: () => void;
+  onOpenAdminUsers?: () => void;
 }
 
 export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
@@ -94,7 +95,8 @@ export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
   isXmlConverterActive,
   onOpenImageStudio,
   onOpenSearchGrounding,
-  onOpenChatbot
+  onOpenChatbot,
+  onOpenAdminUsers
 }) => {
   const [shopMenuOpen, setShopMenuOpen] = useState(false);
   const [isAddingStore, setIsAddingStore] = useState(false);
@@ -575,6 +577,24 @@ export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
             <Globe className="w-3.5 h-3.5 text-[#FF7A00]" />
             <span className="font-mono uppercase">{lang}</span>
           </button>
+
+          {/* Super Admin Merchant Management */}
+          {authService.isSuperAdmin(currentUser) && onOpenAdminUsers && (
+            <button
+              type="button"
+              onClick={onOpenAdminUsers}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+              title="Управління мерчантами (Super Admin)"
+            >
+              <ShieldCheck className="w-4 h-4 text-slate-950" />
+              <span className="hidden md:inline">Мерчанти</span>
+              {authService.getPendingUsers().length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-slate-950 text-amber-300 font-mono text-[10px] animate-pulse">
+                  {authService.getPendingUsers().length}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* User Profile Avatar with Online Status */}
           {currentUser ? (

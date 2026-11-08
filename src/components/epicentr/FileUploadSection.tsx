@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Check,
   Share2,
+  Lock,
   Users,
   Camera,
   Image as ImageIcon,
@@ -32,6 +33,8 @@ import {
 import { SAMPLE_CATEGORIES } from '../../data/sampleEpicentrCategories';
 import { EpicentrColumn, EpicentrDictionaryAttribute } from '../../types/epicentr';
 import { epicentrMerchantApi } from '../../services/epicentrMerchantApiService';
+import { UserProfile, authService } from '../../services/authService';
+import { canAccessFeature, getDemoRestrictionMessage } from '../../services/permissionService';
 import {
   analyzeEpicentrColumns,
   buildDictionaryIndex,
@@ -74,6 +77,7 @@ interface FileUploadSectionProps {
   uploadedPhotos?: UploadedPhotoItem[];
   columns: EpicentrColumn[];
   rowCount: number;
+  currentUser?: UserProfile | null;
   onProceedToClarification: () => void;
   onOpenShare?: () => void;
   onOpenXmlConverter?: () => void;
@@ -91,6 +95,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   uploadedPhotos = [],
   columns,
   rowCount,
+  currentUser,
   onProceedToClarification,
   onOpenShare,
   onOpenXmlConverter,
@@ -101,11 +106,14 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   const [dragActiveDict, setDragActiveDict] = useState(false);
   const [dragActiveXml, setDragActiveXml] = useState(false);
   const [selectedSampleId, setSelectedSampleId] = useState<string>('headphones');
+  const [demoNotice, setDemoNotice] = useState<string | null>(null);
   const [dictProgress, setDictProgress] = useState<{
     percent: number;
     message: string;
     fromCache?: boolean;
   } | null>(null);
+
+  const canUploadOwnFiles = canAccessFeature('UPLOAD_CUSTOM_FILES', currentUser || authService.getCurrentUser());
 
   const templateInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
@@ -131,6 +139,10 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
   // Handle template file upload preserving exact cell comments, exact header \n, and original sheet names
   const handleTemplateFile = (file: File) => {
+    if (!canUploadOwnFiles) {
+      setDemoNotice(getDemoRestrictionMessage('Завантаження власних прайсів'));
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
@@ -387,6 +399,26 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
       {/* SECTION 1: Convenient Drag-and-Drop Area for Excel Template and Photos */}
       <div>
+        {/* Demo Restriction Alert Banner */}
+        {demoNotice && (
+          <div className="mb-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-900 flex items-start justify-between gap-3 animate-in fade-in">
+            <div className="flex items-start gap-2.5">
+              <Lock className="w-4 h-4 text-[#FF7A00] shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block text-sm text-[#d96500]">Обмеження демо-доступу:</span>
+                <p className="mt-0.5 leading-relaxed">{demoNotice}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDemoNotice(null)}
+              className="p-1 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-amber-100 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-3 px-1">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#FF7A00]" />
@@ -403,38 +435,57 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           
           {/* 1. Drag & Drop: Excel Category Template */}
           <div
-            onDragOver={(e) => { e.preventDefault(); setDragActiveTemplate(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (canUploadOwnFiles) setDragActiveTemplate(true);
+            }}
             onDragLeave={() => setDragActiveTemplate(false)}
             onDrop={(e) => {
               e.preventDefault();
               setDragActiveTemplate(false);
+              if (!canUploadOwnFiles) {
+                setDemoNotice(getDemoRestrictionMessage('Завантаження власних прайсів'));
+                return;
+              }
               if (e.dataTransfer.files && e.dataTransfer.files[0]) {
                 handleTemplateFile(e.dataTransfer.files[0]);
               }
             }}
-            onClick={() => templateInputRef.current?.click()}
+            onClick={() => {
+              if (!canUploadOwnFiles) {
+                setDemoNotice(getDemoRestrictionMessage('Завантаження власних прайсів'));
+                return;
+              }
+              templateInputRef.current?.click();
+            }}
             className={`p-5 rounded-xl border-2 border-dashed transition-all cursor-pointer text-center flex flex-col items-center justify-center min-h-[210px] relative group ${
-              dragActiveTemplate
+              !canUploadOwnFiles
+                ? 'bg-slate-50/80 border-slate-300 opacity-90 hover:border-amber-400 hover:bg-amber-50/30'
+                : dragActiveTemplate
                 ? 'bg-blue-50 border-[#004BB7] ring-4 ring-blue-100 scale-[1.01]'
                 : templateFileName
                 ? 'bg-blue-50/40 border-blue-300 hover:border-[#004BB7]'
                 : 'bg-white border-slate-300 hover:border-[#004BB7] hover:bg-slate-50/70 shadow-xs'
             }`}
           >
-            <input
-              ref={templateInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && handleTemplateFile(e.target.files[0])}
-            />
+            {canUploadOwnFiles && (
+              <input
+                ref={templateInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleTemplateFile(e.target.files[0])}
+              />
+            )}
 
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 transition-colors ${
-              templateFileName
+              !canUploadOwnFiles
+                ? 'bg-amber-100/60 text-[#FF7A00]'
+                : templateFileName
                 ? 'bg-blue-100 text-[#004BB7]'
                 : 'bg-slate-100 text-slate-600 group-hover:bg-blue-100 group-hover:text-[#004BB7]'
             }`}>
-              <FileSpreadsheet className="w-6 h-6" />
+              {!canUploadOwnFiles ? <Lock className="w-6 h-6 text-[#FF7A00]" /> : <FileSpreadsheet className="w-6 h-6" />}
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -443,7 +494,11 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             </div>
 
             <div className="mt-1.5 text-xs text-slate-600 max-w-[210px]">
-              {templateFileName ? (
+              {!canUploadOwnFiles ? (
+                <span className="text-amber-800 font-medium">
+                  Власні файли заблоковано в Демо. Скористайтесь 3 тестовими категоріями нижче ↓
+                </span>
+              ) : templateFileName ? (
                 <div className="space-y-1">
                   <div className="font-semibold text-[#004BB7] flex items-center justify-center gap-1">
                     <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
@@ -460,8 +515,12 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               )}
             </div>
 
-            <span className="mt-3 text-[10px] px-2 py-0.5 rounded font-semibold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-              Обов'язковий шаблон
+            <span className={`mt-3 text-[10px] px-2 py-0.5 rounded font-semibold uppercase tracking-wider ${
+              !canUploadOwnFiles
+                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                : 'bg-slate-100 text-slate-600 border border-slate-200'
+            }`}>
+              {!canUploadOwnFiles ? '🔒 Демо-Sandbox' : "Обов'язковий шаблон"}
             </span>
           </div>
 

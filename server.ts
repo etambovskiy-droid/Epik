@@ -3,7 +3,8 @@ import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import dotenv from 'dotenv';
-import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel, Modality, LiveServerMessage } from '@google/genai';
+import { WebSocketServer, WebSocket } from 'ws';
 
 dotenv.config();
 
@@ -22,9 +23,23 @@ function getAiClient(): GoogleGenAI {
   });
 }
 
+function resolvePort(): number {
+  // Check CLI arguments (--port 3000 or -p 3000)
+  const portArgIdx = process.argv.findIndex(arg => arg === '--port' || arg === '-p');
+  if (portArgIdx !== -1 && process.argv[portArgIdx + 1]) {
+    const val = parseInt(process.argv[portArgIdx + 1], 10);
+    if (!isNaN(val) && val > 0) return val;
+  }
+  // In development, AI Studio dev server MUST run on port 3000
+  if (process.env.NODE_ENV !== 'production') {
+    return 3000;
+  }
+  return Number(process.env.PORT) || 3000;
+}
+
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+  const PORT = resolvePort();
   const httpServer = http.createServer(app);
 
   // Allow larger payloads for base64 image editing & catalog data
@@ -724,12 +739,13 @@ ${attributesPromptSection}
     }
   });
 
-  // 8. Gemini: Generic Direct Proxy Endpoint
+  // 8. Gemini: Generic Direct Proxy Endpoint (Server-Side)
   app.post('/api/gemini/direct', async (req, res) => {
     try {
-      const { prompt, model, systemInstruction, responseMimeType, maxOutputTokens = 350, temperature, tools } = req.body;
-      if (!prompt || typeof prompt !== 'string') {
-        res.status(400).json({ error: 'Prompt is required' });
+      const { prompt, contents, model, systemInstruction, responseMimeType, maxOutputTokens = 350, temperature, tools } = req.body;
+      const effectiveInput = prompt || contents;
+      if (!effectiveInput) {
+        res.status(400).json({ error: 'Prompt or contents are required' });
         return;
       }
 
@@ -747,8 +763,28 @@ ${attributesPromptSection}
         config.tools = tools;
       }
 
-      const response = await generateTextWithFallback(model || 'gemini-3.5-flash-lite', prompt, config);
-      res.json({ text: response?.text || '' });
+      const response = await generateTextWithFallback(model || 'gemini-3.8-flash', effectiveInput, config);
+      const candidate = response?.candidates?.[0];
+      const groundingChunks = candidate?.groundingMetadata?.groundingChunks || [];
+      const sources = groundingChunks
+        .map((chunk: any) => {
+          if (chunk.web?.uri) {
+            return {
+              uri: chunk.web.uri,
+              title: chunk.web.title || chunk.web.uri
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+      const searchEntryPoint = candidate?.groundingMetadata?.searchEntryPoint?.renderedContent || null;
+
+      res.json({
+        text: response?.text || '',
+        sources,
+        searchEntryPoint
+      });
     } catch (error: any) {
       if (isPrepaymentDepletedError(error)) {
         res.status(402).json({
@@ -761,7 +797,135 @@ ${attributesPromptSection}
     }
   });
 
-  // In-memory feedback store for contextual cell issues
+  // 8.1 Gemini: Streaming Content Generation Endpoint (Server-Sent Events)
+  app.post('/api/gemini/stream', async (req, res) => {
+    try {
+      const { prompt, contents, model = 'gemini-3.8-flash', systemInstruction, maxOutputTokens = 1000 } = req.body;
+      const input = prompt || contents;
+      if (!input) {
+        res.status(400).json({ error: 'Prompt or contents are required' });
+        return;
+      }
+
+      const ai = getAiClient();
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      const config: any = {
+        maxOutputTokens: Number(maxOutputTokens) || 1000
+      };
+      if (systemInstruction) {
+        config.systemInstruction = systemInstruction;
+      }
+
+      const responseStream = await ai.models.generateContentStream({
+        model,
+        contents: input,
+        config
+      });
+
+      for await (const chunk of responseStream) {
+        const text = chunk.text || '';
+        if (text) {
+          res.write(`data: ${JSON.stringify({ text })}\n\n`);
+        }
+      }
+
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } catch (error: any) {
+      console.warn('Error in /api/gemini/stream:', error?.message || error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: error?.message || 'Streaming failed' });
+      } else {
+        res.write(`data: ${JSON.stringify({ error: error?.message || 'Stream error' })}\n\n`);
+        res.end();
+      }
+    }
+  });
+
+  // 8.2 Gemini Live API: Real-Time Audio & Conversation WebSocket Bridge
+  const wss = new WebSocketServer({ server: httpServer, path: '/api/gemini/live' });
+
+  wss.on('connection', async (clientWs: WebSocket) => {
+    let session: any = null;
+    try {
+      const ai = getAiClient();
+      session = await ai.live.connect({
+        model: 'gemini-3.8-live',
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
+          },
+          systemInstruction: 'Ти — голосовий асистент маркетплейсу Епіцентр. Допомагай селерам у заповненні шаблонів товарів, характеристик та формуванні назв за регламентом.'
+        },
+        callbacks: {
+          onmessage: (message: LiveServerMessage) => {
+            for (const part of message.serverContent?.modelTurn?.parts ?? []) {
+              if (part.inlineData?.data) {
+                if (clientWs.readyState === WebSocket.OPEN) {
+                  clientWs.send(JSON.stringify({ audio: part.inlineData.data }));
+                }
+              }
+              if (part.text) {
+                if (clientWs.readyState === WebSocket.OPEN) {
+                  clientWs.send(JSON.stringify({ text: part.text }));
+                }
+              }
+            }
+            if (message.serverContent?.interrupted) {
+              if (clientWs.readyState === WebSocket.OPEN) {
+                clientWs.send(JSON.stringify({ interrupted: true }));
+              }
+            }
+          },
+          onerror: (err: any) => {
+            console.warn('[Gemini Live WS Server notice]:', err?.message || err);
+            if (clientWs.readyState === WebSocket.OPEN) {
+              clientWs.send(JSON.stringify({ error: err?.message || 'Gemini Live error' }));
+            }
+          },
+          onclose: () => {
+            if (clientWs.readyState === WebSocket.OPEN) {
+              clientWs.close();
+            }
+          }
+        }
+      });
+
+      clientWs.on('message', (data: any) => {
+        try {
+          const parsed = JSON.parse(data.toString());
+          if (parsed.audio && session) {
+            session.sendRealtimeInput({
+              media: { data: parsed.audio, mimeType: 'audio/pcm;rate=16000' }
+            });
+          } else if (parsed.text && session) {
+            session.sendClientContent({
+              turns: [{ role: 'user', parts: [{ text: parsed.text }] }],
+              turnComplete: true
+            });
+          }
+        } catch (e: any) {
+          console.warn('[Gemini Live client message error]:', e?.message);
+        }
+      });
+
+      clientWs.on('close', () => {
+        try {
+          if (session?.close) session.close();
+        } catch {}
+      });
+    } catch (err: any) {
+      console.warn('[Gemini Live Connection Failed]:', err?.message || err);
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify({ error: err?.message || 'Could not connect to Gemini Live' }));
+        clientWs.close();
+      }
+    }
+  });
   const inMemoryFeedbackStore: any[] = [];
 
   // 9. Feedback API
@@ -809,12 +973,264 @@ ${attributesPromptSection}
     });
   });
 
+  // 10. Super Admin & Approval Flow Configuration
+  const SUPER_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'e.tambovskiy@gmail.com').trim().toLowerCase();
+
+  const inMemoryUsers: Map<string, any> = new Map([
+    [
+      SUPER_ADMIN_EMAIL,
+      {
+        id: 'usr_super_admin',
+        email: SUPER_ADMIN_EMAIL,
+        name: 'Евгеній Тамбовський',
+        shopName: 'Головний Адміністратор Епіцентр PIM',
+        sellerCode: 'EP-ADMIN',
+        role: 'admin',
+        status: 'approved',
+        createdAt: '2026-01-01T00:00:00Z'
+      }
+    ]
+  ]);
+
+  // List all users for Super Admin
+  app.get('/api/admin/users', (req, res) => {
+    const requesterEmail = String(req.headers['x-admin-email'] || req.query.adminEmail || '').toLowerCase().trim();
+    if (requesterEmail !== SUPER_ADMIN_EMAIL) {
+      res.status(403).json({
+        error: 'FORBIDDEN',
+        message: 'Доступ заборонено. Панель схвалення мерчантів доступна виключно для головного адміністратора платформи.'
+      });
+      return;
+    }
+
+    res.json({
+      superAdmin: 'Головний Адміністратор',
+      users: Array.from(inMemoryUsers.values())
+    });
+  });
+
+  // Admin: 1-Click Approve User
+  app.post('/api/admin/approve-user', (req, res) => {
+    const requesterEmail = String(req.headers['x-admin-email'] || req.body.adminEmail || '').toLowerCase().trim();
+    if (requesterEmail !== SUPER_ADMIN_EMAIL) {
+      res.status(403).json({
+        error: 'FORBIDDEN',
+        message: 'Доступ заборонено. Тільки головний адміністратор платформи має право схвалювати мерчантів.'
+      });
+      return;
+    }
+
+    const { email, token } = req.body;
+    let targetUser: any = null;
+
+    if (email) {
+      targetUser = inMemoryUsers.get(String(email).toLowerCase().trim());
+    } else if (token) {
+      for (const u of inMemoryUsers.values()) {
+        if (u.approvalToken === token) {
+          targetUser = u;
+          break;
+        }
+      }
+    }
+
+    if (!targetUser) {
+      res.status(404).json({ error: 'Користувача з таким email або токеном не знайдено' });
+      return;
+    }
+
+    targetUser.status = 'approved';
+    targetUser.approvedAt = new Date().toISOString();
+    inMemoryUsers.set(targetUser.email.toLowerCase().trim(), targetUser);
+
+    console.log(`[Admin Approval] User ${targetUser.email} (${targetUser.shopName}) APPROVED by Super Admin`);
+
+    res.json({
+      success: true,
+      user: targetUser,
+      message: `Користувача ${targetUser.email} успішно схвалено! Доступ до PIM надано.`
+    });
+  });
+
+  // Admin: Reject User
+  app.post('/api/admin/reject-user', (req, res) => {
+    const requesterEmail = String(req.headers['x-admin-email'] || req.body.adminEmail || '').toLowerCase().trim();
+    if (requesterEmail !== SUPER_ADMIN_EMAIL) {
+      res.status(403).json({
+        error: 'FORBIDDEN',
+        message: 'Доступ заборонено. Тільки головний адміністратор платформи має право відхиляти доступ.'
+      });
+      return;
+    }
+
+    const { email, reason } = req.body;
+    const targetUser = inMemoryUsers.get(String(email || '').toLowerCase().trim());
+    if (!targetUser) {
+      res.status(404).json({ error: 'Користувача не знайдено' });
+      return;
+    }
+
+    targetUser.status = 'rejected';
+    targetUser.rejectedAt = new Date().toISOString();
+    targetUser.adminNotes = reason || 'Заявку відхилено адміністратором';
+    inMemoryUsers.set(targetUser.email.toLowerCase().trim(), targetUser);
+
+    res.json({
+      success: true,
+      user: targetUser,
+      message: `Заявку користувача ${targetUser.email} відхилено.`
+    });
+  });
+
+  // Notify Admin upon registration
+  app.post('/api/auth/notify-registration', (req, res) => {
+    const { user, approvalToken } = req.body;
+    if (!user || !user.email) {
+      res.status(400).json({ error: 'User payload required' });
+      return;
+    }
+
+    const emailKey = String(user.email).toLowerCase().trim();
+    const existing = inMemoryUsers.get(emailKey) || {};
+    inMemoryUsers.set(emailKey, {
+      ...existing,
+      ...user,
+      approvalToken: approvalToken || user.approvalToken,
+      status: user.status || 'pending_approval'
+    });
+
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const tokenVal = approvalToken || user.approvalToken;
+    const approveUrl = `${appUrl}?approvalToken=${tokenVal}&action=approve`;
+    const rejectUrl = `${appUrl}?approvalToken=${tokenVal}&action=reject`;
+
+    console.log(`[EMAIL NOTIFICATION TO PLATFORM ADMIN]`);
+    console.log(`Новий мерчант подав заявку: ${user.name} (${user.shopName}), email: ${user.email}`);
+    console.log(`-> 1-Click Approve URL: ${approveUrl}`);
+    console.log(`-> Reject URL: ${rejectUrl}`);
+
+    res.json({
+      success: true,
+      message: 'Заявку передано адміністратору',
+      approveUrl,
+      rejectUrl
+    });
+  });
+
+  // 11. Password Reset with 60-Second TTL (1 minute)
+  const inMemoryResetTokens: Map<string, { email: string; token: string; expiresAt: number; used?: boolean }> = new Map();
+
+  app.post('/api/auth/request-password-reset', (req, res) => {
+    const { email, token: clientToken, expiresAt: clientExpiresAt } = req.body;
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      res.status(400).json({ error: 'Введіть коректну адресу електронної пошти' });
+      return;
+    }
+
+    // Verify user exists and is approved or admin
+    const isSuper = cleanEmail === SUPER_ADMIN_EMAIL;
+    const existing = inMemoryUsers.get(cleanEmail);
+
+    if (!isSuper && existing && existing.status !== 'approved') {
+      res.status(403).json({
+        error: 'ACCOUNT_NOT_ELIGIBLE',
+        message: 'Скидання пароля можливе лише для підтверджених облікових записів або адміністратора.'
+      });
+      return;
+    }
+
+    const token = clientToken || `rst_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const expiresAt = clientExpiresAt || Date.now() + 60 * 1000; // 60s TTL
+    inMemoryResetTokens.set(token, {
+      email: cleanEmail,
+      token,
+      expiresAt,
+      used: false
+    });
+
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const resetUrl = `${appUrl}?resetToken=${token}`;
+
+    console.log(`[EMAIL DISPATCH: PASSWORD RESET LINK]`);
+    console.log(`Одержувач: ${cleanEmail}`);
+    console.log(`Час дії: 60 секунд (TTL: 1 min)`);
+    console.log(`-> Посилання: ${resetUrl}`);
+
+    res.json({
+      success: true,
+      message: 'Лист із посиланням для зміни пароля надіслано. Посилання активне рівно 1 хвилину (60 сек).',
+      token,
+      resetUrl,
+      expiresIn: 60
+    });
+  });
+
+  app.post('/api/auth/verify-reset-token', (req, res) => {
+    const { token } = req.body;
+    if (!token) {
+      res.status(400).json({ valid: false, message: 'Токен відсутній' });
+      return;
+    }
+
+    const record = inMemoryResetTokens.get(token);
+    if (!record || record.used) {
+      res.status(404).json({ valid: false, message: 'Посилання не знайдено або вже використано' });
+      return;
+    }
+
+    const now = Date.now();
+    const remainingMs = record.expiresAt - now;
+    if (remainingMs <= 0) {
+      inMemoryResetTokens.delete(token);
+      res.status(410).json({ valid: false, message: 'Час дії посилання (60 сек) вичерпано. Згенеруйте нове.' });
+      return;
+    }
+
+    res.json({
+      valid: true,
+      email: record.email,
+      remainingSeconds: Math.ceil(remainingMs / 1000)
+    });
+  });
+
+  app.post('/api/auth/reset-password', (req, res) => {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword || String(newPassword).length < 6) {
+      res.status(400).json({ error: 'Пароль повинен містити не менше 6 символів' });
+      return;
+    }
+
+    const record = inMemoryResetTokens.get(token);
+    if (!record || record.used) {
+      res.status(404).json({ error: 'Посилання недійсне або вже використано' });
+      return;
+    }
+
+    if (Date.now() > record.expiresAt) {
+      inMemoryResetTokens.delete(token);
+      res.status(410).json({ error: 'Час дії посилання (60 сек) вичерпано. Згенеруйте нове.' });
+      return;
+    }
+
+    record.used = true;
+    inMemoryResetTokens.delete(token);
+
+    console.log(`[PASSWORD UPDATED] Password successfully updated for user: ${record.email}`);
+
+    res.json({
+      success: true,
+      message: 'Пароль успішно змінено! Тепер ви можете увійти з новим паролем.'
+    });
+  });
+
   // Vite middleware for development, static serving for production
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: process.env.DISABLE_HMR === 'true' ? false : { server: httpServer }
+        hmr: false
       },
       appType: 'spa'
     });

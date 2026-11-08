@@ -65,6 +65,8 @@ import {
   BatchEnrichmentProgressMetrics
 } from '../../services/geminiFillingService';
 import { getStoredApiKey } from '../../services/aiApiKeyService';
+import { authService } from '../../services/authService';
+import { canAccessFeature, getDemoRestrictionMessage } from '../../services/permissionService';
 
 interface InteractiveDiffTableProps {
   columns: EpicentrColumn[];
@@ -508,6 +510,15 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
 
   // Quick Export to Excel .xlsx
   const handleExportExcel = () => {
+    const curUser = authService.getCurrentUser();
+    if (!canAccessFeature('EXPORT_CATALOG_FILE', curUser)) {
+      setNotificationToast({
+        message: getDemoRestrictionMessage('Експорт заповненого Excel'),
+        type: 'info'
+      });
+      setTimeout(() => setNotificationToast(null), 5000);
+      return;
+    }
     try {
       const exportWb = generateEpicentrExportWorkbook(rawWorkbook, rows, columns, dictionaryIndex);
       const outName = originalFileName
@@ -524,6 +535,15 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
 
   // Quick Export to CSV
   const handleExportCsv = () => {
+    const curUser = authService.getCurrentUser();
+    if (!canAccessFeature('EXPORT_CATALOG_FILE', curUser)) {
+      setNotificationToast({
+        message: getDemoRestrictionMessage('Експорт у форматі CSV'),
+        type: 'info'
+      });
+      setTimeout(() => setNotificationToast(null), 5000);
+      return;
+    }
     try {
       const dataToExport = filteredRows.map(r => {
         const rowCopy = { ...r.updatedRow };

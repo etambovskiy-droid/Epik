@@ -58,11 +58,14 @@ import { ApiKeySettingsModal } from './components/epicentr/ApiKeySettingsModal';
 import { EpicentrXmlConverterView } from './components/epicentr/EpicentrXmlConverterView';
 import { EpicentrTokenModal } from './components/epicentr/EpicentrTokenModal';
 import { AuthModal } from './components/epicentr/AuthModal';
+import { AuthGuard } from './components/auth/AuthGuard';
+import { AdminUsersModal } from './components/auth/AdminUsersModal';
 import { UserProfileDrawer } from './components/epicentr/UserProfileDrawer';
 import { ImageStudioModal } from './components/epicentr/ImageStudioModal';
 import { SearchGroundingModal } from './components/epicentr/SearchGroundingModal';
 import { GeminiChatbotDrawer } from './components/epicentr/GeminiChatbotDrawer';
 import { authService, UserProfile } from './services/authService';
+import { canAccessFeature, getDemoRestrictionMessage } from './services/permissionService';
 import {
   auth,
   saveCatalogSessionToFirestore,
@@ -211,6 +214,7 @@ export function App() {
   const [isImageStudioOpen, setIsImageStudioOpen] = useState(false);
   const [isSearchGroundingOpen, setIsSearchGroundingOpen] = useState(false);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+  const [isAdminUsersModalOpen, setIsAdminUsersModalOpen] = useState(false);
 
   useEffect(() => {
     const unsub = authService.subscribe((u) => {
@@ -287,6 +291,23 @@ export function App() {
   const [hasCustomApiKey, setHasCustomApiKey] = useState<boolean>(() => !!getStoredApiKey());
   const [missingKeyWarning, setMissingKeyWarning] = useState<string | null>(null);
   const [isAiWarningBannerDismissed, setIsAiWarningBannerDismissed] = useState(false);
+
+  const handleOpenApiKeyModal = () => {
+    if (!canAccessFeature('CONFIGURE_API_KEYS', currentUser)) {
+      alert(getDemoRestrictionMessage('Керування API-ключами'));
+      return;
+    }
+    setMissingKeyWarning(null);
+    setIsApiKeyModalOpen(true);
+  };
+
+  const handleOpenEpicentrTokenModal = () => {
+    if (!canAccessFeature('CONFIGURE_API_KEYS', currentUser)) {
+      alert(getDemoRestrictionMessage('Керування токеном Merchant API'));
+      return;
+    }
+    setIsEpicentrTokenModalOpen(true);
+  };
 
   // Auto-Save State & Debounced serialization (3 seconds after last change)
   const [lastSavedTimestamp, setLastSavedTimestamp] = useState<number | null>(null);
@@ -1062,41 +1083,40 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0A0D14] text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-[#FF6B00] selection:text-white transition-colors">
-      {/* Top Navbar */}
-      <EpicentrNavbar
-        onOpenInstructions={() => setIsInstructionsOpen(true)}
-        onOpenValidator={() => setIsValidatorOpen(true)}
-        onOpenShare={() => setIsShareOpen(true)}
-        onOpenHistory={() => setIsHistoryOpen(true)}
-        onOpenGuide={() => setIsOnboardingOpen(true)}
-        onOpenUserStories={() => setIsUserStoriesOpen(true)}
-        onOpenApiKeySettings={() => {
-          setMissingKeyWarning(null);
-          setIsApiKeyModalOpen(true);
-        }}
-        hasCustomApiKey={hasCustomApiKey}
-        onReset={handleReset}
-        activeStep={workflowState === 'completed' ? 5 : workflowState === 'processing' ? 2 : 0}
-        historyCount={history.length}
-        currentShop={currentShop}
-        allShops={allShops}
-        onSelectShop={handleSelectShop}
-        onAddStore={handleAddStore}
-        appVersion="v1.3.0"
-        lastSavedTimestamp={lastSavedTimestamp}
-        isAutoSaving={isAutoSaving}
-        hasPendingChanges={hasPendingChanges}
-        onManualSave={handleManualSave}
-        onOpenXmlConverter={() => setActiveTab('converter')}
-        isXmlConverterActive={activeTab === 'converter'}
-        currentUser={currentUser}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        onOpenProfileDrawer={() => setIsProfileDrawerOpen(true)}
-        onOpenImageStudio={() => setIsImageStudioOpen(true)}
-        onOpenSearchGrounding={() => setIsSearchGroundingOpen(true)}
-        onOpenChatbot={() => setIsChatbotOpen(true)}
-      />
+    <AuthGuard onUserChanged={(u) => setCurrentUser(u)}>
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0A0D14] text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-[#FF6B00] selection:text-white transition-colors">
+        {/* Top Navbar */}
+        <EpicentrNavbar
+          onOpenInstructions={() => setIsInstructionsOpen(true)}
+          onOpenValidator={() => setIsValidatorOpen(true)}
+          onOpenShare={() => setIsShareOpen(true)}
+          onOpenHistory={() => setIsHistoryOpen(true)}
+          onOpenGuide={() => setIsOnboardingOpen(true)}
+          onOpenUserStories={() => setIsUserStoriesOpen(true)}
+          onOpenApiKeySettings={handleOpenApiKeyModal}
+          hasCustomApiKey={hasCustomApiKey}
+          onReset={handleReset}
+          activeStep={workflowState === 'completed' ? 5 : workflowState === 'processing' ? 2 : 0}
+          historyCount={history.length}
+          currentShop={currentShop}
+          allShops={allShops}
+          onSelectShop={handleSelectShop}
+          onAddStore={handleAddStore}
+          appVersion="v1.3.0"
+          lastSavedTimestamp={lastSavedTimestamp}
+          isAutoSaving={isAutoSaving}
+          hasPendingChanges={hasPendingChanges}
+          onManualSave={handleManualSave}
+          onOpenXmlConverter={() => setActiveTab('converter')}
+          isXmlConverterActive={activeTab === 'converter'}
+          currentUser={currentUser}
+          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onOpenProfileDrawer={() => setIsProfileDrawerOpen(true)}
+          onOpenImageStudio={() => setIsImageStudioOpen(true)}
+          onOpenSearchGrounding={() => setIsSearchGroundingOpen(true)}
+          onOpenChatbot={() => setIsChatbotOpen(true)}
+          onOpenAdminUsers={() => setIsAdminUsersModalOpen(true)}
+        />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
@@ -1400,10 +1420,11 @@ export function App() {
                   uploadedPhotos={uploadedPhotos}
                   columns={columns}
                   rowCount={rawRows.length}
+                  currentUser={currentUser}
                   onProceedToClarification={() => setIsClarificationOpen(true)}
                   onOpenShare={() => setIsShareOpen(true)}
                   onOpenXmlConverter={() => setActiveTab('converter')}
-                  onOpenEpicentrTokenModal={() => setIsEpicentrTokenModalOpen(true)}
+                  onOpenEpicentrTokenModal={handleOpenEpicentrTokenModal}
                 />
               </ErrorBoundary>
             )}
@@ -1421,10 +1442,11 @@ export function App() {
               uploadedPhotos={uploadedPhotos}
               columns={columns}
               rowCount={rawRows.length}
+              currentUser={currentUser}
               onProceedToClarification={() => setIsClarificationOpen(true)}
               onOpenShare={() => setIsShareOpen(true)}
               onOpenXmlConverter={() => setActiveTab('converter')}
-              onOpenEpicentrTokenModal={() => setIsEpicentrTokenModalOpen(true)}
+              onOpenEpicentrTokenModal={handleOpenEpicentrTokenModal}
             />
           </ErrorBoundary>
         )}
@@ -1649,7 +1671,14 @@ export function App() {
           <span>ШІ-Консультант Gemini</span>
         </button>
       )}
+      {/* Super Admin Users Management Modal */}
+      <AdminUsersModal
+        isOpen={isAdminUsersModalOpen}
+        onClose={() => setIsAdminUsersModalOpen(false)}
+        onUserUpdated={() => setCurrentUser(authService.getCurrentUser())}
+      />
     </div>
+    </AuthGuard>
   );
 }
 

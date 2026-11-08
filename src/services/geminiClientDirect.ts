@@ -5,33 +5,20 @@
 
 import { getStoredApiKey, testApiKeyConnection } from './aiApiKeyService';
 
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 
-export function getEffectiveApiKey(storeId?: string): string | null {
-  const stored = getStoredApiKey(storeId);
-  if (stored && stored.trim() && stored !== 'server-managed') {
-    return stored.trim();
-  }
-
-  try {
-    const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY;
-    if (envKey && typeof envKey === 'string' && envKey.trim()) {
-      return envKey.trim();
-    }
-  } catch {
-    // ignore
-  }
-
-  return null;
+export function getEffectiveApiKey(_storeId?: string): string | null {
+  // All Gemini API calls are managed server-side via process.env.GEMINI_API_KEY
+  return 'server-managed';
 }
 
 /**
- * Tests Gemini API Key directly with Google Generative Language REST API.
+ * Tests Gemini API connection via server endpoint.
  */
 export async function testGeminiApiKeyDirect(
-  apiKey: string
+  apiKey?: string
 ): Promise<{ success: boolean; message: string; modelUsed?: string }> {
-  const res = await testApiKeyConnection(apiKey);
+  const res = await testApiKeyConnection(apiKey || 'server-managed');
   return {
     success: res.success,
     message: res.message,
@@ -59,71 +46,42 @@ export interface DirectGeminiResult {
 }
 
 /**
- * Direct client-side Google Generative Language REST API call.
- * Eliminates relative server routes (/api/gemini/...) and 404 errors on static hosts/Vercel.
+ * Server-side proxied Gemini API call.
+ * Eliminates direct browser API key exposure and ensures uninterrupted access.
  */
 export async function callGeminiDirect(
   prompt: string,
   options?: DirectGeminiOptions
 ): Promise<DirectGeminiResult> {
-  const apiKey = (options?.apiKey || getEffectiveApiKey(options?.storeId) || '').trim();
-  if (!apiKey) {
-    return {
-      text: '',
-      sources: [],
-      error: 'Ключ Google AI Studio API не знайдено в localStorage (epic_ai_key). Будь ласка, вкажіть ваш API-ключ у налаштуваннях.'
-    };
-  }
-
   const model = options?.model || DEFAULT_GEMINI_MODEL;
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-  const contents: any[] = [
-    {
-      role: 'user',
-      parts: [{ text: prompt }]
-    }
-  ];
 
   const requestBody: any = {
-    contents
+    prompt,
+    model,
+    maxOutputTokens: options?.maxOutputTokens || 350
   };
 
   if (options?.systemInstruction) {
-    requestBody.systemInstruction = {
-      parts: [{ text: options.systemInstruction }]
-    };
+    requestBody.systemInstruction = options.systemInstruction;
   }
 
-  // Google Search Grounding tool configuration
   if (options?.tools && options.tools.length > 0) {
     requestBody.tools = options.tools;
   }
 
-  const generationConfig: any = {};
-  if (options?.maxOutputTokens) {
-    generationConfig.maxOutputTokens = options.maxOutputTokens;
-  }
   if (options?.temperature !== undefined) {
-    generationConfig.temperature = options.temperature;
+    requestBody.temperature = options.temperature;
   }
 
-  // Only pass responseMimeType when no googleSearch tool is attached
-  const hasSearchTool = options?.tools && options.tools.some((t: any) => t.googleSearch);
-  if (options?.responseMimeType && !hasSearchTool) {
-    generationConfig.responseMimeType = options.responseMimeType;
-  }
-
-  if (Object.keys(generationConfig).length > 0) {
-    requestBody.generationConfig = generationConfig;
+  if (options?.responseMimeType) {
+    requestBody.responseMimeType = options.responseMimeType;
   }
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch('/api/gemini/direct', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(requestBody)
     });
@@ -132,16 +90,16 @@ export async function callGeminiDirect(
       let errDetail = '';
       try {
         const errJson = await response.json();
-        errDetail = errJson?.error?.message || JSON.stringify(errJson?.error || errJson);
+        errDetail = errJson?.message || errJson?.error || JSON.stringify(errJson);
       } catch {
         errDetail = await response.text();
       }
 
-      if (response.status === 400 && errDetail.includes('API key')) {
+      if (response.status === 402) {
         return {
           text: '',
           sources: [],
-          error: `Недійсний Google API Key (${response.status}): ${errDetail}`
+          error: 'Кредити Gemini API вичерпано. Локальний PIM-рушій автоматично підхопив обробку.'
         };
       }
       if (response.status === 429) {
@@ -155,52 +113,27 @@ export async function callGeminiDirect(
       return {
         text: '',
         sources: [],
-        error: `Помилка Google API (${response.status}): ${errDetail}`
+        error: `Помилка Gemini API (${response.status}): ${errDetail}`
       };
     }
 
     const data = await response.json();
-    const candidate = data?.candidates?.[0];
-
-    // Extract raw text
-    const text = candidate?.content?.parts?.map((p: any) => p?.text || '').join('') || '';
-
-    // Direct extraction of grounding sources from candidates[0].groundingMetadata
-    const grounding = candidate?.groundingMetadata;
-    const sources: { uri: string; title: string }[] = [];
-
-    if (grounding?.groundingChunks && Array.isArray(grounding.groundingChunks)) {
-      for (const chunk of grounding.groundingChunks) {
-        if (chunk?.web?.uri) {
-          sources.push({
-            uri: chunk.web.uri,
-            title: chunk.web.title || chunk.web.uri
-          });
-        }
-      }
-    }
-
-    let searchEntryPoint: string | null = null;
-    if (grounding?.searchEntryPoint?.renderedContent) {
-      searchEntryPoint = grounding.searchEntryPoint.renderedContent;
-    }
-
     return {
-      text,
-      sources,
-      searchEntryPoint
+      text: data.text || '',
+      sources: data.sources || [],
+      searchEntryPoint: data.searchEntryPoint || null
     };
   } catch (err: any) {
     return {
       text: '',
       sources: [],
-      error: `Помилка прямого виклику Google Generative Language REST API: ${err?.message || err}`
+      error: `Помилка звернення до сервера Gemini API: ${err?.message || err}`
     };
   }
 }
 
 /**
- * Direct client-side Google Imagen REST API call.
+ * Server-side proxied Gemini Image Generation (gemini-nano-banana-2.1).
  */
 export async function generateImageDirect(options: {
   prompt: string;
@@ -211,48 +144,98 @@ export async function generateImageDirect(options: {
   apiKey?: string;
   storeId?: string;
 }): Promise<{ imageUrl?: string; textComment?: string; error?: string }> {
-  const apiKey = (options?.apiKey || getEffectiveApiKey(options?.storeId) || '').trim();
-  if (!apiKey) {
-    return {
-      error: 'Ключ Google AI Studio API не знайдено (epic_ai_key). Вкажіть API-ключ для генерації зображень.'
-    };
-  }
-
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${encodeURIComponent(apiKey)}`;
-    const response = await fetch(url, {
+    const response = await fetch('/api/gemini/image', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        instances: [{ prompt: options.prompt }],
-        parameters: {
-          sampleCount: 1,
-          aspectRatio: options.aspectRatio || '1:1'
-        }
+        prompt: options.prompt,
+        aspectRatio: options.aspectRatio || '1:1',
+        imageSize: options.imageSize || '1K',
+        sourceImageBase64: options.sourceImageBase64,
+        sourceImageMimeType: options.sourceImageMimeType
       })
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      const b64 = data?.predictions?.[0]?.bytesBase64Encoded;
-      if (b64) {
-        return {
-          imageUrl: `data:image/jpeg;base64,${b64}`,
-          textComment: 'Зображення успішно згенеровано'
-        };
-      }
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data?.imageUrl) {
+      return {
+        imageUrl: data.imageUrl,
+        textComment: data.textComment || 'Зображення успішно згенеровано'
+      };
     }
 
-    const errJson = await response.json().catch(() => ({}));
     return {
-      error: errJson?.error?.message || `Помилка Google Imagen API (${response.status})`
+      error: data?.error || data?.message || `Помилка генерації зображення (${response.status})`
     };
   } catch (err: any) {
     return {
       error: `Помилка запиту генерації зображення: ${err?.message || err}`
     };
   }
+}
+
+/**
+ * Server-Sent Events (SSE) streaming helper for real-time text generation.
+ */
+export async function streamGeminiDirect(
+  prompt: string,
+  options?: DirectGeminiOptions,
+  onChunk?: (chunkText: string) => void
+): Promise<string> {
+  const response = await fetch('/api/gemini/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt,
+      model: options?.model || DEFAULT_GEMINI_MODEL,
+      systemInstruction: options?.systemInstruction,
+      maxOutputTokens: options?.maxOutputTokens || 1000
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Streaming failed (${response.status}): ${errText}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Response stream not readable');
+  const decoder = new TextDecoder();
+  let fullText = '';
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const dataStr = line.slice(6).trim();
+        if (dataStr === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(dataStr);
+          if (parsed.text) {
+            fullText += parsed.text;
+            onChunk?.(parsed.text);
+          }
+        } catch {}
+      }
+    }
+  }
+
+  return fullText;
+}
+
+/**
+ * Establishes a WebSocket connection to Gemini Live API bridge on the server.
+ */
+export function connectGeminiLive(): WebSocket {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${protocol}//${window.location.host}/api/gemini/live`;
+  return new WebSocket(url);
 }

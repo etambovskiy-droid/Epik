@@ -1168,10 +1168,8 @@ function mapAttributesToColumns(
 }
 
 /**
- * Direct client-side Google Generative Language REST API call with Google Search Grounding.
- * Uses gemini-3.5-flash-lite and passes apiKey in URL query ?key= and header x-goog-api-key.
- * Extracts grounding sources and metadata directly from candidates[0].groundingMetadata.
- * Completely eliminates backend relative routes (/api/gemini/...) and 404 errors on Vercel/static hosts.
+ * Server-side proxied Gemini API call with Google Search Grounding.
+ * Routes through Express server with attached GEMINI_API_KEY.
  */
 export async function callGeminiSearchRestDirect(
   prompt: string,
@@ -1186,103 +1184,18 @@ export async function callGeminiSearchRestDirect(
   searchEntryPoint?: string | null;
   error?: string;
 }> {
-  const apiKey = getStoredApiKey(options?.storeId);
-  if (!apiKey) {
-    notifyMissingApiKey('Google Search Grounding розшук специфікацій');
-    return {
-      text: '',
-      sources: [],
-      error: 'Google AI Studio API Key не знайдено в localStorage (epic_ai_key). Будь ласка, вкажіть ваш API-ключ у налаштуваннях.'
-    };
-  }
-
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-  const body: any = {
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: prompt }]
-      }
-    ],
-    tools: [
-      {
-        googleSearch: {}
-      }
-    ],
-    generationConfig: {
-      maxOutputTokens: options?.maxOutputTokens || 350,
-      temperature: 0.2
-    }
+  const res = await callGeminiDirect(prompt, {
+    model: 'gemini-3.8-flash',
+    tools: [{ googleSearch: {} }],
+    systemInstruction: options?.systemInstruction,
+    maxOutputTokens: options?.maxOutputTokens || 350
+  });
+  return {
+    text: res.text,
+    sources: res.sources || [],
+    searchEntryPoint: res.searchEntryPoint || null,
+    error: res.error
   };
-
-  if (options?.systemInstruction) {
-    body.systemInstruction = {
-      parts: [{ text: options.systemInstruction }]
-    };
-  }
-
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      let errDetail = '';
-      try {
-        const errJson = await response.json();
-        errDetail = errJson?.error?.message || JSON.stringify(errJson?.error || errJson);
-      } catch {
-        errDetail = await response.text();
-      }
-      return {
-        text: '',
-        sources: [],
-        error: `Помилка Google Generative Language API (${response.status}): ${errDetail}`
-      };
-    }
-
-    const data = await response.json();
-    const candidate = data?.candidates?.[0];
-    const text = candidate?.content?.parts?.map((p: any) => p?.text || '').join('') || '';
-
-    // Direct extraction of grounding metadata
-    const grounding = candidate?.groundingMetadata;
-    const sources: { uri: string; title: string }[] = [];
-
-    if (grounding?.groundingChunks && Array.isArray(grounding.groundingChunks)) {
-      for (const chunk of grounding.groundingChunks) {
-        if (chunk?.web?.uri) {
-          sources.push({
-            uri: chunk.web.uri,
-            title: chunk.web.title || chunk.web.uri
-          });
-        }
-      }
-    }
-
-    let searchEntryPoint: string | null = null;
-    if (grounding?.searchEntryPoint?.renderedContent) {
-      searchEntryPoint = grounding.searchEntryPoint.renderedContent;
-    }
-
-    return {
-      text,
-      sources,
-      searchEntryPoint
-    };
-  } catch (err: any) {
-    return {
-      text: '',
-      sources: [],
-      error: `Помилка клієнтського звернення до Google Generative Language API: ${err?.message || err}`
-    };
-  }
 }
 
 /**

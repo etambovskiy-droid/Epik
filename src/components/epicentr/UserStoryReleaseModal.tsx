@@ -521,10 +521,10 @@ export const UserStoryReleaseModal: React.FC<UserStoryReleaseModalProps> = ({
                         <div>
                           <div className="font-bold text-slate-900 flex items-center gap-1.5">
                             <span>Автоматичний лист відправлено:</span>
-                            <span className="font-mono text-[#004BB7]">{ADMIN_MODERATOR_EMAIL}</span>
+                            <span className="font-semibold text-[#004BB7]">Головному адміністратору платформи</span>
                           </div>
                           <p className="text-slate-500 text-[11px]">
-                            У листі міститься повний опис та унікальне посилання-токен для схвалення релізу.
+                            У листі міститься повний опис та захищене посилання для схвалення релізу.
                           </p>
                         </div>
                       </div>

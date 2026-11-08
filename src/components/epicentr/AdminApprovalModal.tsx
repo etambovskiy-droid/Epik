@@ -20,7 +20,7 @@ import {
   Check
 } from 'lucide-react';
 import { UserStoryProposal, ReleaseLogItem } from '../../types/userStories';
-import { getRecordByToken, ADMIN_MODERATOR_EMAIL } from '../../services/moderationService';
+import { getRecordByToken } from '../../services/moderationService';
 import { compileAndDeployRelease, getUserStories, saveUserStories } from '../../services/userStoryEngine';
 import { getStoredApiKey, maskApiKey } from '../../services/aiApiKeyService';
 
@@ -75,7 +75,7 @@ export const AdminApprovalModal: React.FC<AdminApprovalModalProps> = ({
     setCompilationError(null);
     setIsCompiling(true);
     setCompilationLogs([
-      `[MODERATOR] Запит на схвалення отримано від адміністратора (${ADMIN_MODERATOR_EMAIL})...`,
+      `[MODERATOR] Запит на схвалення отримано від головного адміністратора платформи...`,
       `[BYOK CHECK] Перевірка наявності персонального ключа "epic_ai_key" в localStorage...`
     ]);
 
@@ -147,7 +147,7 @@ export const AdminApprovalModal: React.FC<AdminApprovalModalProps> = ({
               </div>
               <p className="text-xs text-blue-100 flex items-center gap-1 mt-0.5">
                 <Mail className="w-3.5 h-3.5 text-blue-200" />
-                <span>Отримувач сповіщення: {ADMIN_MODERATOR_EMAIL}</span>
+                <span>Отримувач сповіщення: Головний адміністратор платформи</span>
               </p>
             </div>
           </div>

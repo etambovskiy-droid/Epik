@@ -43,7 +43,8 @@ import {
   Square,
   MinusSquare,
   Sliders,
-  Wand2
+  Wand2,
+  Lock
 } from 'lucide-react';
 import { ContextualFeedbackModal } from '../ContextualFeedbackModal';
 import { ContextSnapshot } from '../../types/feedback';
@@ -64,7 +65,7 @@ import {
   GroundedResearchResult,
   BatchEnrichmentProgressMetrics
 } from '../../services/geminiFillingService';
-import { getStoredApiKey } from '../../services/aiApiKeyService';
+import { getStoredApiKey, hasUserApiKey } from '../../services/aiApiKeyService';
 import { authService } from '../../services/authService';
 import { canAccessFeature, getDemoRestrictionMessage } from '../../services/permissionService';
 
@@ -126,6 +127,8 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
   // Domain/Merchant Website Search state
   const [merchantDomain, setMerchantDomain] = useState('');
   const [restrictToDomain, setRestrictToDomain] = useState(false);
+  const curUser = authService.getCurrentUser();
+  const isDemoUser = curUser?.isDemo === true;
 
   // Manual Cell Editing and "Apply to All" state
   const [editingCell, setEditingCell] = useState<{
@@ -679,6 +682,32 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
     onlyMandatory?: boolean;
     targetRowIndices?: Set<number>;
   }) => {
+    const user = authService.getCurrentUser();
+    if (!canAccessFeature('AI_FILL_CHARACTERISTICS', user)) {
+      if (onDemoRestricted) {
+        onDemoRestricted('ШІ-заповнення характеристик');
+      } else {
+        setNotificationToast({
+          message: getDemoRestrictionMessage('ШІ-заповнення характеристик'),
+          type: 'info'
+        });
+        setTimeout(() => setNotificationToast(null), 5000);
+      }
+      return;
+    }
+
+    if (!hasUserApiKey()) {
+      if (onOpenApiKeySettings) {
+        onOpenApiKeySettings();
+      }
+      setNotificationToast({
+        message: 'Для ШІ-заповнення характеристик потрібен власний Google AI Studio API Key. Будь ласка, вкажіть ваш ключ.',
+        type: 'info'
+      });
+      setTimeout(() => setNotificationToast(null), 5000);
+      return;
+    }
+
     const useGrounding = opts?.forceWebGrounding !== undefined ? opts.forceWebGrounding : enableWebGrounding;
     const onlyMandatory = Boolean(opts?.onlyMandatory);
 
@@ -798,6 +827,32 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
 
   // Deep research for a single product using Google Search Grounding
   const handleResearchSingleProduct = async (pRow: EpicentrProductRow) => {
+    const user = authService.getCurrentUser();
+    if (!canAccessFeature('SEARCH_GROUNDING', user)) {
+      if (onDemoRestricted) {
+        onDemoRestricted('Google Search Grounding (Розшук характеристик)');
+      } else {
+        setNotificationToast({
+          message: getDemoRestrictionMessage('Google Search Grounding'),
+          type: 'info'
+        });
+        setTimeout(() => setNotificationToast(null), 5000);
+      }
+      return;
+    }
+
+    if (!hasUserApiKey()) {
+      if (onOpenApiKeySettings) {
+        onOpenApiKeySettings();
+      }
+      setNotificationToast({
+        message: 'Для розшуку характеристик потрібен власний Google AI Studio API Key.',
+        type: 'info'
+      });
+      setTimeout(() => setNotificationToast(null), 5000);
+      return;
+    }
+
     setResearchingRowIdx(pRow.rowIdx);
     try {
       const result = await researchProductAttributesWithWebGrounding(
@@ -984,11 +1039,15 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
             type="button"
             onClick={() => handleTriggerAiFilling({ forceWebGrounding: false })}
             disabled={isAiProcessing}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-[#FF7A00] to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-            title="⚡ Експрес AI: 12 паралельних потоків, 5 товарів на запит, Zero-AI локальне відсікання та кеш серій"
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50 ${
+              isDemoUser
+                ? 'bg-slate-200 text-slate-600 border border-slate-300 hover:border-amber-400 hover:bg-amber-50 hover:text-amber-800'
+                : 'bg-gradient-to-r from-amber-500 via-[#FF7A00] to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white'
+            }`}
+            title={isDemoUser ? 'ШІ-заповнення заблоковано в Демо' : '⚡ Експрес AI: 12 паралельних потоків, 5 товарів на запит, Zero-AI локальне відсікання та кеш серій'}
           >
-            <Zap className={`w-3.5 h-3.5 ${isAiProcessing && !enableWebGrounding ? 'animate-spin' : ''}`} />
-            <span>{isAiProcessing && !enableWebGrounding ? 'Експрес AI...' : '⚡ Експрес AI (Без Grounding)'}</span>
+            {isDemoUser ? <Lock className="w-3.5 h-3.5 text-amber-600" /> : <Zap className={`w-3.5 h-3.5 ${isAiProcessing && !enableWebGrounding ? 'animate-spin' : ''}`} />}
+            <span>{isDemoUser ? '🔒 ШІ-Експрес (Демо)' : isAiProcessing && !enableWebGrounding ? 'Експрес AI...' : '⚡ Експрес AI (Без Grounding)'}</span>
           </button>
 
           {/* Secondary Point Grounding: Exclusively for products with unfilled mandatory fields (*) */}
@@ -996,11 +1055,15 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
             type="button"
             onClick={() => handleTriggerAiFilling({ forceWebGrounding: true, onlyMandatory: true })}
             disabled={isAiProcessing}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-[#004BB7] hover:from-blue-700 hover:to-[#003d99] text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-            title="🌐 Розшукати тільки порожні обов'язкові поля (*): запускає Google Search Grounding ВИКЛЮЧНО для товарів із незаповненими обов'язковими полями"
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50 ${
+              isDemoUser
+                ? 'bg-slate-200 text-slate-600 border border-slate-300 hover:border-amber-400 hover:bg-amber-50 hover:text-amber-800'
+                : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-[#004BB7] hover:from-blue-700 hover:to-[#003d99] text-white'
+            }`}
+            title={isDemoUser ? 'Точковий розшук заблоковано в Демо' : "🌐 Розшукати тільки порожні обов'язкові поля (*): запускає Google Search Grounding ВИКЛЮЧНО для товарів із незаповненими обов'язковими полями"}
           >
-            <Globe className={`w-3.5 h-3.5 ${isAiProcessing && enableWebGrounding ? 'animate-spin' : ''}`} />
-            <span>{isAiProcessing && enableWebGrounding ? 'Точковий розшук...' : '🌐 Розшукати тільки порожні (*)'}</span>
+            {isDemoUser ? <Lock className="w-3.5 h-3.5 text-amber-600" /> : <Globe className={`w-3.5 h-3.5 ${isAiProcessing && enableWebGrounding ? 'animate-spin' : ''}`} />}
+            <span>{isDemoUser ? '🔒 Точковий розшук (Демо)' : isAiProcessing && enableWebGrounding ? 'Точковий розшук...' : '🌐 Розшукати тільки порожні (*)'}</span>
           </button>
 
           {/* Export to Excel */}
@@ -1693,10 +1756,18 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
                             type="button"
                             onClick={() => handleResearchSingleProduct(pRow)}
                             disabled={researchingRowIdx === pRow.rowIdx}
-                            className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 transition-colors cursor-pointer"
-                            title="Розшукати характеристики товару в Google (Web Grounding)"
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                              isDemoUser
+                                ? 'bg-slate-100 text-slate-400 hover:bg-amber-50 hover:text-amber-600'
+                                : 'bg-blue-50 hover:bg-blue-100 text-blue-700'
+                            }`}
+                            title={isDemoUser ? 'Google Search Grounding (Заблоковано в Демо)' : 'Розшукати характеристики товару в Google (Web Grounding)'}
                           >
-                            <Globe className={`w-3.5 h-3.5 ${researchingRowIdx === pRow.rowIdx ? 'animate-spin text-blue-600' : ''}`} />
+                            {isDemoUser ? (
+                              <Lock className="w-3.5 h-3.5 text-amber-500" />
+                            ) : (
+                              <Globe className={`w-3.5 h-3.5 ${researchingRowIdx === pRow.rowIdx ? 'animate-spin text-blue-600' : ''}`} />
+                            )}
                           </button>
                         )}
                         <button
@@ -2029,11 +2100,15 @@ export const InteractiveDiffTable: React.FC<InteractiveDiffTableProps> = ({
               type="button"
               onClick={() => handleTriggerAiFilling({ forceWebGrounding: false, targetRowIndices: selectedRowIndices })}
               disabled={isAiProcessing}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-[#FF7A00] hover:from-amber-600 hover:to-orange-600 text-white text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-              title="Запустити AI-дозаповнення тільки для вибраних товарів"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50 ${
+                isDemoUser
+                  ? 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-amber-500 hover:text-amber-400'
+                  : 'bg-gradient-to-r from-amber-500 to-[#FF7A00] hover:from-amber-600 hover:to-orange-600 text-white'
+              }`}
+              title={isDemoUser ? 'AI-обробка заблокована в Демо' : 'Запустити AI-дозаповнення тільки для вибраних товарів'}
             >
-              <Zap className="w-3.5 h-3.5" />
-              <span>{isAiProcessing ? 'AI обробка...' : `AI для вибраних (${selectedRowIndices.size})`}</span>
+              {isDemoUser ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <Zap className="w-3.5 h-3.5" />}
+              <span>{isDemoUser ? '🔒 AI для вибраних (Демо)' : isAiProcessing ? 'AI обробка...' : `AI для вибраних (${selectedRowIndices.size})`}</span>
             </button>
 
             {/* Bulk Assign Value */}

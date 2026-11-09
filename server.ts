@@ -877,10 +877,17 @@ ${attributesPromptSection}
   // 8.2 Gemini Live API: Real-Time Audio & Conversation WebSocket Bridge
   const wss = new WebSocketServer({ server: httpServer, path: '/api/gemini/live' });
 
-  wss.on('connection', async (clientWs: WebSocket) => {
+  wss.on('connection', async (clientWs: WebSocket, req: http.IncomingMessage) => {
     let session: any = null;
     try {
-      const ai = getAiClient();
+      const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+      const userApiKey = url.searchParams.get('apiKey') || '';
+      if (!userApiKey || userApiKey === 'server-managed') {
+        clientWs.send(JSON.stringify({ error: 'API_KEY_REQUIRED' }));
+        clientWs.close();
+        return;
+      }
+      const ai = getAiClient(userApiKey);
       session = await ai.live.connect({
         model: 'gemini-3.8-live',
         config: {

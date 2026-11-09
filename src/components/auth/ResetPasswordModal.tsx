@@ -250,7 +250,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
           </form>
         )}
 
-        {/* Mode B: Link Sent & Out-of-Band Delivery Notification (Zero in-app token leak) */}
+        {/* Mode B: Link Sent & Delivery Notification / Direct Fallback */}
         {step === 'sent' && (
           <div className="mt-5 space-y-4">
             <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-700/50 text-xs text-emerald-200 space-y-2">
@@ -259,7 +259,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
                 <span>Запит успішно оброблено!</span>
               </div>
               <p>
-                Лист із захищеним посиланням надіслано на вашу електронну пошту.
+                Лист із захищеним одноразовим посиланням надіслано на вашу електронну пошту.
               </p>
             </div>
 
@@ -269,7 +269,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
                 <span>Захист від несанкціонованого доступу</span>
               </div>
               <p className="text-slate-300 leading-relaxed">
-                З міркувань безпеки зміна пароля можлива <strong>виключно через перехід за персональним посиланням із листа</strong>, надісланого до вашої поштової скриньки.
+                З міркувань безпеки зміна пароля можлива <strong>виключно через перехід за персональним захищеним посиланням із листа</strong>, надісланого до вашої поштової скриньки.
               </p>
               <p className="text-slate-400 text-[11px] leading-relaxed">
                 Будь ласка, відкрийте вашу пошту (перевірте також папку «Спам») та перейдіть за посиланням протягом <strong>60 секунд</strong>.

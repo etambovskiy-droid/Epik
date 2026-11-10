@@ -1,0 +1,329 @@
+{
+  "page": 1,
+  "pages": 1,
+  "items": [
+    {
+      "code": "159",
+      "translations": [
+        {
+          "languageCode": "ru",
+          "title": "Фото- и видеотехника"
+        },
+        {
+          "languageCode": "ua",
+          "title": "Фото- та відеотехніка"
+        }
+      ],
+      "attributes": [
+        {
+          "code": "weight",
+          "type": "float",
+          "isSystem": true,
+          "isRequired": true,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Вес",
+              "suffix": "г",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Вага",
+              "suffix": "г",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "description",
+          "type": "text",
+          "isSystem": true,
+          "isRequired": false,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Описание",
+              "suffix": "",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Опис",
+              "suffix": "",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "14195",
+          "type": "select",
+          "isSystem": false,
+          "isRequired": false,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Обмен и возврат",
+              "suffix": "",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Обмін та повернення",
+              "suffix": "",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "width",
+          "type": "float",
+          "isSystem": true,
+          "isRequired": true,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Ширина",
+              "suffix": "мм",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Ширина",
+              "suffix": "мм",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "767",
+          "type": "text",
+          "isSystem": false,
+          "isRequired": false,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Комплектация",
+              "suffix": "",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Комплектація",
+              "suffix": "",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "113",
+          "type": "float",
+          "isSystem": false,
+          "isRequired": false,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Гарантия",
+              "suffix": "мес.",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Гарантія",
+              "suffix": "міс.",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "producer_code",
+          "type": "string",
+          "isSystem": true,
+          "isRequired": false,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Модель производителя (референция)",
+              "suffix": "",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Модель виробника (референцiя)",
+              "suffix": "",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "barcodes",
+          "type": "array",
+          "isSystem": true,
+          "isRequired": false,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Штрих код",
+              "suffix": "",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Штрих код",
+              "suffix": "",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "height",
+          "type": "float",
+          "isSystem": true,
+          "isRequired": true,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Высота",
+              "suffix": "мм",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Висота",
+              "suffix": "мм",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "length",
+          "type": "float",
+          "isSystem": true,
+          "isRequired": true,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Глубина",
+              "suffix": "мм",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Глибина",
+              "suffix": "мм",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "measure",
+          "type": "select",
+          "isSystem": true,
+          "isRequired": true,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Мера измерения",
+              "suffix": "",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Одиниця виміру та кількість",
+              "suffix": "",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "ratio",
+          "type": "float",
+          "isSystem": true,
+          "isRequired": true,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Минимальная кратность товара",
+              "suffix": "",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Мінімальна кратність товару",
+              "suffix": "",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "country_of_origin",
+          "type": "select",
+          "isSystem": true,
+          "isRequired": true,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Страна-производитель",
+              "suffix": "",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Країна-виробник",
+              "suffix": "",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": false
+        },
+        {
+          "code": "brand",
+          "type": "select",
+          "isSystem": true,
+          "isRequired": true,
+          "translations": [
+            {
+              "languageCode": "ru",
+              "title": "Бренд",
+              "suffix": "",
+              "prefix": null
+            },
+            {
+              "languageCode": "ua",
+              "title": "Бренд",
+              "suffix": "",
+              "prefix": null
+            }
+          ],
+          "isModel": false,
+          "isFilter": true
+        }
+      ]
+    }
+  ]
+}

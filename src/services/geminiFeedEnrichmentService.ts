@@ -169,4 +169,171 @@ export class GeminiFeedEnrichmentService {
 
     return updatedProducts;
   }
+
+  /**
+   * Enriches missing mandatory and filter attributes using Regex + Gemini Search Grounding
+   */
+  public static async enrichMissingAttributesWithGrounding(
+    products: SourceProduct[],
+    attributeSets: Record<string, any>,
+    categoryMappings: Record<string, any>,
+    onProgress?: (progress: EnrichmentProgress) => void,
+    apiKeyOverride?: string
+  ): Promise<{ products: SourceProduct[]; enrichedCount: number }> {
+    const updatedProducts: SourceProduct[] = [];
+    let enrichedCount = 0;
+    const total = products.length;
+
+    for (let i = 0; i < total; i++) {
+      const prod = { ...products[i] };
+      const mapping = categoryMappings[prod.categoryId] || categoryMappings[prod.categoryName];
+      const attrSetCode = mapping?.attributeSetCode || mapping?.epicentrCategoryCode || '3343';
+      const attrSet = attributeSets[attrSetCode] || attributeSets['3343'];
+
+      if (onProgress) {
+        onProgress({
+          current: i + 1,
+          total,
+          currentItemName: prod.name
+        });
+      }
+
+      let wasModified = false;
+
+      // 1. Local Regex Extraction for Dimensions & Logistics from title / description
+      const fullText = `${prod.name} ${prod.description || ''}`;
+
+      // Dimensions (e.g. 30*30, 30x30 см, 15х30)
+      if (!prod.width || !prod.height) {
+        const dimMatch = fullText.match(/(\d+(?:[.,]\d+)?)\s*[*xхX]\s*(\d+(?:[.,]\d+)?)(?:\s*[*xхX]\s*(\d+(?:[.,]\d+)?))?\s*(см|cm|мм|mm)?/i);
+        if (dimMatch) {
+          const isCm = !dimMatch[4] || dimMatch[4].toLowerCase().startsWith('с') || dimMatch[4].toLowerCase() === 'cm';
+          const multiplier = isCm ? 10 : 1;
+          const w = Math.round(parseFloat(dimMatch[1].replace(',', '.')) * multiplier);
+          const h = Math.round(parseFloat(dimMatch[2].replace(',', '.')) * multiplier);
+          const d = dimMatch[3] ? Math.round(parseFloat(dimMatch[3].replace(',', '.')) * multiplier) : 20;
+
+          if (!prod.width) { prod.width = String(w); wasModified = true; }
+          if (!prod.height) { prod.height = String(h); wasModified = true; }
+          if (!prod.length) { prod.length = String(d); wasModified = true; }
+        }
+      }
+
+      // Weight (e.g. 1.2 кг, 500 г)
+      if (!prod.weight) {
+        const weightMatch = fullText.match(/(\d+(?:[.,]\d+)?)\s*(кг|kg|г|g)\b/i);
+        if (weightMatch) {
+          const isKg = weightMatch[2].toLowerCase().startsWith('к') || weightMatch[2].toLowerCase() === 'kg';
+          const w = Math.round(parseFloat(weightMatch[1].replace(',', '.')) * (isKg ? 1000 : 1));
+          prod.weight = String(w);
+          wasModified = true;
+        }
+      }
+
+      // Brand extraction from title if missing
+      if (!prod.brand) {
+        const commonBrands = ['Ідейка', 'Идейка', 'Brushme', 'Bosch', 'Grohe', 'Philips', 'Samsung', 'DeWalt', 'Makita', 'Karcher'];
+        for (const b of commonBrands) {
+          if (new RegExp(`\\b${b}\\b`, 'i').test(prod.name)) {
+            prod.brand = b === 'Идейка' ? 'Ідейка' : b;
+            wasModified = true;
+            break;
+          }
+        }
+      }
+
+      // Country extraction
+      if (!prod.country_of_origin) {
+        if (/украї|украи/i.test(fullText)) {
+          prod.country_of_origin = 'Україна';
+          wasModified = true;
+        } else if (/китай|china/i.test(fullText)) {
+          prod.country_of_origin = 'Китай';
+          wasModified = true;
+        } else if (/герман|німеч|deutsch/i.test(fullText)) {
+          prod.country_of_origin = 'Німеччина';
+          wasModified = true;
+        } else if (/польщ|польш|poland/i.test(fullText)) {
+          prod.country_of_origin = 'Польща';
+          wasModified = true;
+        }
+      }
+
+      // Category-specific attribute extraction from text
+      if (attrSet && Array.isArray(attrSet.attributes)) {
+        attrSet.attributes.forEach((attr: any) => {
+          if (attr.isSystem) return;
+          const alreadyHasParam = prod.params.some((p) => (p.code && p.code === attr.code) || p.name.toLowerCase() === attr.name.toLowerCase());
+          if (alreadyHasParam) return;
+
+          // Check if option value exists in text
+          if (Array.isArray(attr.options) && attr.options.length > 0) {
+            for (const opt of attr.options) {
+              const optVal = opt.value.toLowerCase();
+              const optRu = (opt.value_ru || '').toLowerCase();
+              if (
+                new RegExp(`\\b${optVal}\\b`, 'i').test(fullText) ||
+                (optRu && new RegExp(`\\b${optRu}\\b`, 'i').test(fullText))
+              ) {
+                prod.params.push({
+                  name: attr.name,
+                  value: opt.value,
+                  code: attr.code,
+                  valuecode: opt.code
+                });
+                wasModified = true;
+                break;
+              }
+            }
+          }
+        });
+      }
+
+      // 2. AI Semantic Enrichment via Gemini if needed and available
+      const needsAi = !prod.brand || !prod.country_of_origin || !prod.weight;
+      if (needsAi) {
+        try {
+          const prompt = `Ти — експерт каталогу маркетплейсу Епіцентр.
+Визнач точні характеристики для товару за його назвою:
+Назва: "${prod.name}"
+Опис: "${(prod.description || '').slice(0, 200)}"
+
+Поверни суворо JSON:
+{
+  "brand": "Бренд товару або 'Generic'",
+  "country_of_origin": "Країна-виробник (наприклад, 'Україна', 'Китай', 'Німеччина')",
+  "width": "число в мм або null",
+  "height": "число в мм або null",
+  "length": "число в мм або null",
+  "weight": "число в грамах або null"
+}`;
+
+          const aiRes = await callGeminiDirect(prompt, {
+            apiKey: apiKeyOverride,
+            responseMimeType: 'application/json',
+            maxOutputTokens: 250
+          });
+
+          if (aiRes.text) {
+            const parsed = JSON.parse(aiRes.text.replace(/```json/g, '').replace(/```/g, '').trim());
+            if (!prod.brand && parsed.brand) { prod.brand = parsed.brand; wasModified = true; }
+            if (!prod.country_of_origin && parsed.country_of_origin) { prod.country_of_origin = parsed.country_of_origin; wasModified = true; }
+            if (!prod.width && parsed.width) { prod.width = String(parsed.width); wasModified = true; }
+            if (!prod.height && parsed.height) { prod.height = String(parsed.height); wasModified = true; }
+            if (!prod.length && parsed.length) { prod.length = String(parsed.length); wasModified = true; }
+            if (!prod.weight && parsed.weight) { prod.weight = String(parsed.weight); wasModified = true; }
+          }
+        } catch {
+          // Graceful fallback to existing extracted data
+        }
+      }
+
+      if (wasModified) {
+        enrichedCount++;
+      }
+      updatedProducts.push(prod);
+    }
+
+    return { products: updatedProducts, enrichedCount };
+  }
 }

@@ -792,14 +792,32 @@ export class AuthService {
   }
 
   /**
+   * Reads optional client-side Vite/process Resend env var ONLY to forward to our own same-origin
+   * server API route (/api/auth/reset-password) if the user named the env var VITE_RESEND_API_KEY.
+   * Never calls api.resend.com from the browser (prevents CORS errors and browser exposure).
+   */
+  private resolveEnvResendFallbackKey(): string {
+    const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
+    const procEnv = typeof process !== 'undefined' ? (process as any).env : undefined;
+    const rawKey =
+      metaEnv?.VITE_RESEND_API_KEY ||
+      procEnv?.RESEND_API_KEY ||
+      procEnv?.VITE_RESEND_API_KEY ||
+      '';
+    const trimmed = String(rawKey).trim();
+    return trimmed && trimmed !== 're_xxxxxxxxx' ? trimmed : '';
+  }
+
+  /**
    * Request password reset with strictly 60 seconds TTL (1 minute)
-   * Only permitted for approved merchants or Super Admin
+   * Dispatches strictly via server-side API route (/api/auth/reset-password) to Resend REST API
    */
   public async requestPasswordReset(email: string): Promise<{
     success: boolean;
     message: string;
     expiresIn?: number;
     error?: string;
+    details?: any;
     directToken?: string;
     isSuperAdmin?: boolean;
     firebaseEmailSent?: boolean;
@@ -811,21 +829,12 @@ export class AuthService {
         return { success: false, message: 'Введіть коректну адресу електронної пошти', error: 'INVALID_EMAIL' };
       }
 
-      const isSuperAdmin = cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase();
       const accounts = this.getAccounts();
       const account = accounts[cleanEmail];
 
-      if (!account && !isSuperAdmin) {
-        return {
-          success: false,
-          message: 'Користувача з такою електронною поштою не зареєстровано в системі',
-          error: 'USER_NOT_FOUND'
-        };
-      }
-
+      // Enforce status check if account exists in local registry
       if (account) {
         const user = account.user;
-        // Security check: Must be approved or super_admin
         if (user.role !== 'admin' && user.status !== 'approved') {
           if (user.status === 'pending_approval') {
             return {
@@ -844,7 +853,7 @@ export class AuthService {
         }
       }
 
-      // 1. Attempt client-side Firebase Auth password reset email
+      // 1. Optional Firebase Auth password reset email (if registered in Firebase)
       let firebaseEmailSent = false;
       try {
         await sendPasswordResetEmail(auth, cleanEmail);
@@ -853,44 +862,103 @@ export class AuthService {
         console.warn('Firebase sendPasswordResetEmail note:', fbErr?.message || fbErr);
       }
 
-      // 2. Dispatch to Vercel Serverless / Node backend with Resend API
+      // 2. Server-side dispatch via /api/auth/reset-password (Vercel Serverless / Express)
       try {
-        const res = await fetch('/api/auth/request-password-reset', {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json'
+        };
+        const fallbackEnvKey = this.resolveEnvResendFallbackKey();
+        if (fallbackEnvKey) {
+          headers['X-Resend-Api-Key'] = fallbackEnvKey;
+        }
+
+        const res = await fetch('/api/auth/reset-password', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: cleanEmail })
+          headers,
+          body: JSON.stringify({
+            action: 'request',
+            email: cleanEmail
+          })
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
+
+        let data: any = {};
+        const responseText = await res.text();
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          data = { rawText: responseText };
+        }
+
+        if (!res.ok || data?.success === false) {
+          const exactErr = {
+            status: res.status,
+            error: data?.error,
+            message: data?.message,
+            details: data?.details || data?.rawText
+          };
+          console.error('[Resend Password Reset Error]:', exactErr);
+
+          if (res.status === 404) {
+            return {
+              success: false,
+              message: 'Помилка 404 (Not Found): Серверний роут /api/auth/reset-password не знайдено. Перевірте деплой або виконайте Redeploy у Vercel.',
+              error: 'ENDPOINT_404',
+              details: exactErr
+            };
+          }
+
+          if (data?.error === 'RESEND_API_KEY_NOT_CONFIGURED') {
+            return {
+              success: false,
+              message:
+                data?.message ||
+                'Ключ RESEND_API_KEY (або VITE_RESEND_API_KEY) не знайдено на сервері. Додайте ключ у змінні середовища та зробіть Redeploy.',
+              error: 'RESEND_API_KEY_NOT_CONFIGURED',
+              details: exactErr
+            };
+          }
+
           return {
             success: false,
-            message: data?.message || 'Не вдалося надіслати лист через Resend. Перевірте конфігурацію API ключа.',
-            error: data?.error || 'DISPATCH_FAILED'
+            message:
+              data?.message ||
+              data?.error ||
+              `Помилка сервера HTTP ${res.status}: ${data?.rawText?.slice(0, 180) || 'Не вдалося надіслати лист через Resend'}`,
+            error: data?.error || `HTTP_${res.status}`,
+            details: exactErr
           };
         }
+
+        return {
+          success: true,
+          firebaseEmailSent,
+          serverDispatched: true,
+          message:
+            data?.message ||
+            'Лист із захищеним посиланням для зміни пароля надіслано на вашу електронну пошту через Resend. Будь ласка, перевірте поштову скриньку (та папку Спам).'
+        };
       } catch (err: any) {
+        console.error('[Resend Password Reset Network Exception]:', err);
         return {
           success: false,
-          message: err?.message || 'Мережева помилка при зверненні до сервера відновлення пароля',
-          error: 'NETWORK_ERROR'
+          message: err?.message || 'Мережева помилка при зверненні до серверного роуту /api/auth/reset-password',
+          error: 'NETWORK_ERROR',
+          details: err
         };
       }
-
-      return {
-        success: true,
-        message: 'Лист із захищеним посиланням для зміни пароля надіслано на вашу електронну пошту через Resend. Будь ласка, перевірте поштову скриньку (та папку Спам).'
-      };
     } catch (err: any) {
+      console.error('[Password Reset Unexpected Exception]:', err);
       return {
         success: false,
         message: err?.message || 'Помилка запиту на відновлення пароля',
-        error: 'SERVER_ERROR'
+        error: 'SERVER_ERROR',
+        details: err
       };
     }
   }
 
   /**
-   * Asynchronously verify password reset token via server or local cache
+   * Asynchronously verify password reset token via server (/api/auth/reset-password) or local cache
    */
   public async verifyResetTokenAsync(token: string): Promise<{
     valid: boolean;
@@ -900,12 +968,12 @@ export class AuthService {
   }> {
     if (!token) return { valid: false, remainingSeconds: 0, error: 'Токен відсутній' };
 
-    // 1. Authoritative server check (cross-device/tab support)
+    // 1. Authoritative server check via unified /api/auth/reset-password
     try {
-      const resp = await fetch('/api/auth/verify-reset-token', {
+      const resp = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({ action: 'verify', token })
       });
       const data = await resp.json();
       if (resp.ok && data.valid) {
@@ -918,8 +986,8 @@ export class AuthService {
       if (resp.status === 410) {
         return { valid: false, remainingSeconds: 0, error: 'Час дії посилання (60 сек) вичерпано. Згенеруйте нове.' };
       }
-    } catch {
-      // fallback
+    } catch (err) {
+      console.error('[verifyResetTokenAsync Error]:', err);
     }
 
     // 2. Fallback to local cache verification

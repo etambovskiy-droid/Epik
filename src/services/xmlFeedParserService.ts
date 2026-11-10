@@ -30,6 +30,11 @@ export interface SourceProduct {
   barcode?: string;
   ratio?: string;
   measure?: string;
+  weight?: string;
+  width?: string;
+  height?: string;
+  length?: string;
+  producer_code?: string;
   params: SourceProductParam[];
 }
 
@@ -54,8 +59,31 @@ export const SAMPLE_SOURCE_XML_FEED = `<?xml version="1.0" encoding="UTF-8"?>
       <category id="201">Сантехника</category>
       <category id="202" parentId="201">Смесители для кухни</category>
       <category id="301">Освещение и LED</category>
+      <category id="3343">Картини за номерами</category>
     </categories>
     <offers>
+      <offer id="1122334455" available="true">
+        <price>163</price>
+        <oldprice>199</oldprice>
+        <categoryId>3343</categoryId>
+        <picture>https://nikids.co.ua/upload/iblock/3fa/b7dc01a3adb1d84ee1.jpg</picture>
+        <name>Картина по номерам Идейка Пушистое облачко 30*30см KHO4212</name>
+        <name_ua>Картина за номерами Ідейка Пухнаста хмаринка 30*30см KHO4212</name_ua>
+        <vendor>Ідейка</vendor>
+        <country_of_origin>Китай</country_of_origin>
+        <barcode>4826664899</barcode>
+        <description><![CDATA[<p>Картина по номерам Идейка Пушистое облачко 30*30см KHO4212</p>]]></description>
+        <description_ua><![CDATA[<p>Картина за номерами Ідейка Пухнаста хмаринка 30*30см KHO4212</p>]]></description_ua>
+        <param paramcode="13183" name="Розмір" valuecode="d7c3d344fd844ca187739e4f6a4d5baa">15x30</param>
+        <param paramcode="11887" name="Полотно" valuecode="c5380bbfa7fca64b5496a10bfde38b3a">поліестер</param>
+        <param paramcode="9875" name="Рівень складності" valuecode="b15bfd532157cfd62c9ba04987760e9c">середній</param>
+        <param paramcode="3176" name="Тематика" valuecode="bsz6btxa,wle9vq5zsirz1dni">тварини, коти</param>
+        <param paramcode="767" name="Комплектація"><![CDATA[Полотно на підрамнику, пензлі, фарби.]]></param>
+        <param paramcode="width" name="Ширина">10</param>
+        <param paramcode="height" name="Висота">20</param>
+        <param paramcode="length" name="Глибина">30</param>
+        <param paramcode="weight" name="Вага">1000</param>
+      </offer>
       <offer id="DR-850" available="true">
         <price>1899.00</price>
         <oldprice>2199.00</oldprice>
@@ -250,8 +278,15 @@ export class XmlFeedParserService {
         undefined;
 
       // Ratio & Measure
-      const ratio = offerNode.querySelector('ratio, min_quantity')?.textContent?.trim() || '1';
-      const measure = offerNode.querySelector('measure')?.textContent?.trim() || 'шт.';
+      const ratio = offerNode.querySelector('ratio, min_quantity, param[paramcode="ratio"]')?.textContent?.trim() || '1';
+      const measure = offerNode.querySelector('measure, param[paramcode="measure"]')?.textContent?.trim() || 'шт.';
+
+      // Logistics & Dimensions
+      const weight = offerNode.querySelector('weight, param[paramcode="weight"], param[name="Вага"], param[name="Вес"]')?.textContent?.trim() || undefined;
+      const width = offerNode.querySelector('width, param[paramcode="width"], param[name="Ширина"]')?.textContent?.trim() || undefined;
+      const height = offerNode.querySelector('height, param[paramcode="height"], param[name="Висота"], param[name="Высота"]')?.textContent?.trim() || undefined;
+      const length = offerNode.querySelector('length, depth, param[paramcode="length"], param[name="Глибина"], param[name="Глубина"], param[name="Довжина"]')?.textContent?.trim() || undefined;
+      const producer_code = offerNode.querySelector('producer_code, vendorCode, article, param[paramcode="producer_code"], param[name="Артикул"], param[name="Модель"]')?.textContent?.trim() || undefined;
 
       // Extract all other parameters
       const params: SourceProductParam[] = [];
@@ -286,6 +321,11 @@ export class XmlFeedParserService {
         barcode,
         ratio,
         measure,
+        weight,
+        width,
+        height,
+        length,
+        producer_code,
         params
       });
     });

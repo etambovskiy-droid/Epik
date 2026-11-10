@@ -65,6 +65,10 @@ function isBenignStreamAbortOrHmr(err: any, msg?: string, stack?: string): boole
 window.addEventListener(
   'error',
   (event) => {
+    // Ignore DOM resource loading errors (img 404, script/link load failures) which have no error object
+    if (!event.error && !event.message) {
+      return;
+    }
     if (isBenignStreamAbortOrHmr(event.error, event.message, event.filename)) {
       event.preventDefault();
       if (event.stopImmediatePropagation) event.stopImmediatePropagation();

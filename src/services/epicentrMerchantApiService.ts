@@ -20,9 +20,21 @@ export interface EpicentrCategory {
 export interface EpicentrAttributeDef {
   code: string;
   name: string;
-  type: 'select' | 'multiselect' | 'text' | 'numeric' | 'float' | 'string' | 'boolean';
+  type: 'select' | 'multiselect' | 'text' | 'numeric' | 'float' | 'string' | 'boolean' | 'array';
+  isSystem?: boolean;
+  isRequired?: boolean;
   is_required?: boolean;
+  isFilter?: boolean;
   is_filter?: boolean;
+  isModel?: boolean;
+  suffix?: string;
+  prefix?: string | null;
+  translations?: {
+    languageCode: string;
+    title: string;
+    suffix?: string;
+    prefix?: string | null;
+  }[];
   options?: { code: string; value: string; value_ru?: string }[];
 }
 
@@ -79,14 +91,163 @@ export const FALLBACK_EPICENTR_CATEGORIES: EpicentrCategory[] = EPICENTR_LIVE_LE
 
 export const FALLBACK_ATTRIBUTE_SETS: EpicentrAttributeSet[] = [
   {
+    code: '3343',
+    name: 'Картини за номерами',
+    category_codes: ['3343'],
+    attributes: [
+      {
+        code: '13183',
+        name: 'Розмір',
+        type: 'select',
+        isRequired: true,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Розмір' },
+          { languageCode: 'ru', title: 'Размер' }
+        ],
+        options: [
+          { code: 'd7c3d344fd844ca187739e4f6a4d5baa', value: '15x30' },
+          { code: 'a12bc44fd844ca187739e4f6a4d5ccc', value: '30x30' },
+          { code: 'e89ff44fd844ca187739e4f6a4d5ddd', value: '40x50' }
+        ]
+      },
+      {
+        code: '11887',
+        name: 'Полотно',
+        type: 'select',
+        isRequired: false,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Полотно' },
+          { languageCode: 'ru', title: 'Холст' }
+        ],
+        options: [
+          { code: 'c5380bbfa7fca64b5496a10bfde38b3a', value: 'поліестер' },
+          { code: 'f1280bbfa7fca64b5496a10bfde38baa', value: 'бавовна' }
+        ]
+      },
+      {
+        code: '9875',
+        name: 'Рівень складності',
+        type: 'select',
+        isRequired: false,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Рівень складності' },
+          { languageCode: 'ru', title: 'Уровень сложности' }
+        ],
+        options: [
+          { code: 'b15bfd532157cfd62c9ba04987760e9c', value: 'середній' },
+          { code: 'c22bfd532157cfd62c9ba04987760e9d', value: 'простий' },
+          { code: 'd33bfd532157cfd62c9ba04987760e9e', value: 'складний' }
+        ]
+      },
+      {
+        code: '3176',
+        name: 'Тематика',
+        type: 'multiselect',
+        isRequired: false,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Тематика' },
+          { languageCode: 'ru', title: 'Тематика' }
+        ],
+        options: [
+          { code: 'bsz6btxa', value: 'тварини' },
+          { code: 'wle9vq5zsirz1dni', value: 'коти' },
+          { code: 'pe78q1zsirz1dni', value: 'квіти' },
+          { code: 'la99q1zsirz1dni', value: 'пейзаж' }
+        ]
+      },
+      {
+        code: '767',
+        name: 'Комплектація',
+        type: 'text',
+        isRequired: false,
+        isFilter: false,
+        translations: [
+          { languageCode: 'ua', title: 'Комплектація' },
+          { languageCode: 'ru', title: 'Комплектация' }
+        ]
+      },
+      {
+        code: 'brand',
+        name: 'Бренд',
+        type: 'select',
+        isSystem: true,
+        isRequired: true,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Бренд' },
+          { languageCode: 'ru', title: 'Бренд' }
+        ],
+        options: [
+          { code: 'cz1445500250k5a9', value: 'Ідейка' },
+          { code: 'br_brushme_2026', value: 'Brushme' },
+          { code: 'generic', value: 'Generic' }
+        ]
+      },
+      {
+        code: 'country_of_origin',
+        name: 'Країна-виробник',
+        type: 'select',
+        isSystem: true,
+        isRequired: true,
+        isFilter: false,
+        translations: [
+          { languageCode: 'ua', title: 'Країна-виробник' },
+          { languageCode: 'ru', title: 'Страна-производитель' }
+        ],
+        options: [
+          { code: 'ukr', value: 'Україна' },
+          { code: 'chn', value: 'Китай' },
+          { code: 'pol', value: 'Польща' },
+          { code: 'deu', value: 'Німеччина' }
+        ]
+      },
+      { code: 'measure', name: 'Міра виміру', type: 'select', isSystem: true, isRequired: true },
+      { code: 'ratio', name: 'Мінімальна кратність товару', type: 'float', isSystem: true, isRequired: true },
+      { code: 'width', name: 'Ширина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'height', name: 'Висота', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'length', name: 'Глибина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'weight', name: 'Вага', type: 'float', isSystem: true, isRequired: true, suffix: 'г' },
+      { code: 'barcodes', name: 'Штрих код', type: 'array', isSystem: true, isRequired: false }
+    ]
+  },
+  {
+    code: '159',
+    name: 'Фото- та відеотехніка',
+    category_codes: ['159'],
+    attributes: [
+      { code: 'weight', name: 'Вага', type: 'float', isSystem: true, isRequired: true, suffix: 'г' },
+      { code: 'description', name: 'Опис', type: 'text', isSystem: true, isRequired: false },
+      { code: '14195', name: 'Обмін та повернення', type: 'select', isSystem: false, isRequired: false },
+      { code: 'width', name: 'Ширина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: '767', name: 'Комплектація', type: 'text', isSystem: false, isRequired: false },
+      { code: '113', name: 'Гарантія', type: 'float', isSystem: false, isRequired: false, suffix: 'міс.' },
+      { code: 'producer_code', name: 'Модель виробника (референція)', type: 'string', isSystem: true, isRequired: false },
+      { code: 'barcodes', name: 'Штрих код', type: 'array', isSystem: true, isRequired: false },
+      { code: 'height', name: 'Висота', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'length', name: 'Глибина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'measure', name: 'Одиниця виміру та кількість', type: 'select', isSystem: true, isRequired: true },
+      { code: 'ratio', name: 'Мінімальна кратність товару', type: 'float', isSystem: true, isRequired: true },
+      { code: 'country_of_origin', name: 'Країна-виробник', type: 'select', isSystem: true, isRequired: true },
+      { code: 'brand', name: 'Бренд', type: 'select', isSystem: true, isRequired: true, isFilter: true }
+    ]
+  },
+  {
     code: 'attr_set_drills',
     name: 'Ударні та акумуляторні дрилі',
     category_codes: ['10543'],
     attributes: [
-      { code: 'brand', name: 'Бренд', type: 'select', is_required: true },
-      { code: 'country_of_origin', name: 'Країна-виробник', type: 'select', is_required: true },
-      { code: 'power_w', name: 'Споживана потужність, Вт', type: 'numeric' },
-      { code: 'drill_type', name: 'Тип дриля', type: 'select', options: [{ code: 'impact', value: 'Ударний' }, { code: 'rotary', value: 'Безударний' }, { code: 'cordless', value: 'Акумуляторний' }] }
+      { code: 'brand', name: 'Бренд', type: 'select', isRequired: true, isFilter: true },
+      { code: 'country_of_origin', name: 'Країна-виробник', type: 'select', isRequired: true },
+      { code: 'power_w', name: 'Споживана потужність, Вт', type: 'numeric', suffix: 'Вт' },
+      { code: 'drill_type', name: 'Тип дриля', type: 'select', options: [{ code: 'impact', value: 'Ударний' }, { code: 'rotary', value: 'Безударний' }, { code: 'cordless', value: 'Акумуляторний' }] },
+      { code: 'width', name: 'Ширина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'height', name: 'Висота', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'length', name: 'Глибина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'weight', name: 'Вага', type: 'float', isSystem: true, isRequired: true, suffix: 'г' }
     ]
   },
   {
@@ -94,10 +255,14 @@ export const FALLBACK_ATTRIBUTE_SETS: EpicentrAttributeSet[] = [
     name: 'Змішувачі побутові',
     category_codes: ['20102'],
     attributes: [
-      { code: 'brand', name: 'Бренд', type: 'select', is_required: true },
-      { code: 'country_of_origin', name: 'Країна-виробник', type: 'select', is_required: true },
+      { code: 'brand', name: 'Бренд', type: 'select', isRequired: true, isFilter: true },
+      { code: 'country_of_origin', name: 'Країна-виробник', type: 'select', isRequired: true },
       { code: 'material', name: 'Матеріал корпуса', type: 'select', options: [{ code: 'brass', value: 'Латунь' }, { code: 'stainless', value: 'Нержавіюча сталь' }, { code: 'silumin', value: 'Силумін' }] },
-      { code: 'mount_type', name: 'Тип монтажу', type: 'select', options: [{ code: 'deck', value: 'На виріб / раковину' }, { code: 'wall', value: 'Настінний' }, { code: 'hidden', value: 'Прихованого монтажу' }] }
+      { code: 'mount_type', name: 'Тип монтажу', type: 'select', options: [{ code: 'deck', value: 'На виріб / раковину' }, { code: 'wall', value: 'Настінний' }, { code: 'hidden', value: 'Прихованого монтажу' }] },
+      { code: 'width', name: 'Ширина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'height', name: 'Висота', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'length', name: 'Глибина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'weight', name: 'Вага', type: 'float', isSystem: true, isRequired: true, suffix: 'г' }
     ]
   },
   {
@@ -105,9 +270,13 @@ export const FALLBACK_ATTRIBUTE_SETS: EpicentrAttributeSet[] = [
     name: 'Побутова техніка для дому',
     category_codes: ['30201', '30202', '30203'],
     attributes: [
-      { code: 'brand', name: 'Бренд', type: 'select', is_required: true },
-      { code: 'country_of_origin', name: 'Країна-виробник', type: 'select', is_required: true },
-      { code: 'energy_class', name: 'Клас енергоспоживання', type: 'select', options: [{ code: 'a_plus_plus', value: 'A+++' }, { code: 'a_plus', value: 'A+' }, { code: 'a', value: 'A' }] }
+      { code: 'brand', name: 'Бренд', type: 'select', isRequired: true, isFilter: true },
+      { code: 'country_of_origin', name: 'Країна-виробник', type: 'select', isRequired: true },
+      { code: 'energy_class', name: 'Клас енергоспоживання', type: 'select', options: [{ code: 'a_plus_plus', value: 'A+++' }, { code: 'a_plus', value: 'A+' }, { code: 'a', value: 'A' }] },
+      { code: 'width', name: 'Ширина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'height', name: 'Висота', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'length', name: 'Глибина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'weight', name: 'Вага', type: 'float', isSystem: true, isRequired: true, suffix: 'г' }
     ]
   }
 ];
@@ -458,16 +627,27 @@ export class EpicentrMerchantApiService {
 
         const attrDefs: EpicentrAttributeDef[] = match.attributes.map((a: any) => {
           let aName = a.code;
+          let suffix = a.suffix || '';
+          let prefix = a.prefix || null;
+          let translations: any[] = [];
           if (Array.isArray(a.translations)) {
+            translations = a.translations;
             const ua = a.translations.find((t: any) => t.languageCode === 'ua');
             if (ua?.title) aName = ua.title;
+            if (ua?.suffix) suffix = ua.suffix;
+            if (ua?.prefix) prefix = ua.prefix;
           }
           return {
             code: String(a.code),
             name: aName,
             type: a.type || 'text',
-            is_required: Boolean(a.isRequired),
-            is_filter: Boolean(a.isFilter)
+            isSystem: Boolean(a.isSystem),
+            isRequired: Boolean(a.isRequired),
+            isFilter: Boolean(a.isFilter),
+            isModel: Boolean(a.isModel),
+            suffix,
+            prefix,
+            translations
           };
         });
 
@@ -481,7 +661,9 @@ export class EpicentrMerchantApiService {
       // Return fallback attribute set if network or API error
     }
 
-    const fallback = FALLBACK_ATTRIBUTE_SETS.find((s) => s.code === cleanCode);
+    const fallback = FALLBACK_ATTRIBUTE_SETS.find(
+      (s) => s.code === cleanCode || (s.category_codes && s.category_codes.includes(cleanCode))
+    );
     return fallback || null;
   }
 

@@ -126,9 +126,11 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
         setIsExpired(false);
         setStep('sent');
       } else {
+        console.error('[ResetPasswordModal Resend Error]:', res.details || res.error || res.message);
         setErrorMessage(res.message || 'Не вдалося надіслати запит');
       }
     } catch (err: any) {
+      console.error(err);
       setErrorMessage(err?.message || 'Помилка звернення до сервера');
     } finally {
       setIsLoading(false);
@@ -166,9 +168,11 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
       if (res.success) {
         setStep('success');
       } else {
+        console.error('[ResetPasswordModal Token Submit Error]:', res.error || res.message);
         setErrorMessage(res.message);
       }
     } catch (err: any) {
+      console.error(err);
       setErrorMessage(err?.message || 'Помилка збереження нового пароля');
     } finally {
       setIsLoading(false);

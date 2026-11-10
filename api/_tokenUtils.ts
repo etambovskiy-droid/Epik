@@ -5,10 +5,14 @@
 
 import crypto from 'crypto';
 
-const SECRET_KEY =
-  process.env.AUTH_SECRET ||
-  process.env.RESEND_API_KEY ||
-  'epicentr-pim-secure-serverless-secret-2026';
+export function getTokenSecret(): string {
+  return (
+    process.env.AUTH_SECRET ||
+    process.env.RESEND_API_KEY ||
+    process.env.VITE_RESEND_API_KEY ||
+    'epicentr-pim-secure-serverless-secret-2026'
+  );
+}
 
 // Global in-memory set to prevent replay attacks across single function life
 const usedTokensSet = new Set<string>();
@@ -33,7 +37,7 @@ export function generateResetToken(
   const expiresAt = Date.now() + ttlSeconds * 1000;
   const randomPart = crypto.randomBytes(16).toString('hex');
   const payload = `${cleanEmail}:${expiresAt}:${randomPart}`;
-  const hmac = crypto.createHmac('sha256', SECRET_KEY).update(payload).digest('hex');
+  const hmac = crypto.createHmac('sha256', getTokenSecret()).update(payload).digest('hex');
   const token = Buffer.from(`${payload}:${hmac}`).toString('base64url');
   return { token, expiresAt };
 }
@@ -60,7 +64,7 @@ export function verifyResetToken(token: string): DecodedResetToken {
     const [email, expiresAtStr, randomPart, signature] = parts;
     const expiresAt = Number(expiresAtStr);
     const payload = `${email}:${expiresAtStr}:${randomPart}`;
-    const expectedHmac = crypto.createHmac('sha256', SECRET_KEY).update(payload).digest('hex');
+    const expectedHmac = crypto.createHmac('sha256', getTokenSecret()).update(payload).digest('hex');
 
     if (signature !== expectedHmac) {
       return { valid: false, remainingSeconds: 0, error: 'Підпис токена недійсний або пошкоджений' };
@@ -93,7 +97,6 @@ export function verifyResetToken(token: string): DecodedResetToken {
 export function markTokenAsUsed(token: string): void {
   if (token) {
     usedTokensSet.add(token);
-    // Prune set after 20 minutes to prevent memory leak
     setTimeout(() => usedTokensSet.delete(token), 20 * 60 * 1000);
   }
 }

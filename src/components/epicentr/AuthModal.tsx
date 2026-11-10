@@ -101,10 +101,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         if (res?.success) {
           setSuccessMsg(res?.message || 'Інструкції надіслано на вашу пошту');
         } else {
+          console.error('[AuthModal Resend Error]:', res?.details || res?.error || res?.message);
           setErrorMsg(res?.message || 'Не вдалося надіслати інструкції');
         }
       }
     } catch (err: any) {
+      console.error(err);
       setErrorMsg(err?.message || 'Непередбачена помилка авторизації');
     } finally {
       setIsLoading(false);

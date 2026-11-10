@@ -33,7 +33,9 @@ import {
   ListFilter,
   CheckCircle,
   Hash,
-  ArrowUpDown
+  ArrowUpDown,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import {
   epicentrMerchantApi,
@@ -86,11 +88,14 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
   const [isParsing, setIsParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
-  // Mapping state
+  // Mapping & Category Selection state
   const [categoryMappings, setCategoryMappings] = useState<CategoryMappingConfig>({});
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(new Set());
   const [confidenceMap, setConfidenceMap] = useState<Record<string, number>>({});
   const [mappingSearchQuery, setMappingSearchQuery] = useState('');
   const [onlyUnmappedFilter, setOnlyUnmappedFilter] = useState(false);
+  const [onlySelectedFilter, setOnlySelectedFilter] = useState(false);
+  const [showOnlySelectedProducts, setShowOnlySelectedProducts] = useState(true);
   const [autoEnrichUa, setAutoEnrichUa] = useState(true);
   const [isEnriching, setIsEnriching] = useState(false);
   const [enrichmentProgress, setEnrichmentProgress] = useState<EnrichmentProgress | null>(null);
@@ -179,10 +184,13 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
       setParsedProducts(res.products);
       if (filename) setFeedFileName(filename);
 
-      // Auto-map categories
+      // Auto-map categories & select all categories by default
       const activeCats = categories.length > 0 ? categories : FALLBACK_EPICENTR_CATEGORIES;
       const initialMappings = buildInitialMappings(res.products, activeCats);
       setCategoryMappings(initialMappings);
+      const allCatIds = new Set<string>(res.products.map((p) => p.categoryId));
+      setSelectedCategoryIds(allCatIds);
+      setOnlySelectedFilter(false);
       setIsGenerated(false);
       setGeneratedXml('');
       setXsdReport(null);
@@ -265,8 +273,55 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
       ...prev,
       [sourceCatId]: 100
     }));
+    setIsGenerated(false);
+    setGeneratedXml('');
+    setXsdReport(null);
     setSelectorForSourceCat(null);
     setCategoryPickerSearch('');
+  };
+
+  // Category export selection handlers
+  const invalidateGeneratedXml = () => {
+    setIsGenerated(false);
+    setGeneratedXml('');
+    setXsdReport(null);
+    setDownloadGateToast(null);
+  };
+
+  const handleToggleCategorySelection = (catId: string) => {
+    setSelectedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(catId)) {
+        next.delete(catId);
+      } else {
+        next.add(catId);
+      }
+      return next;
+    });
+    invalidateGeneratedXml();
+  };
+
+  const handleSelectOnlyThisCategory = (catId: string) => {
+    setSelectedCategoryIds(new Set([catId]));
+    invalidateGeneratedXml();
+  };
+
+  const handleSelectAllCategories = () => {
+    setSelectedCategoryIds(new Set(uniqueSourceCategories.map((c) => c.id)));
+    invalidateGeneratedXml();
+  };
+
+  const handleDeselectAllCategories = () => {
+    setSelectedCategoryIds(new Set());
+    invalidateGeneratedXml();
+  };
+
+  const handleSelectHighConfidenceCategories = () => {
+    const highConfIds = uniqueSourceCategories
+      .filter((c) => Boolean(categoryMappings[c.id]?.epicentrCategoryCode) && (confidenceMap[c.id] ?? 0) >= 80)
+      .map((c) => c.id);
+    setSelectedCategoryIds(new Set(highConfIds));
+    invalidateGeneratedXml();
   };
 
   // Re-run Auto-mapping with AI & Fuzzy token matching for all source categories
@@ -288,6 +343,7 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
 
     setCategoryMappings(newMappings);
     setConfidenceMap(newConfidences);
+    invalidateGeneratedXml();
   };
 
   // Open live Attribute Set & Options Inspector for a category
@@ -327,34 +383,101 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
     }
   };
 
-  // Execute XML generation + automatic XSD validation
+  const [isEnrichingGrounding, setIsEnrichingGrounding] = useState(false);
+  const [groundingToast, setGroundingToast] = useState<string | null>(null);
+
+  // Execute AI Grounding & Regex Enrichment for missing mandatory fields (only for selected categories)
+  const handleGroundingEnrichment = async () => {
+    const targetSubset = parsedProducts.filter((p) => selectedCategoryIds.has(p.categoryId));
+    if (targetSubset.length === 0) return;
+    setIsEnrichingGrounding(true);
+    setGroundingToast(null);
+
+    try {
+      const attributeSetsMap: Record<string, EpicentrAttributeSet> = {};
+      for (const catId of Array.from(selectedCategoryIds)) {
+        const mapping = categoryMappings[catId];
+        if (mapping?.attributeSetCode) {
+          const s = await epicentrMerchantApi.getAttributeSetDetails(mapping.attributeSetCode);
+          if (s) {
+            attributeSetsMap[mapping.attributeSetCode] = s;
+            attributeSetsMap[mapping.epicentrCategoryCode] = s;
+          }
+        }
+      }
+
+      const { products: enrichedSubset, enrichedCount } =
+        await GeminiFeedEnrichmentService.enrichMissingAttributesWithGrounding(
+          targetSubset,
+          attributeSetsMap,
+          categoryMappings,
+          (progress) => setEnrichmentProgress(progress)
+        );
+
+      const enrichedById = new Map(enrichedSubset.map((p) => [p.id, p]));
+      setParsedProducts((prev) => prev.map((p) => enrichedById.get(p.id) || p));
+      invalidateGeneratedXml();
+
+      setGroundingToast(
+        enrichedCount > 0
+          ? `Успішно дозаповнено обов’язкові поля, габарити та коди характеристик для ${enrichedCount} товарів (в обраних категоріях)!`
+          : `Всі обрані товари (${targetSubset.length} шт.) вже мають заповнені характеристики та габарити згідно з вимогами Епіцентру!`
+      );
+    } catch (err: any) {
+      console.warn('Grounding enrichment error:', err);
+    } finally {
+      setIsEnrichingGrounding(false);
+      setEnrichmentProgress(null);
+    }
+  };
+
+  // Execute XML generation + automatic XSD validation strictly for selected categories
   const handleGenerateXml = async (openPreviewModal = true): Promise<{
     xml: string;
     report: EpicentrXsdValidationReport;
   } | null> => {
-    if (parsedProducts.length === 0) return null;
+    if (parsedProducts.length === 0 || selectedCategoryIds.size === 0) return null;
 
-    let finalProducts = [...parsedProducts];
+    let selectedSubset = parsedProducts.filter((p) => selectedCategoryIds.has(p.categoryId));
+    if (selectedSubset.length === 0) return null;
 
-    // If auto-enrichment enabled, enrich missing UA tags
+    // If auto-enrichment enabled, enrich missing UA tags strictly for selected categories
     if (autoEnrichUa) {
       setIsEnriching(true);
       try {
-        finalProducts = await GeminiFeedEnrichmentService.enrichProductsBatch(
-          parsedProducts,
+        selectedSubset = await GeminiFeedEnrichmentService.enrichProductsBatch(
+          selectedSubset,
           (progress) => setEnrichmentProgress(progress)
         );
-        setParsedProducts(finalProducts);
+        const enrichedById = new Map(selectedSubset.map((p) => [p.id, p]));
+        setParsedProducts((prev) => prev.map((p) => enrichedById.get(p.id) || p));
       } finally {
         setIsEnriching(false);
         setEnrichmentProgress(null);
       }
     }
 
+    // Preload attribute sets strictly for selected mapped categories for O(1) paramcode & valuecode lookup
+    const attributeSetsMap: Record<string, EpicentrAttributeSet> = {};
+    for (const catId of Array.from(selectedCategoryIds)) {
+      const mapping = categoryMappings[catId];
+      if (mapping?.attributeSetCode) {
+        const attrSet = await epicentrMerchantApi.getAttributeSetDetails(mapping.attributeSetCode);
+        if (attrSet) {
+          attributeSetsMap[mapping.attributeSetCode] = attrSet;
+          attributeSetsMap[mapping.epicentrCategoryCode] = attrSet;
+        }
+      }
+    }
+
     const xml = EpicentrXmlGeneratorService.generateEpicentrXml(
-      finalProducts,
+      selectedSubset,
       categories.length > 0 ? categories : FALLBACK_EPICENTR_CATEGORIES,
-      { categoryMappings }
+      {
+        categoryMappings,
+        attributeSets: attributeSetsMap,
+        selectedCategoryIds: Array.from(selectedCategoryIds)
+      }
     );
 
     const validationReport = EpicentrXmlGeneratorService.validateXmlAgainstEpicentrXsd(xml);
@@ -371,14 +494,14 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
 
   // Standalone XSD validation check trigger
   const handleValidateXsdOnly = async () => {
-    if (parsedProducts.length === 0) return;
+    if (parsedProducts.length === 0 || selectedCategoryIds.size === 0) return;
     if (generatedXml) {
       const report = EpicentrXmlGeneratorService.validateXmlAgainstEpicentrXsd(generatedXml);
       setXsdReport(report);
       setDownloadGateToast({
         type: report.isValid ? 'success' : 'error',
         text: report.isValid
-          ? `Перевірку XSD успішно пройдено (${report.complianceScore}% відповідність, ${report.offersValidated} товарів).`
+          ? `Перевірку XSD успішно пройдено (${report.complianceScore}% відповідність, ${report.offersValidated} товарів із ${selectedCategoryIds.size} обраних категорій).`
           : `Знайдено ${report.errorCount} помилок невідповідності XSD-схемі Епіцентру.`
       });
     } else {
@@ -387,7 +510,7 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
         setDownloadGateToast({
           type: res.report.isValid ? 'success' : 'error',
           text: res.report.isValid
-            ? `XML згенеровано та перевірено за XSD (${res.report.complianceScore}% відповідність). Готово до завантаження!`
+            ? `XML згенеровано та перевірено за XSD (${res.report.complianceScore}% відповідність, ${res.report.offersValidated} товарів). Готово до завантаження!`
             : `Знайдено ${res.report.errorCount} помилок невідповідності XSD-схемі Епіцентру.`
         });
       }
@@ -417,11 +540,14 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
       return;
     }
 
-    const filename = `epicentr_feed_${new Date().toISOString().split('T')[0]}.xml`;
+    const singleCatId = selectedCategoryIds.size === 1 ? Array.from(selectedCategoryIds)[0] : null;
+    const singleCatCode = singleCatId ? categoryMappings[singleCatId]?.epicentrCategoryCode : null;
+    const catSuffix = singleCatCode ? `_cat_${singleCatCode}` : '';
+    const filename = `epicentr_feed${catSuffix}_${new Date().toISOString().split('T')[0]}.xml`;
     EpicentrXmlGeneratorService.downloadXmlFile(xmlToDownload, filename);
     setDownloadGateToast({
       type: 'success',
-      text: `XSD-валідація пройдена (${currentReport.complianceScore}%). Файл ${filename} завантажено.`
+      text: `XSD-валідація пройдена (${currentReport.complianceScore}%, ${currentReport.offersValidated} товарів). Файл ${filename} завантажено.`
     });
   };
 
@@ -451,18 +577,21 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
     return Array.from(map.values());
   }, [parsedProducts]);
 
-  // Filtered source categories based on search and "only unmapped" toggle
+  // Filtered source categories based on search, "only unmapped", and "only selected" toggles
   const filteredSourceCategories = useMemo(() => {
     return uniqueSourceCategories.filter((srcCat) => {
       const q = mappingSearchQuery.trim().toLowerCase();
       const matchesSearch = !q || srcCat.name.toLowerCase().includes(q) || srcCat.id.toLowerCase().includes(q);
       if (!matchesSearch) return false;
-      if (onlyUnmappedFilter) {
-        return !categoryMappings[srcCat.id]?.epicentrCategoryCode;
+      if (onlyUnmappedFilter && Boolean(categoryMappings[srcCat.id]?.epicentrCategoryCode)) {
+        return false;
+      }
+      if (onlySelectedFilter && !selectedCategoryIds.has(srcCat.id)) {
+        return false;
       }
       return true;
     });
-  }, [uniqueSourceCategories, mappingSearchQuery, onlyUnmappedFilter, categoryMappings]);
+  }, [uniqueSourceCategories, mappingSearchQuery, onlyUnmappedFilter, onlySelectedFilter, categoryMappings, selectedCategoryIds]);
 
   // Filtered categories for the category picker modal (searches live list of 4,878 leaf categories)
   const filteredPickerCategories = useMemo(() => {
@@ -470,26 +599,38 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
     return epicentrMerchantApi.searchCategories(categoryPickerSearch, 40);
   }, [selectorForSourceCat, categoryPickerSearch]);
 
-  // Statistics for mapping progress
+  // Statistics for mapping & category export selection
   const mappingStats = useMemo(() => {
     const total = uniqueSourceCategories.length;
     const mapped = uniqueSourceCategories.filter((c) => Boolean(categoryMappings[c.id]?.epicentrCategoryCode)).length;
     const percentage = total > 0 ? Math.round((mapped / total) * 100) : 0;
-    return { total, mapped, percentage };
-  }, [uniqueSourceCategories, categoryMappings]);
+    const selectedCategoriesCount = uniqueSourceCategories.filter((c) => selectedCategoryIds.has(c.id)).length;
+    const selectedProductsCount = parsedProducts.filter((p) => selectedCategoryIds.has(p.categoryId)).length;
+    return {
+      total,
+      mapped,
+      percentage,
+      selectedCategoriesCount,
+      selectedProductsCount,
+      totalProductsCount: parsedProducts.length
+    };
+  }, [uniqueSourceCategories, categoryMappings, selectedCategoryIds, parsedProducts]);
 
   // Filtered products for inspection
   const filteredProducts = useMemo(() => {
-    if (!searchTerm.trim()) return parsedProducts;
+    const baseList = showOnlySelectedProducts
+      ? parsedProducts.filter((p) => selectedCategoryIds.has(p.categoryId))
+      : parsedProducts;
+    if (!searchTerm.trim()) return baseList;
     const term = searchTerm.toLowerCase();
-    return parsedProducts.filter(
+    return baseList.filter(
       (p) =>
         p.name.toLowerCase().includes(term) ||
         (p.name_ua && p.name_ua.toLowerCase().includes(term)) ||
         (p.brand && p.brand.toLowerCase().includes(term)) ||
         p.id.toLowerCase().includes(term)
     );
-  }, [parsedProducts, searchTerm]);
+  }, [parsedProducts, searchTerm, showOnlySelectedProducts, selectedCategoryIds]);
 
   const hasApiKey = Boolean(getStoredApiKey());
 
@@ -750,6 +891,47 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
                 </p>
               </div>
             )}
+
+            {/* AI Grounding / Missing Attribute Enrichment Card */}
+            <div className="pt-3 border-t border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-amber-400" />
+                  ШІ-збагачення характеристик (AI Grounding)
+                </span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                  Google Search + API Schema
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Автоматично заповнює обов'язкові параметри (габарити width/height/length, вагу, бренд, країну та значення зі списку allowedValues з API).
+              </p>
+              <button
+                type="button"
+                onClick={handleGroundingEnrichment}
+                disabled={isEnrichingGrounding || mappingStats.selectedProductsCount === 0}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold transition-all disabled:opacity-50 cursor-pointer shadow-sm"
+              >
+                {isEnrichingGrounding ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    <span>ШІ-пошук та дозаповнення...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Дозаповнити пропущені обов'язкові поля ШІ</span>
+                  </>
+                )}
+              </button>
+
+              {groundingToast && (
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300 flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>{groundingToast}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -775,7 +957,16 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
               </div>
 
               {/* Progress pill & Auto-map button */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {uniqueSourceCategories.length > 0 && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs font-mono">
+                    <span className="text-amber-200/80">До експорту:</span>
+                    <span className="font-bold text-amber-300">
+                      {mappingStats.selectedCategoriesCount}/{mappingStats.total} кат. ({mappingStats.selectedProductsCount}/{mappingStats.totalProductsCount} тов.)
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono">
                   <span className="text-slate-400">Зіставлено:</span>
                   <span className={`font-bold ${mappingStats.mapped === mappingStats.total && mappingStats.total > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
@@ -795,37 +986,93 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
               </div>
             </div>
 
-            {/* Filter and Search Bar for Source Categories */}
+            {/* Category Selection Matrix Toolbar & Search Bar */}
             {uniqueSourceCategories.length > 0 && (
-              <div className="flex flex-wrap items-center justify-between gap-3 p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={mappingSearchQuery}
-                    onChange={(e) => setMappingSearchQuery(e.target.value)}
-                    placeholder="Пошук по категоріях вхідного фіду..."
-                    className="w-full pl-8 pr-3 py-1 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500"
-                  />
-                  {mappingSearchQuery && (
+              <div className="space-y-2.5">
+                {/* Selection Presets Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-950/90 border border-slate-800/90 text-xs">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-medium text-slate-400 mr-1">
+                      Вибір категорій для конвертації:
+                    </span>
                     <button
-                      onClick={() => setMappingSearchQuery('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 cursor-pointer"
+                      type="button"
+                      onClick={handleSelectAllCategories}
+                      className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 text-[11px] font-medium transition-colors flex items-center gap-1 cursor-pointer"
                     >
-                      <X className="w-3 h-3" />
+                      <CheckSquare className="w-3 h-3 text-emerald-400" />
+                      <span>Обрати всі ({uniqueSourceCategories.length})</span>
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      onClick={handleDeselectAllCategories}
+                      className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 text-[11px] font-medium transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Square className="w-3 h-3 text-slate-400" />
+                      <span>Зняти всі</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSelectHighConfidenceCategories}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-medium transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Обрати лише категорії з високою точністю зіставлення (≥80%)"
+                    >
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      <span>Тільки точні збіги (≥80%)</span>
+                    </button>
+                  </div>
+
+                  <span className="text-[11px] font-mono text-slate-400">
+                    У XML увійде:{' '}
+                    <b className={mappingStats.selectedProductsCount > 0 ? 'text-amber-300' : 'text-rose-400'}>
+                      {mappingStats.selectedProductsCount} товарів
+                    </b>
+                  </span>
                 </div>
 
-                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={onlyUnmappedFilter}
-                    onChange={(e) => setOnlyUnmappedFilter(e.target.checked)}
-                    className="rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0 cursor-pointer"
-                  />
-                  <span>Тільки незіставлені</span>
-                </label>
+                {/* Search & View Filters */}
+                <div className="flex flex-wrap items-center justify-between gap-3 p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={mappingSearchQuery}
+                      onChange={(e) => setMappingSearchQuery(e.target.value)}
+                      placeholder="Пошук по категоріях вхідного фіду (напр. Настільні ігри)..."
+                      className="w-full pl-8 pr-7 py-1 bg-slate-900 border border-slate-800 rounded-lg text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500"
+                    />
+                    {mappingSearchQuery && (
+                      <button
+                        onClick={() => setMappingSearchQuery('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={onlySelectedFilter}
+                        onChange={(e) => setOnlySelectedFilter(e.target.checked)}
+                        className="rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0 cursor-pointer"
+                      />
+                      <span>Тільки обрані</span>
+                    </label>
+
+                    <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={onlyUnmappedFilter}
+                        onChange={(e) => setOnlyUnmappedFilter(e.target.checked)}
+                        className="rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0 cursor-pointer"
+                      />
+                      <span>Тільки незіставлені</span>
+                    </label>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -840,53 +1087,99 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
                 <p>Не знайдено категорій за заданим фільтром</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
                 {filteredSourceCategories.map((srcCat) => {
                   const currentMapping = categoryMappings[srcCat.id];
                   const confidence = confidenceMap[srcCat.id];
                   const isMapped = Boolean(currentMapping?.epicentrCategoryCode);
+                  const isSelected = selectedCategoryIds.has(srcCat.id);
+                  const isOnlyThisSelected = isSelected && selectedCategoryIds.size === 1;
 
                   return (
                     <div
                       key={srcCat.id}
                       className={`p-3.5 rounded-xl border transition-all text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 ${
-                        isMapped
-                          ? 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                        !isSelected
+                          ? 'bg-slate-950/30 border-slate-800/50 opacity-60 hover:opacity-90'
+                          : isMapped
+                          ? 'bg-slate-950/80 border-amber-500/30 hover:border-amber-500/50 shadow-xs'
                           : 'bg-amber-950/20 border-amber-800/40'
                       }`}
                     >
-                      {/* Left side: Source Category Information */}
-                      <div className="space-y-1.5 flex-1 min-w-[200px]">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-slate-100 text-xs">{srcCat.name}</span>
-                          <span className="px-2 py-0.5 rounded font-mono text-[10px] bg-slate-800 text-slate-300 border border-slate-700/60">
-                            {srcCat.count} товарів
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-mono">
-                            ID: {srcCat.id}
-                          </span>
-                        </div>
+                      {/* Left side: Checkbox + Source Category Information */}
+                      <div className="flex items-start gap-3 flex-1 min-w-[200px]">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCategorySelection(srcCat.id)}
+                          aria-label={`Обрати категорію ${srcCat.name} для конвертації`}
+                          className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-500 border-amber-400 text-slate-950'
+                              : 'bg-slate-900 border-slate-700 text-transparent hover:border-slate-500'
+                          }`}
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </button>
 
-                        {confidence !== undefined && (
-                          <div className="flex items-center gap-1.5">
+                        <div className="space-y-1.5 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span
-                              className={`text-[10px] font-mono px-2 py-0.2 rounded-full border ${
-                                confidence >= 90
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                  : confidence >= 70
-                                  ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
-                                  : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                              onClick={() => handleToggleCategorySelection(srcCat.id)}
+                              className={`font-semibold text-xs cursor-pointer select-none ${
+                                isSelected ? 'text-slate-100' : 'text-slate-400 line-through'
                               }`}
                             >
-                              {confidence}% збіг
+                              {srcCat.name}
                             </span>
+                            <span className="px-2 py-0.5 rounded font-mono text-[10px] bg-slate-800 text-slate-300 border border-slate-700/60">
+                              {srcCat.count} товарів
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              ID: {srcCat.id}
+                            </span>
+                            {!isSelected && (
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-slate-700">
+                                Пропущено
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {confidence !== undefined && (
+                              <span
+                                className={`text-[10px] font-mono px-2 py-0.2 rounded-full border ${
+                                  confidence >= 90
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                    : confidence >= 70
+                                    ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
+                                    : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                }`}
+                              >
+                                {confidence}% збіг
+                              </span>
+                            )}
                             {isMapped && (
                               <span className="text-[10px] text-slate-500 font-mono">
                                 Набір: {currentMapping.attributeSetCode}
                               </span>
                             )}
+                            {uniqueSourceCategories.length > 1 && !isOnlyThisSelected && (
+                              <button
+                                type="button"
+                                onClick={() => handleSelectOnlyThisCategory(srcCat.id)}
+                                className="text-[10px] font-medium px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/25 text-amber-300 border border-amber-500/25 transition-colors cursor-pointer"
+                                title="Зняти всі інші категорії та конвертувати в XML виключно цю категорію"
+                              >
+                                Тільки ця ({srcCat.count})
+                              </button>
+                            )}
+                            {isOnlyThisSelected && uniqueSourceCategories.length > 1 && (
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                ★ Обрана тільки ця категорія
+                              </span>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </div>
 
                       {/* Right side: Mapped Epicentr Category Card & Actions */}
@@ -943,6 +1236,22 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
               </div>
             )}
 
+            {uniqueSourceCategories.length > 0 && mappingStats.selectedCategoriesCount === 0 && (
+              <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-700/50 text-amber-300 text-xs flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Оберіть прапорцем хоча б одну категорію, щоб сформувати XML-прайс для Епіцентру.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSelectAllCategories}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-[11px] font-medium shrink-0 cursor-pointer"
+                >
+                  Обрати всі
+                </button>
+              </div>
+            )}
+
             {/* Action Bar */}
             <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs text-slate-400 flex items-center gap-2">
@@ -956,7 +1265,7 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
                 {isGenerated && (
                   <button
                     onClick={() => setIsPreviewModalOpen(true)}
-                    className="px-3 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1.5"
+                    className="px-3 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
                     <Eye className="w-3.5 h-3.5" />
                     Перегляд коду
@@ -965,8 +1274,8 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
 
                 <button
                   onClick={handleValidateXsdOnly}
-                  disabled={parsedProducts.length === 0 || isEnriching}
-                  className="px-3.5 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-500/30 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                  disabled={mappingStats.selectedProductsCount === 0 || isEnriching}
+                  className="px-3.5 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-500/30 disabled:opacity-50 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <ShieldCheck className="w-4 h-4 text-sky-400" />
                   Перевірити за XSD
@@ -974,11 +1283,13 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
 
                 <button
                   onClick={() => handleGenerateXml(true)}
-                  disabled={parsedProducts.length === 0 || isEnriching}
-                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all flex items-center gap-1.5"
+                  disabled={mappingStats.selectedProductsCount === 0 || isEnriching}
+                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <FileCode className="w-4 h-4" />
-                  {isEnriching ? 'Збагачення AI...' : 'Сформувати валідний XML'}
+                  {isEnriching
+                    ? 'Збагачення AI...'
+                    : `Сформувати валідний XML (${mappingStats.selectedProductsCount})`}
                 </button>
 
                 {isGenerated && (
@@ -1181,11 +1492,22 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
       {parsedProducts.length > 0 && (
         <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-slate-800">
-            <div className="flex items-center gap-2">
-              <Package className="w-4 h-4 text-amber-400" />
-              <h2 className="text-sm font-semibold text-slate-100">
-                Товари у фіді ({filteredProducts.length} із {parsedProducts.length})
-              </h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-amber-400" />
+                <h2 className="text-sm font-semibold text-slate-100">
+                  Товари до експорту ({filteredProducts.length} із {parsedProducts.length})
+                </h2>
+              </div>
+              <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800">
+                <input
+                  type="checkbox"
+                  checked={showOnlySelectedProducts}
+                  onChange={(e) => setShowOnlySelectedProducts(e.target.checked)}
+                  className="rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0 cursor-pointer"
+                />
+                <span>Показувати тільки з обраних категорій ({mappingStats.selectedProductsCount})</span>
+              </label>
             </div>
 
             <div className="flex items-center gap-2">
@@ -1218,19 +1540,22 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
               <tbody className="divide-y divide-slate-800/60 bg-slate-900/60 font-sans">
                 {filteredProducts.map((p) => {
                   const mapping = categoryMappings[p.categoryId];
+                  const isCatSelected = selectedCategoryIds.has(p.categoryId);
                   const offerErrors =
                     xsdReport?.issues.filter(
                       (iss) => iss.offerId === p.id && iss.severity === 'error'
                     ) || [];
                   return (
-                    <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
+                    <tr key={p.id} className={`hover:bg-slate-800/40 transition-colors ${!isCatSelected ? 'opacity-50' : ''}`}>
                       <td className="px-4 py-3">
                         <img
-                          src={p.picture}
+                          src={p.picture || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%230f172a'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='monospace' font-size='10'%3ENO IMG%3C/text%3E%3C/svg%3E"}
                           alt={p.name}
                           className="w-10 h-10 object-cover rounded-lg border border-slate-800 bg-slate-950"
                           onError={(e) => {
-                            (e.target as any).src = 'https://via.placeholder.com/60?text=IMG';
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src =
+                              "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%230f172a'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='monospace' font-size='10'%3ENO IMG%3C/text%3E%3C/svg%3E";
                           }}
                         />
                       </td>
@@ -1454,7 +1779,7 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
                 <p className="text-xs text-slate-400 mt-0.5">
                   Атрибут-сет: <span className="font-mono text-amber-300">{inspectedCategory.attribute_set_code}</span>
                   {inspectedAttrSet && (
-                    <span> • {inspectedAttrSet.attributes?.length || 0} характеристик (обов'язкових: {inspectedAttrSet.attributes?.filter(a => a.is_required).length || 0})</span>
+                    <span> • {inspectedAttrSet.attributes?.length || 0} характеристик (обов'язкових: {inspectedAttrSet.attributes?.filter(a => a.isRequired || a.is_required).length || 0})</span>
                   )}
                 </p>
               </div>
@@ -1549,7 +1874,7 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
                                 </span>
                               </td>
                               <td className="px-3 py-2">
-                                {attr.is_required ? (
+                                {attr.isRequired || attr.is_required ? (
                                   <span className="text-[10px] font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                                     Обов'язкова *
                                   </span>
@@ -1608,7 +1933,7 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
         isOpen={isPreviewModalOpen}
         onClose={() => setIsPreviewModalOpen(false)}
         xmlContent={generatedXml}
-        offersCount={parsedProducts.length}
+        offersCount={xsdReport?.offersValidated ?? mappingStats.selectedProductsCount}
         xsdReport={xsdReport}
       />
     </div>

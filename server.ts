@@ -1,5 +1,6 @@
 import express from 'express';
 import http from 'http';
+import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -1156,18 +1157,116 @@ ${attributesPromptSection}
   // 11. Password Reset with 60-Second TTL (1 minute) & Resend Email Delivery
   const inMemoryResetTokens: Map<string, { email: string; token: string; expiresAt: number; used?: boolean }> = new Map();
 
+  function getServerTokenSecret(): string {
+    return (
+      process.env.AUTH_SECRET ||
+      process.env.RESEND_API_KEY ||
+      process.env.VITE_RESEND_API_KEY ||
+      'epicentr-pim-secure-serverless-secret-2026'
+    );
+  }
+
+  function createStatelessResetToken(email: string, ttlSeconds: number = 60): { token: string; expiresAt: number } {
+    const cleanEmail = email.trim().toLowerCase();
+    const expiresAt = Date.now() + ttlSeconds * 1000;
+    const randomPart = crypto.randomBytes(16).toString('hex');
+    const payload = `${cleanEmail}:${expiresAt}:${randomPart}`;
+    const hmac = crypto.createHmac('sha256', getServerTokenSecret()).update(payload).digest('hex');
+    const token = Buffer.from(`${payload}:${hmac}`).toString('base64url');
+    return { token, expiresAt };
+  }
+
+  function verifyStatelessOrMemoryToken(token: string): {
+    valid: boolean;
+    email?: string;
+    remainingSeconds: number;
+    statusCode?: number;
+    error?: string;
+  } {
+    const memRecord = inMemoryResetTokens.get(token);
+    if (memRecord) {
+      if (memRecord.used) {
+        return { valid: false, remainingSeconds: 0, statusCode: 400, error: 'Посилання вже використано' };
+      }
+      const remMs = memRecord.expiresAt - Date.now();
+      if (remMs <= 0) {
+        inMemoryResetTokens.delete(token);
+        return { valid: false, remainingSeconds: 0, statusCode: 410, error: 'Час дії посилання (60 сек) вичерпано. Згенеруйте нове.' };
+      }
+      return { valid: true, email: memRecord.email, remainingSeconds: Math.max(1, Math.ceil(remMs / 1000)) };
+    }
+
+    try {
+      const raw = Buffer.from(token, 'base64url').toString('utf-8');
+      const parts = raw.split(':');
+      if (parts.length !== 4) {
+        return { valid: false, remainingSeconds: 0, statusCode: 404, error: 'Посилання не знайдено або недійсне' };
+      }
+      const [email, expiresAtStr, randomPart, signature] = parts;
+      const expiresAt = Number(expiresAtStr);
+      const payload = `${email}:${expiresAtStr}:${randomPart}`;
+      const expectedHmac = crypto.createHmac('sha256', getServerTokenSecret()).update(payload).digest('hex');
+      if (signature !== expectedHmac) {
+        return { valid: false, remainingSeconds: 0, statusCode: 400, error: 'Підпис токена недійсний' };
+      }
+      const remMs = expiresAt - Date.now();
+      if (remMs <= 0) {
+        return { valid: false, remainingSeconds: 0, statusCode: 410, error: 'Час дії посилання (60 сек) вичерпано. Згенеруйте нове.' };
+      }
+      return { valid: true, email, remainingSeconds: Math.max(1, Math.ceil(remMs / 1000)) };
+    } catch {
+      return { valid: false, remainingSeconds: 0, statusCode: 400, error: 'Помилка перевірки токена' };
+    }
+  }
+
+  function resolveAppOriginFromReq(req: express.Request): string {
+    const envUrl = (process.env.APP_URL || process.env.VITE_APP_URL || '').trim();
+    if (envUrl && envUrl !== 'MY_APP_URL') {
+      return envUrl.replace(/\/$/, '');
+    }
+    const originHeader = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
+    if (originHeader && originHeader.startsWith('http')) {
+      return originHeader.replace(/\/$/, '');
+    }
+    const fwdHost = req.headers['x-forwarded-host'] || req.headers.host;
+    if (typeof fwdHost === 'string' && fwdHost.trim()) {
+      const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
+      return `${proto}://${fwdHost.trim()}`.replace(/\/$/, '');
+    }
+    return `http://localhost:${PORT}`;
+  }
+
   async function sendPasswordResetViaResend(
     toEmail: string,
     resetUrl: string,
-    ttlSeconds: number = 60
-  ): Promise<{ success: boolean; id?: string; error?: string }> {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey || !apiKey.trim()) {
-      console.warn('[Resend Notice] RESEND_API_KEY is not set in environment. Dispatched to server console logs.');
-      return { success: false, error: 'RESEND_API_KEY_NOT_CONFIGURED' };
+    ttlSeconds: number = 60,
+    fallbackHeaderKey?: string
+  ): Promise<{ success: boolean; id?: string; statusCode?: number; errorCode?: string; error?: string; details?: any }> {
+    const apiKey = (
+      process.env.RESEND_API_KEY ||
+      process.env.VITE_RESEND_API_KEY ||
+      fallbackHeaderKey ||
+      ''
+    ).trim();
+
+    if (!apiKey || apiKey === 're_xxxxxxxxx') {
+      const missingMsg =
+        'Ключ RESEND_API_KEY (або VITE_RESEND_API_KEY) не налаштовано в серверному оточенні.';
+      console.error('[Resend Configuration Error]:', missingMsg);
+      return {
+        success: false,
+        statusCode: 500,
+        errorCode: 'RESEND_API_KEY_NOT_CONFIGURED',
+        error: missingMsg
+      };
     }
 
-    const fromAddress = process.env.RESEND_FROM || 'Epicentr PIM Support <onboarding@resend.dev>';
+    const fromAddress = (
+      process.env.RESEND_FROM ||
+      process.env.VITE_RESEND_FROM ||
+      'Epicentr PIM <onboarding@resend.dev>'
+    ).trim();
+
     const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -1248,7 +1347,7 @@ ${attributesPromptSection}
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey.trim()}`,
+          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -1259,44 +1358,71 @@ ${attributesPromptSection}
         })
       });
 
-      const data = await response.json().catch(() => ({}));
+      const rawText = await response.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = { message: rawText };
+      }
+
       if (response.ok && data?.id) {
-        console.log(`[Resend SUCCESS] Email dispatched via Resend. ID: ${data.id}`);
-        return { success: true, id: data.id };
+        console.log(`[Resend SUCCESS] Email dispatched to ${toEmail} from "${fromAddress}". ID: ${data.id}`);
+        return { success: true, id: data.id, statusCode: 200 };
       } else {
-        console.warn(`[Resend Notice]: ${response.status}`, data);
-        return { success: false, error: data?.message || `HTTP ${response.status}` };
+        const exactError =
+          data?.message || data?.error?.message || data?.error || rawText || `HTTP ${response.status}`;
+        console.error('[Resend API Error]:', {
+          status: response.status,
+          from: fromAddress,
+          to: toEmail,
+          response: data
+        });
+        return {
+          success: false,
+          statusCode: response.status,
+          errorCode: data?.name || 'RESEND_DISPATCH_FAILED',
+          error: `Помилка Resend (${response.status}): ${exactError}`,
+          details: data
+        };
       }
     } catch (err: any) {
-      console.warn(`[Resend Network Notice]:`, err?.message || err);
-      return { success: false, error: err?.message || 'Network error reaching Resend' };
+      console.error('[Resend Network Error]:', err);
+      return {
+        success: false,
+        statusCode: 502,
+        errorCode: 'RESEND_NETWORK_ERROR',
+        error: err?.message || 'Мережева помилка при зверненні до Resend API'
+      };
     }
   }
 
-  app.post('/api/auth/request-password-reset', async (req, res) => {
-    const { email } = req.body;
+  async function handlePasswordResetEmailRequest(req: express.Request, res: express.Response) {
+    const { email } = req.body || {};
     const cleanEmail = String(email || '').trim().toLowerCase();
 
     if (!cleanEmail || !cleanEmail.includes('@')) {
-      res.status(400).json({ error: 'Введіть коректну адресу електронної пошти' });
+      res.status(400).json({
+        success: false,
+        error: 'INVALID_EMAIL',
+        message: 'Введіть коректну адресу електронної пошти'
+      });
       return;
     }
 
-    // Verify user exists and is approved or admin
-    const isSuper = cleanEmail === SUPER_ADMIN_EMAIL;
+    const isSuper = cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase();
     const existing = inMemoryUsers.get(cleanEmail);
 
     if (!isSuper && existing && existing.status !== 'approved') {
       res.status(403).json({
+        success: false,
         error: 'ACCOUNT_NOT_ELIGIBLE',
         message: 'Скидання пароля можливе лише для підтверджених облікових записів або адміністратора.'
       });
       return;
     }
 
-    // Server-generated cryptographically strong token
-    const token = `rst_${Date.now()}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 8)}`;
-    const expiresAt = Date.now() + 60 * 1000; // 60s TTL
+    const { token, expiresAt } = createStatelessResetToken(cleanEmail, 60);
     inMemoryResetTokens.set(token, {
       email: cleanEmail,
       token,
@@ -1304,88 +1430,129 @@ ${attributesPromptSection}
       used: false
     });
 
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
-    const resetUrl = `${appUrl}?resetToken=${token}`;
+    const appUrl = resolveAppOriginFromReq(req);
+    const resetUrl = `${appUrl}?resetToken=${encodeURIComponent(token)}`;
+    const fallbackHeaderKey =
+      typeof req.headers['x-resend-api-key'] === 'string'
+        ? req.headers['x-resend-api-key'].trim()
+        : undefined;
 
-    console.log(`[EMAIL DISPATCH: SECURE OUT-OF-BAND PASSWORD RESET LINK]`);
-    console.log(`Одержувач: ${cleanEmail}`);
-    console.log(`Час дії: 60 секунд (TTL: 1 min)`);
-    console.log(`-> Захищене посилання: ${resetUrl}`);
+    const dispatchResult = await sendPasswordResetViaResend(cleanEmail, resetUrl, 60, fallbackHeaderKey);
 
-    // Asynchronously dispatch email via Resend
-    sendPasswordResetViaResend(cleanEmail, resetUrl, 60).catch(err => {
-      console.warn('Background Resend dispatch error:', err);
-    });
+    if (!dispatchResult.success) {
+      res.status(dispatchResult.statusCode || 500).json({
+        success: false,
+        error: dispatchResult.errorCode || 'RESEND_DISPATCH_FAILED',
+        message: dispatchResult.error || 'Не вдалося надіслати лист через Resend',
+        details: dispatchResult.details
+      });
+      return;
+    }
 
-    // ZERO IN-APP LEAK: Return only success message, never leak the token to whoever filled the form
     res.json({
       success: true,
-      message: 'Лист із захищеним посиланням для зміни пароля надіслано на вашу електронну пошту через Resend. Будь ласка, перевірте поштову скриньку.'
+      id: dispatchResult.id,
+      message:
+        'Лист із захищеним посиланням для зміни пароля надіслано на вашу електронну пошту через Resend. Будь ласка, перевірте поштову скриньку.'
     });
-  });
+  }
+
+  app.post('/api/auth/request-password-reset', handlePasswordResetEmailRequest);
 
   app.post('/api/auth/verify-reset-token', (req, res) => {
-    const { token } = req.body;
+    const { token } = req.body || {};
     if (!token) {
       res.status(400).json({ valid: false, message: 'Токен відсутній' });
       return;
     }
 
-    const record = inMemoryResetTokens.get(token);
-    if (!record || record.used) {
-      res.status(404).json({ valid: false, message: 'Посилання не знайдено або вже використано' });
-      return;
-    }
-
-    const now = Date.now();
-    const remainingMs = record.expiresAt - now;
-    if (remainingMs <= 0) {
-      inMemoryResetTokens.delete(token);
-      res.status(410).json({ valid: false, message: 'Час дії посилання (60 сек) вичерпано. Згенеруйте нове.' });
+    const verification = verifyStatelessOrMemoryToken(String(token).trim());
+    if (!verification.valid) {
+      res.status(verification.statusCode || 400).json({
+        valid: false,
+        error: verification.error,
+        message: verification.error
+      });
       return;
     }
 
     res.json({
       valid: true,
-      email: record.email,
-      remainingSeconds: Math.ceil(remainingMs / 1000)
+      email: verification.email,
+      remainingSeconds: verification.remainingSeconds
     });
   });
 
-  app.post('/api/auth/reset-password', (req, res) => {
-    const { token, newPassword } = req.body;
-    if (!token || !newPassword || String(newPassword).length < 6) {
-      res.status(400).json({ error: 'Пароль повинен містити не менше 6 символів' });
+  app.post('/api/auth/reset-password', async (req, res) => {
+    const body = req.body || {};
+    const action = String(body.action || '').trim().toLowerCase();
+
+    // Support unified /api/auth/reset-password route for email dispatch & verification too
+    if (action === 'request' || (body.email && !body.token && !body.newPassword)) {
+      await handlePasswordResetEmailRequest(req, res);
       return;
     }
 
-    const record = inMemoryResetTokens.get(token);
-    if (!record || record.used) {
-      res.status(404).json({ error: 'Посилання недійсне або вже використано' });
+    if (action === 'verify' || body.verifyOnly) {
+      const verification = verifyStatelessOrMemoryToken(String(body.token || '').trim());
+      if (!verification.valid) {
+        res.status(verification.statusCode || 400).json({
+          valid: false,
+          error: verification.error,
+          message: verification.error
+        });
+        return;
+      }
+      res.json({
+        valid: true,
+        email: verification.email,
+        remainingSeconds: verification.remainingSeconds
+      });
       return;
     }
 
-    if (Date.now() > record.expiresAt) {
-      inMemoryResetTokens.delete(token);
-      res.status(410).json({ error: 'Час дії посилання (60 сек) вичерпано. Згенеруйте нове.' });
+    const { token, newPassword } = body;
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken || !newPassword || String(newPassword).length < 6) {
+      res.status(400).json({ success: false, error: 'Пароль повинен містити не менше 6 символів' });
       return;
     }
 
-    record.used = true;
-    inMemoryResetTokens.delete(token);
+    const verification = verifyStatelessOrMemoryToken(cleanToken);
+    if (!verification.valid || !verification.email) {
+      res.status(verification.statusCode || 400).json({
+        success: false,
+        error: verification.error || 'Посилання недійсне або вже використано'
+      });
+      return;
+    }
 
-    const emailKey = record.email.toLowerCase().trim();
+    const memRecord = inMemoryResetTokens.get(cleanToken);
+    if (memRecord) {
+      memRecord.used = true;
+      inMemoryResetTokens.delete(cleanToken);
+    } else {
+      // Store consumed stateless token in memory to prevent replay
+      inMemoryResetTokens.set(cleanToken, {
+        email: verification.email,
+        token: cleanToken,
+        expiresAt: Date.now() + 60 * 1000,
+        used: true
+      });
+    }
+
+    const emailKey = verification.email.toLowerCase().trim();
     const existing = inMemoryUsers.get(emailKey);
     if (existing) {
       existing.password = String(newPassword).trim();
       inMemoryUsers.set(emailKey, existing);
     }
 
-    console.log(`[PASSWORD UPDATED] Password successfully updated for user: ${record.email}`);
+    console.log(`[PASSWORD UPDATED] Password successfully updated for user: ${verification.email}`);
 
     res.json({
       success: true,
-      email: record.email,
+      email: verification.email,
       message: 'Пароль успішно змінено! Тепер ви можете увійти з новим паролем.'
     });
   });

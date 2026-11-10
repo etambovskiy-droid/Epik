@@ -4,7 +4,12 @@
  */
 
 import { SourceProduct } from './xmlFeedParserService';
-import { EpicentrCategory } from './epicentrMerchantApiService';
+import {
+  EpicentrCategory,
+  EpicentrAttributeSet,
+  EpicentrAttributeDef,
+  FALLBACK_ATTRIBUTE_SETS
+} from './epicentrMerchantApiService';
 
 export interface CategoryMappingConfig {
   [sourceCategoryId: string]: {
@@ -17,20 +22,34 @@ export interface CategoryMappingConfig {
 
 export interface EpicentrFeedGenerationOptions {
   categoryMappings?: CategoryMappingConfig;
+  attributeSets?: Record<string, EpicentrAttributeSet>;
+  selectedCategoryIds?: string[];
   defaultMeasure?: string;
   defaultRatio?: string;
   defaultCountry?: string;
   defaultBrand?: string;
 }
 
+function cleanXmlText(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/_x000d_/gi, '')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+}
+
 function escapeXml(unsafe: string): string {
   if (!unsafe) return '';
-  return unsafe
+  return cleanXmlText(unsafe)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function wrapCdata(content: string): string {
+  if (!content) return '';
+  return cleanXmlText(content).replace(/]]>/g, ']]]]><![CDATA[>');
 }
 
 function slugify(text: string): string {
@@ -41,6 +60,26 @@ function slugify(text: string): string {
     .replace(/[^\w\s-]/g, '')
     .replace(/[\s_-]+/g, '_')
     .replace(/^-+|-+$/g, '');
+}
+
+function extractNumericFloat(val: string, suffix?: string): string {
+  if (!val) return '0';
+  const clean = val.replace(/,/g, '.');
+  const numMatch = clean.match(/[-+]?[0-9]*\.?[0-9]+/);
+  if (!numMatch) return '0';
+  let num = parseFloat(numMatch[0]);
+
+  // Unit conversions based on suffix
+  const valLower = val.toLowerCase();
+  if (suffix === 'мм' && (valLower.includes('см') || valLower.includes('cm'))) {
+    num = num * 10;
+  } else if (suffix === 'мм' && (valLower.includes('м') || valLower.includes('m')) && !valLower.includes('мм')) {
+    num = num * 1000;
+  } else if (suffix === 'г' && (valLower.includes('кг') || valLower.includes('kg'))) {
+    num = num * 1000;
+  }
+
+  return Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.00$/, '');
 }
 
 export class EpicentrXmlGeneratorService {
@@ -73,21 +112,60 @@ export class EpicentrXmlGeneratorService {
     lines.push(`<yml_catalog date="${dateStr}">`);
     lines.push('<offers>');
 
+    const selectedSet = options.selectedCategoryIds ? new Set(options.selectedCategoryIds) : null;
+    const targetProducts = selectedSet
+      ? products.filter((p) => selectedSet.has(p.categoryId))
+      : products;
+
     const mappings = options.categoryMappings || {};
     const defaultCat = categoriesList[0] || {
-      code: '10542',
-      name: 'Електроінструменти',
-      attribute_set_code: 'attr_set_powertools',
-      attribute_set_name: 'Електроінструменти та оснащення'
+      code: '3343',
+      name: 'Картини за номерами',
+      attribute_set_code: '3343',
+      attribute_set_name: 'Картини за номерами'
     };
 
-    products.forEach((prod) => {
+    // Pre-index attribute sets for O(1) performance
+    const attrSetIndex = new Map<string, EpicentrAttributeSet>();
+    FALLBACK_ATTRIBUTE_SETS.forEach((s) => {
+      attrSetIndex.set(s.code, s);
+      if (s.category_codes) {
+        s.category_codes.forEach((cCode) => attrSetIndex.set(cCode, s));
+      }
+    });
+
+    if (options.attributeSets) {
+      Object.entries(options.attributeSets).forEach(([code, s]) => {
+        attrSetIndex.set(code, s);
+        if (s.category_codes) {
+          s.category_codes.forEach((cCode) => attrSetIndex.set(cCode, s));
+        }
+      });
+    }
+
+    targetProducts.forEach((prod) => {
       const mapping = mappings[prod.categoryId] || mappings[prod.categoryName];
 
       const categoryCode = mapping?.epicentrCategoryCode || defaultCat.code;
       const categoryName = mapping?.epicentrCategoryName || defaultCat.name;
-      const attributeSetCode = mapping?.attributeSetCode || defaultCat.attribute_set_code || `attr_set_${categoryCode}`;
+      const attributeSetCode = mapping?.attributeSetCode || defaultCat.attribute_set_code || categoryCode;
       const attributeSetName = mapping?.attributeSetName || defaultCat.attribute_set_name || categoryName;
+
+      const attrSet = attrSetIndex.get(attributeSetCode) || attrSetIndex.get(categoryCode);
+
+      // Fast attribute name -> EpicentrAttributeDef lookup
+      const attrDefsMap = new Map<string, EpicentrAttributeDef>();
+      if (attrSet && Array.isArray(attrSet.attributes)) {
+        attrSet.attributes.forEach((attr) => {
+          attrDefsMap.set(attr.code.toLowerCase(), attr);
+          attrDefsMap.set(attr.name.toLowerCase().trim(), attr);
+          if (Array.isArray(attr.translations)) {
+            attr.translations.forEach((t) => {
+              if (t.title) attrDefsMap.set(t.title.toLowerCase().trim(), attr);
+            });
+          }
+        });
+      }
 
       const availableAttr = prod.available ? 'true' : 'false';
       const availabilityStatus = prod.available ? 'in_stock' : 'out_of_stock';
@@ -100,10 +178,17 @@ export class EpicentrXmlGeneratorService {
       lines.push(`<availability>${availabilityStatus}</availability>`);
       lines.push(`<category code="${escapeXml(categoryCode)}">${escapeXml(categoryName)}</category>`);
 
-      // Picture
+      // Picture(s)
       const mainPicture = prod.picture || (prod.pictures && prod.pictures[0]) || '';
       if (mainPicture) {
         lines.push(`<picture>${escapeXml(mainPicture)}</picture>`);
+      }
+      if (Array.isArray(prod.pictures) && prod.pictures.length > 1) {
+        prod.pictures.slice(1, 15).forEach((pic) => {
+          if (pic && pic !== mainPicture) {
+            lines.push(`<picture>${escapeXml(pic)}</picture>`);
+          }
+        });
       }
 
       // Bilingual Names
@@ -115,47 +200,172 @@ export class EpicentrXmlGeneratorService {
       // Bilingual Descriptions with CDATA
       const descRu = prod.description_ru || prod.description || '';
       const descUa = prod.description_ua || prod.description || '';
-      lines.push(`<description lang="ru"><![CDATA[${descRu}]]></description>`);
-      lines.push(`<description lang="ua"><![CDATA[${descUa}]]></description>`);
+      lines.push(`<description lang="ru"><![CDATA[${wrapCdata(descRu)}]]></description>`);
+      lines.push(`<description lang="ua"><![CDATA[${wrapCdata(descUa)}]]></description>`);
 
       // Attribute set
       lines.push(`<attribute_set code="${escapeXml(attributeSetCode)}">${escapeXml(attributeSetName)}</attribute_set>`);
 
-      // Custom parameters (excluding standard ones to avoid duplication)
+      // Keep track of emitted codes to avoid duplicates
+      const emittedParamCodes = new Set<string>();
+
+      // Custom parameters with schema mapping
       prod.params.forEach((param) => {
-        const paramLower = param.name.toLowerCase();
+        const pNameLower = param.name.toLowerCase().trim();
+        const pCodeLower = (param.code || '').toLowerCase().trim();
+
+        // Skip system parameters handled below
         if (
-          paramLower.includes('бренд') ||
-          paramLower.includes('производитель') ||
-          paramLower.includes('країна') ||
-          paramLower.includes('страна') ||
-          paramLower.includes('штрих') ||
-          paramLower.includes('міра') ||
-          paramLower.includes('кратність')
+          pNameLower.includes('бренд') ||
+          pNameLower.includes('производитель') ||
+          pNameLower.includes('виробник') ||
+          pNameLower.includes('країна') ||
+          pNameLower.includes('страна') ||
+          pNameLower.includes('штрих') ||
+          pNameLower.includes('міра') ||
+          pNameLower.includes('кратність') ||
+          pNameLower === 'вага' ||
+          pNameLower === 'вес' ||
+          pNameLower === 'ширина' ||
+          pNameLower === 'висота' ||
+          pNameLower === 'высота' ||
+          pNameLower === 'глибина' ||
+          pNameLower === 'глубина' ||
+          pNameLower === 'довжина' ||
+          pCodeLower === 'weight' ||
+          pCodeLower === 'width' ||
+          pCodeLower === 'height' ||
+          pCodeLower === 'length' ||
+          pCodeLower === 'brand' ||
+          pCodeLower === 'country_of_origin' ||
+          pCodeLower === 'measure' ||
+          pCodeLower === 'ratio' ||
+          pCodeLower === 'barcodes'
         ) {
           return;
         }
 
-        const codeAttr = param.code ? ` paramcode="${escapeXml(param.code)}"` : ` paramcode="${escapeXml(slugify(param.name))}"`;
-        const valCodeAttr = param.valuecode ? ` valuecode="${escapeXml(param.valuecode)}"` : ` valuecode="${escapeXml(slugify(param.value))}"`;
-        lines.push(`<param${codeAttr} name="${escapeXml(param.name)}"${valCodeAttr}>${escapeXml(param.value)}</param>`);
+        const matchedDef = attrDefsMap.get(pCodeLower) || attrDefsMap.get(pNameLower);
+        const effectiveCode = param.code || matchedDef?.code || slugify(param.name);
+
+        if (emittedParamCodes.has(effectiveCode)) return;
+        emittedParamCodes.add(effectiveCode);
+
+        // 1. Text parameter with bilingual support (e.g. 767 Комплектація)
+        if (matchedDef?.type === 'text' || effectiveCode === '767') {
+          const uaTitle = matchedDef?.translations?.find((t) => t.languageCode === 'ua')?.title || matchedDef?.name || param.name;
+          const ruTitle = matchedDef?.translations?.find((t) => t.languageCode === 'ru')?.title || uaTitle;
+
+          lines.push(
+            `<param lang="ru" paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(ruTitle)}"><![CDATA[${wrapCdata(param.value)}]]></param>`
+          );
+          lines.push(
+            `<param lang="ua" paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(uaTitle)}"><![CDATA[${wrapCdata(param.value)}]]></param>`
+          );
+          return;
+        }
+
+        // 2. Multiselect parameter (e.g. 3176 Тематика: "тварини, коти")
+        if (matchedDef?.type === 'multiselect') {
+          const rawItems = param.value.split(/[,;/]+/).map((s) => s.trim()).filter(Boolean);
+          const valCodes: string[] = [];
+          const valTexts: string[] = [];
+
+          rawItems.forEach((item) => {
+            const itemLower = item.toLowerCase();
+            const matchedOpt = matchedDef.options?.find(
+              (o) =>
+                o.value.toLowerCase() === itemLower ||
+                o.value_ru?.toLowerCase() === itemLower ||
+                o.code.toLowerCase() === itemLower
+            );
+            if (matchedOpt) {
+              valCodes.push(matchedOpt.code);
+              valTexts.push(matchedOpt.value);
+            } else {
+              valCodes.push(slugify(item));
+              valTexts.push(item);
+            }
+          });
+
+          const codeStr = param.valuecode || valCodes.join(',');
+          const textStr = valTexts.join(', ');
+          lines.push(
+            `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(matchedDef.name || param.name)}" valuecode="${escapeXml(codeStr)}">${escapeXml(textStr)}</param>`
+          );
+          return;
+        }
+
+        // 3. Select parameter (e.g. 13183 Розмір, 11887 Полотно, 9875 Рівень складності)
+        if (matchedDef?.type === 'select') {
+          const valLower = param.value.toLowerCase().trim();
+          const matchedOpt = matchedDef.options?.find(
+            (o) =>
+              o.value.toLowerCase() === valLower ||
+              o.value_ru?.toLowerCase() === valLower ||
+              o.code.toLowerCase() === valLower
+          );
+          const effectiveValCode = param.valuecode || matchedOpt?.code || slugify(param.value);
+          const effectiveValText = matchedOpt?.value || param.value;
+
+          lines.push(
+            `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(matchedDef.name || param.name)}" valuecode="${escapeXml(effectiveValCode)}">${escapeXml(effectiveValText)}</param>`
+          );
+          return;
+        }
+
+        // 4. Float / Numeric parameter (e.g. 113 Гарантія)
+        if (matchedDef?.type === 'float' || matchedDef?.type === 'numeric') {
+          const cleanNum = extractNumericFloat(param.value, matchedDef.suffix);
+          lines.push(
+            `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(matchedDef.name || param.name)}"><![CDATA[${cleanNum}]]></param>`
+          );
+          return;
+        }
+
+        // 5. General fallback parameter
+        const valCodeAttr = param.valuecode ? ` valuecode="${escapeXml(param.valuecode)}"` : '';
+        lines.push(
+          `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(param.name)}"${valCodeAttr}>${escapeXml(param.value)}</param>`
+        );
       });
 
       // Standard Mandatory Epicentr Parameters
       const measure = prod.measure || options.defaultMeasure || 'шт.';
-      const measureCode = measure === 'шт.' ? 'measure_pcs' : slugify(measure);
+      const measureCode = measure === 'шт.' ? 'measure_pcs' : (slugify(measure) || 'measure_pcs');
       lines.push(`<param paramcode="measure" name="Міра виміру" valuecode="${measureCode}">${escapeXml(measure)}</param>`);
 
       const ratio = prod.ratio || options.defaultRatio || '1';
       lines.push(`<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[${ratio}]]></param>`);
 
       const country = prod.country_of_origin || options.defaultCountry || 'Україна';
-      const countryCode = slugify(country) || 'ukr';
+      let countryCode = 'ukr';
+      const cLower = country.toLowerCase();
+      if (cLower.includes('китай') || cLower.includes('china')) countryCode = 'chn';
+      else if (cLower.includes('украї') || cLower.includes('украи')) countryCode = 'ukr';
+      else if (cLower.includes('поль') || cLower.includes('pol')) countryCode = 'pol';
+      else if (cLower.includes('німеч') || cLower.includes('герман') || cLower.includes('deu')) countryCode = 'deu';
+      else countryCode = slugify(country) || 'ukr';
       lines.push(`<param paramcode="country_of_origin" name="Країна-виробник" valuecode="${countryCode}">${escapeXml(country)}</param>`);
 
       const brand = prod.brand || options.defaultBrand || 'Generic';
-      const brandCode = slugify(brand) || 'generic';
+      const brandDef = attrDefsMap.get('brand');
+      const matchedBrandOpt = brandDef?.options?.find(
+        (o) => o.value.toLowerCase() === brand.toLowerCase() || o.code.toLowerCase() === brand.toLowerCase()
+      );
+      const brandCode = matchedBrandOpt?.code || (brand.toLowerCase() === 'ідейка' ? 'cz1445500250k5a9' : slugify(brand) || 'generic');
       lines.push(`<param paramcode="brand" name="Бренд" valuecode="${brandCode}">${escapeXml(brand)}</param>`);
+
+      // Dimensions & Logistics in CDATA
+      const widthVal = extractNumericFloat(prod.width || '10', 'мм');
+      const heightVal = extractNumericFloat(prod.height || '20', 'мм');
+      const lengthVal = extractNumericFloat(prod.length || '30', 'мм');
+      const weightVal = extractNumericFloat(prod.weight || '1000', 'г');
+
+      lines.push(`<param paramcode="width" name="Ширина"><![CDATA[${widthVal}]]></param>`);
+      lines.push(`<param paramcode="height" name="Висота"><![CDATA[${heightVal}]]></param>`);
+      lines.push(`<param paramcode="length" name="Глибина"><![CDATA[${lengthVal}]]></param>`);
+      lines.push(`<param paramcode="weight" name="Вага"><![CDATA[${weightVal}]]></param>`);
 
       const barcode = prod.barcode || `200000${prod.id.replace(/\D/g, '').padEnd(7, '0').slice(0, 7)}`;
       lines.push(`<param paramcode="barcodes" name="Штрих код"><![CDATA[${barcode}]]></param>`);

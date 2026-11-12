@@ -114,6 +114,106 @@ function extractNumericFloat(val: string, suffix?: string): string {
   return Number.isInteger(num) ? String(num) : num.toFixed(2).replace(/\.00$/, '');
 }
 
+const ATTRIBUTE_SEMANTIC_ALIASES: Record<string, string[]> = {
+  'матеріал основи': ['основа шпалер', 'основа обоев', 'матеріал основи', 'основа'],
+  'материал основы': ['основа шпалер', 'основа обоев', 'материал основы', 'основа'],
+  'нанесення клею': ['спосіб наклеювання', 'способ наклеивания', 'нанесення клею'],
+  'нанесение клея': ['спосіб наклеювання', 'способ наклеивания', 'нанесение клея'],
+  'накладення малюнка': ['зсув (рапорт)', 'сдвиг (раппорт)', 'рапорт', 'стикування'],
+  'наложение рисунка': ['зсув (рапорт)', 'сдвиг (раппорт)', 'рапорт', 'стыковка'],
+  'стикування': ['зсув (рапорт)', 'сдвиг (раппорт)'],
+  'рапорт': ['зсув (рапорт)', 'сдвиг (раппорт)'],
+  'матеріал поверхні': ['тип', 'матеріал поверхні', 'покриття'],
+  'материал поверхности': ['тип', 'матеріал поверхні', 'покрытие'],
+  'догляд': ['шпалери за способом догляду', 'обои по способу ухода'],
+  'кімната призначення': ['кімната', 'комната', 'призначення'],
+  'призначення': ['кімната', 'комната'],
+  'колір': ['базовий колір', 'колір виробника', 'колір'],
+  'цвет': ['базовий колір', 'колір виробника', 'базовый цвет', 'цвет'],
+  'гарантійний термін': ['гарантія', 'гарантия'],
+  'країна': ['країна-виробник', 'страна-производитель']
+};
+
+function resolveAttributeDef(
+  pCodeLower: string,
+  pNameLower: string,
+  attrDefsMap: Map<string, EpicentrAttributeDef>
+): EpicentrAttributeDef | undefined {
+  if (pCodeLower && attrDefsMap.has(pCodeLower)) {
+    return attrDefsMap.get(pCodeLower);
+  }
+  if (pNameLower && attrDefsMap.has(pNameLower)) {
+    return attrDefsMap.get(pNameLower);
+  }
+  const aliases = ATTRIBUTE_SEMANTIC_ALIASES[pNameLower];
+  if (aliases) {
+    for (const alias of aliases) {
+      const found = attrDefsMap.get(alias);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+function normalizeOptionToken(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/(\d)\.(\d)/g, '$1,$2')
+    .replace(/(?:^|\s)(?:мм|см|м2|м²|м|кг|г|гр|шт\.?|л|мл|вт|w|v|в|хв|год|року|років)(?=$|[\s,;.)])/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function findBestOptionMatch(
+  rawValue: string,
+  options?: { code: string; value: string; value_ru?: string }[]
+): { code: string; value: string; value_ru?: string } | undefined {
+  if (!options || options.length === 0 || !rawValue) return undefined;
+  const valLower = rawValue.toLowerCase().trim();
+
+  // 1. Exact match (UA / RU / code)
+  const exact = options.find(
+    (o) =>
+      o.value.toLowerCase().trim() === valLower ||
+      o.value_ru?.toLowerCase().trim() === valLower ||
+      o.code.toLowerCase().trim() === valLower
+  );
+  if (exact) return exact;
+
+  // 2. Normalized unit & decimal separator match (e.g. "1.06 м" -> "1,06")
+  const valNorm = normalizeOptionToken(rawValue);
+  if (valNorm) {
+    const normMatch = options.find(
+      (o) =>
+        normalizeOptionToken(o.value) === valNorm ||
+        (o.value_ru && normalizeOptionToken(o.value_ru) === valNorm)
+    );
+    if (normMatch) return normMatch;
+  }
+
+  // 3. Semantic prefix / root match ranked by specificity (avoid matching numeric sub-variants like "32" when generic option exists)
+  if (valNorm.length >= 4) {
+    const stem = valNorm.slice(0, Math.min(valNorm.length, 5));
+    const candidates = options.filter((o) => {
+      const ov = o.value.toLowerCase().trim();
+      const oru = o.value_ru?.toLowerCase().trim() || '';
+      return ov.startsWith(valNorm) || oru.startsWith(valNorm) || ov.startsWith(stem) || oru.startsWith(stem);
+    });
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => {
+        const aHasDigits = /\d/.test(a.value) ? 1 : 0;
+        const bHasDigits = /\d/.test(b.value) ? 1 : 0;
+        if (aHasDigits !== bHasDigits) return aHasDigits - bHasDigits;
+        return a.value.length - b.value.length;
+      });
+      return candidates[0];
+    }
+  }
+
+  return undefined;
+}
+
 export class EpicentrXmlGeneratorService {
   /**
    * Formats the current date in YYYY-MM-DD HH:mm format
@@ -277,8 +377,8 @@ export class EpicentrXmlGeneratorService {
           return;
         }
 
-        const matchedDef = attrDefsMap.get(pCodeLower) || attrDefsMap.get(pNameLower);
-        const effectiveCode = param.code || matchedDef?.code || slugify(param.name, 'param');
+        const matchedDef = resolveAttributeDef(pCodeLower, pNameLower, attrDefsMap);
+        const effectiveCode = matchedDef?.code || param.code || slugify(param.name, 'param');
         const effectiveName = matchedDef?.name || param.name || effectiveCode;
 
         if (emittedParamCodes.has(effectiveCode)) return;
@@ -303,20 +403,14 @@ export class EpicentrXmlGeneratorService {
           return;
         }
 
-        // 2. Multiselect parameter (e.g. 3176 Тематика, genre, etc.)
+        // 2. Multiselect parameter (e.g. 3176 Тематика, 3125 Тип, genre, etc.)
         if (matchedDef?.type === 'multiselect') {
           const rawItems = param.value.split(/[,;/]+/).map((s) => s.trim()).filter(Boolean);
           const valCodes: string[] = [];
           const valTexts: string[] = [];
 
           rawItems.forEach((item) => {
-            const itemLower = item.toLowerCase();
-            const matchedOpt = matchedDef.options?.find(
-              (o) =>
-                o.value.toLowerCase() === itemLower ||
-                o.value_ru?.toLowerCase() === itemLower ||
-                o.code.toLowerCase() === itemLower
-            );
+            const matchedOpt = findBestOptionMatch(item, matchedDef.options);
             if (matchedOpt) {
               valCodes.push(matchedOpt.code);
               valTexts.push(matchedOpt.value);
@@ -334,15 +428,9 @@ export class EpicentrXmlGeneratorService {
           return;
         }
 
-        // 3. Select parameter (e.g. language, age_group, size, material, difficulty)
+        // 3. Select parameter (e.g. 7181 Ширина рулону, 13333 Основа шпалер, 3130 Спосіб наклеювання, 3129 Зсув)
         if (matchedDef?.type === 'select') {
-          const valLower = param.value.toLowerCase().trim();
-          const matchedOpt = matchedDef.options?.find(
-            (o) =>
-              o.value.toLowerCase() === valLower ||
-              o.value_ru?.toLowerCase() === valLower ||
-              o.code.toLowerCase() === valLower
-          );
+          const matchedOpt = findBestOptionMatch(param.value, matchedDef.options);
           const effectiveValCode = param.valuecode || matchedOpt?.code || slugify(param.value, 'val');
           const effectiveValText = matchedOpt?.value || param.value;
 
@@ -398,21 +486,29 @@ export class EpicentrXmlGeneratorService {
 
       // Standard Mandatory Epicentr Parameters
       const measure = prod.measure || options.defaultMeasure || 'шт.';
-      const measureCode = measure === 'шт.' ? 'measure_pcs' : (slugify(measure) || 'measure_pcs');
-      lines.push(`<param paramcode="measure" name="Міра виміру" valuecode="${measureCode}">${escapeXml(measure)}</param>`);
+      const measureDef = attrDefsMap.get('measure');
+      const matchedMeasureOpt = findBestOptionMatch(measure, measureDef?.options);
+      const measureCode =
+        matchedMeasureOpt?.code ||
+        (measure === 'шт.' || measure.toLowerCase() === 'шт' ? 'measure_pcs' : slugify(measure) || 'measure_pcs');
+      lines.push(`<param paramcode="measure" name="Міра виміру" valuecode="${measureCode}">${escapeXml(matchedMeasureOpt?.value || measure)}</param>`);
 
       const ratio = prod.ratio || options.defaultRatio || '1';
       lines.push(`<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[${ratio}]]></param>`);
 
       const country = prod.country_of_origin || options.defaultCountry || 'Україна';
-      let countryCode = 'ukr';
-      const cLower = country.toLowerCase();
-      if (cLower.includes('китай') || cLower.includes('china')) countryCode = 'chn';
-      else if (cLower.includes('украї') || cLower.includes('украи')) countryCode = 'ukr';
-      else if (cLower.includes('поль') || cLower.includes('pol')) countryCode = 'pol';
-      else if (cLower.includes('німеч') || cLower.includes('герман') || cLower.includes('deu')) countryCode = 'deu';
-      else countryCode = slugify(country) || 'ukr';
-      lines.push(`<param paramcode="country_of_origin" name="Країна-виробник" valuecode="${countryCode}">${escapeXml(country)}</param>`);
+      const countryDef = attrDefsMap.get('country_of_origin');
+      const matchedCountryOpt = findBestOptionMatch(country, countryDef?.options);
+      let countryCode = matchedCountryOpt?.code || 'ukr';
+      if (!matchedCountryOpt) {
+        const cLower = country.toLowerCase();
+        if (cLower.includes('китай') || cLower.includes('china')) countryCode = 'chn';
+        else if (cLower.includes('украї') || cLower.includes('украи')) countryCode = 'ukr';
+        else if (cLower.includes('поль') || cLower.includes('pol')) countryCode = 'pol';
+        else if (cLower.includes('німеч') || cLower.includes('герман') || cLower.includes('deu')) countryCode = 'deu';
+        else countryCode = slugify(country) || 'ukr';
+      }
+      lines.push(`<param paramcode="country_of_origin" name="Країна-виробник" valuecode="${countryCode}">${escapeXml(matchedCountryOpt?.value || country)}</param>`);
 
       const brand = prod.brand || options.defaultBrand || 'Generic';
       const brandDef = attrDefsMap.get('brand');

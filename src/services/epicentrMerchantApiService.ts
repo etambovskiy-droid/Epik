@@ -91,6 +91,90 @@ export const FALLBACK_EPICENTR_CATEGORIES: EpicentrCategory[] = EPICENTR_LIVE_LE
 
 export const FALLBACK_ATTRIBUTE_SETS: EpicentrAttributeSet[] = [
   {
+    code: '3211',
+    name: 'Шпалери',
+    category_codes: ['3211'],
+    attributes: [
+      {
+        code: '7181',
+        name: 'Ширина рулону',
+        type: 'select',
+        isRequired: true,
+        translations: [{ languageCode: 'ua', title: 'Ширина рулону' }, { languageCode: 'ru', title: 'Ширина рулона' }],
+        options: [
+          { code: 'c7b38933d02eefd4a5bddb4936f89bca', value: '1,06' },
+          { code: 'd1065158d52510a0d9282d7c889a5a45', value: '0,75' },
+          { code: '54b2969454bf895318162a6cbb15f671', value: '0,53' },
+          { code: 'd0166e1ed71bf9799438e6cf6d419318', value: '0,65' },
+          { code: '66e7bac057650fefcd638e9649aca016', value: '0,45' }
+        ]
+      },
+      {
+        code: '2990',
+        name: 'Довжина рулону',
+        type: 'float',
+        isRequired: true,
+        translations: [{ languageCode: 'ua', title: 'Довжина рулону' }, { languageCode: 'ru', title: 'Длина рулона' }]
+      },
+      {
+        code: '13333',
+        name: 'Основа шпалер',
+        type: 'select',
+        isRequired: true,
+        translations: [{ languageCode: 'ua', title: 'Основа шпалер' }, { languageCode: 'ru', title: 'Основа обоев' }],
+        options: [
+          { code: '1f728b73e5614441c9b587e889f35a7a', value: 'флізелін' },
+          { code: 'e5b76a7604d9697dab1f94a99c714535', value: 'папір' },
+          { code: '00e4cfdf05b6cbaaf61a8006161c7e80', value: 'склополотно' }
+        ]
+      },
+      {
+        code: '3130',
+        name: 'Спосіб наклеювання',
+        type: 'select',
+        isRequired: true,
+        translations: [{ languageCode: 'ua', title: 'Спосіб наклеювання' }, { languageCode: 'ru', title: 'Способ наклеивания' }],
+        options: [
+          { code: '3b1ad393a75ea71e141b7b2b7d4485c3', value: 'клей наноситься на стіну' },
+          { code: 'e76b1dcd076295f8062954845fe8e65e', value: 'клей наноситься на шпалери' }
+        ]
+      },
+      {
+        code: '3129',
+        name: 'Зсув (рапорт)',
+        type: 'select',
+        isRequired: false,
+        translations: [{ languageCode: 'ua', title: 'Зсув (рапорт)' }, { languageCode: 'ru', title: 'Сдвиг (раппорт)' }],
+        options: [
+          { code: 'd46f935611f88691596ecd3b93f09000', value: 'пряме припасування' },
+          { code: 'f35d2344f913a43a888d95b7ba9e9311', value: 'без підгонки' },
+          { code: '1072969acc3adbf20aee6dc741a8dbfc', value: 'зміщене припасування' }
+        ]
+      },
+      {
+        code: '3125',
+        name: 'Тип',
+        type: 'multiselect',
+        isRequired: true,
+        translations: [{ languageCode: 'ua', title: 'Тип' }, { languageCode: 'ru', title: 'Тип' }],
+        options: [
+          { code: '0f562d8d7547e9d23848c299c5e93a25', value: 'вінілові на флізеліновій основі' },
+          { code: 'a42523900b4250dda4fddf2fd9d2d136', value: 'вінілові на паперовій основі' },
+          { code: 'e13d02762bec24090bd691d380532593', value: 'вінілові гарячого тиснення' }
+        ]
+      },
+      { code: 'brand', name: 'Бренд', type: 'select', isRequired: true, isFilter: true },
+      { code: 'country_of_origin', name: 'Країна-виробник', type: 'select', isRequired: true },
+      { code: 'measure', name: 'Міра виміру', type: 'select', isSystem: true, isRequired: true },
+      { code: 'ratio', name: 'Мінімальна кратність товару', type: 'float', isSystem: true, isRequired: true },
+      { code: 'width', name: 'Ширина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'height', name: 'Висота', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'length', name: 'Глибина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+      { code: 'weight', name: 'Вага', type: 'float', isSystem: true, isRequired: true, suffix: 'г' },
+      { code: 'barcodes', name: 'Штрих код', type: 'array', isSystem: true, isRequired: false }
+    ]
+  },
+  {
     code: '770',
     name: 'Настільні ігри',
     category_codes: ['770'],
@@ -438,14 +522,24 @@ export class EpicentrMerchantApiService {
   private static instance: EpicentrMerchantApiService;
   private categoriesCache: EpicentrCategory[] | null = null;
   private attributeSetsCache: EpicentrAttributeSet[] | null = null;
+  private attributeSetDetailsCache = new Map<string, EpicentrAttributeSet>();
+  private attributeSetInFlight = new Map<string, Promise<EpicentrAttributeSet | null>>();
+  private attributeOptionsCache = new Map<string, { code: string; value: string; value_ru?: string }[]>();
 
   private constructor() {
     if (typeof window !== 'undefined') {
       window.addEventListener('epicentr_active_store_changed', () => {
-        this.categoriesCache = null;
-        this.attributeSetsCache = null;
+        this.invalidateCaches();
       });
     }
+  }
+
+  private invalidateCaches(): void {
+    this.categoriesCache = null;
+    this.attributeSetsCache = null;
+    this.attributeSetDetailsCache.clear();
+    this.attributeSetInFlight.clear();
+    this.attributeOptionsCache.clear();
   }
 
   public static getInstance(): EpicentrMerchantApiService {
@@ -500,8 +594,7 @@ export class EpicentrMerchantApiService {
       // Ignore storage errors
     }
     // Invalidate caches when token changes
-    this.categoriesCache = null;
-    this.attributeSetsCache = null;
+    this.invalidateCaches();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('epicentr_token_changed', {
@@ -528,8 +621,7 @@ export class EpicentrMerchantApiService {
     } catch {
       // Ignore storage errors
     }
-    this.categoriesCache = null;
-    this.attributeSetsCache = null;
+    this.invalidateCaches();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('epicentr_token_changed', {
@@ -761,88 +853,145 @@ export class EpicentrMerchantApiService {
 
   /**
    * Fetch attribute set details for a category from Epicentr PIM (/v2/pim/attribute-sets?filter[codes][]={code})
+   * Automatically preloads multi-page option dictionaries for select/multiselect attributes and caches results.
    */
   public async getAttributeSetDetails(attributeSetCode: string): Promise<EpicentrAttributeSet | null> {
     const cleanCode = String(attributeSetCode).trim();
     if (!cleanCode) return null;
 
-    try {
-      const url = `/v2/pim/attribute-sets?filter[codes][]=${encodeURIComponent(cleanCode)}`;
-      const { data } = await this.executeRequest<any>(url);
-      const items = Array.isArray(data) ? data : data?.items || [];
-      const match = items.find((i: any) => String(i.code) === cleanCode) || items[0];
+    const cached = this.attributeSetDetailsCache.get(cleanCode);
+    if (cached) return cached;
 
-      if (match && Array.isArray(match.attributes)) {
-        let uaTitle = '';
-        if (Array.isArray(match.translations)) {
-          uaTitle = match.translations.find((t: any) => t.languageCode === 'ua')?.title || '';
-        }
+    const existingPromise = this.attributeSetInFlight.get(cleanCode);
+    if (existingPromise) return existingPromise;
 
-        const attrDefs: EpicentrAttributeDef[] = match.attributes.map((a: any) => {
-          let aName = a.code;
-          let suffix = a.suffix || '';
-          let prefix = a.prefix || null;
-          let translations: any[] = [];
-          if (Array.isArray(a.translations)) {
-            translations = a.translations;
-            const ua = a.translations.find((t: any) => t.languageCode === 'ua');
-            if (ua?.title) aName = ua.title;
-            if (ua?.suffix) suffix = ua.suffix;
-            if (ua?.prefix) prefix = ua.prefix;
+    const loaderPromise = (async (): Promise<EpicentrAttributeSet | null> => {
+      try {
+        const url = `/v2/pim/attribute-sets?filter[codes][]=${encodeURIComponent(cleanCode)}`;
+        const { data } = await this.executeRequest<any>(url);
+        const items = Array.isArray(data) ? data : data?.items || [];
+        const match = items.find((i: any) => String(i.code) === cleanCode) || items[0];
+
+        if (match && Array.isArray(match.attributes)) {
+          let uaTitle = '';
+          if (Array.isArray(match.translations)) {
+            uaTitle = match.translations.find((t: any) => t.languageCode === 'ua')?.title || '';
           }
-          return {
-            code: String(a.code),
-            name: aName,
-            type: a.type || 'text',
-            isSystem: Boolean(a.isSystem),
-            isRequired: Boolean(a.isRequired),
-            isFilter: Boolean(a.isFilter),
-            isModel: Boolean(a.isModel),
-            suffix,
-            prefix,
-            translations
+
+          const rawAttrs = match.attributes as any[];
+          const attrDefs: EpicentrAttributeDef[] = new Array(rawAttrs.length);
+          const CONCURRENCY = 6;
+
+          for (let i = 0; i < rawAttrs.length; i += CONCURRENCY) {
+            const chunk = rawAttrs.slice(i, i + CONCURRENCY);
+            await Promise.all(
+              chunk.map(async (a: any, idx: number) => {
+                let aName = a.code;
+                let suffix = a.suffix || '';
+                let prefix = a.prefix || null;
+                let translations: any[] = [];
+                if (Array.isArray(a.translations)) {
+                  translations = a.translations;
+                  const ua = a.translations.find((t: any) => t.languageCode === 'ua');
+                  if (ua?.title) aName = ua.title;
+                  if (ua?.suffix) suffix = ua.suffix;
+                  if (ua?.prefix) prefix = ua.prefix;
+                }
+
+                let options = a.options || [];
+                const attrType = a.type || 'text';
+                if ((attrType === 'select' || attrType === 'multiselect') && (!options || options.length === 0)) {
+                  try {
+                    options = await this.getAttributeOptions(cleanCode, a.code);
+                  } catch {
+                    // ignore option fetch error
+                  }
+                }
+
+                attrDefs[i + idx] = {
+                  code: String(a.code),
+                  name: aName,
+                  type: attrType,
+                  isSystem: Boolean(a.isSystem),
+                  isRequired: Boolean(a.isRequired),
+                  isFilter: Boolean(a.isFilter),
+                  isModel: Boolean(a.isModel),
+                  suffix,
+                  prefix,
+                  translations,
+                  options
+                };
+              })
+            );
+          }
+
+          const resolvedSet: EpicentrAttributeSet = {
+            code: cleanCode,
+            name: uaTitle || match.name || `Набір характеристик #${cleanCode}`,
+            category_codes: [cleanCode],
+            attributes: attrDefs
           };
-        });
-
-        return {
-          code: cleanCode,
-          name: uaTitle || match.name || `Набір характеристик #${cleanCode}`,
-          attributes: attrDefs
-        };
+          this.attributeSetDetailsCache.set(cleanCode, resolvedSet);
+          return resolvedSet;
+        }
+      } catch {
+        // Return fallback attribute set if network or API error
       }
-    } catch {
-      // Return fallback attribute set if network or API error
+
+      const fallback = FALLBACK_ATTRIBUTE_SETS.find(
+        (s) => s.code === cleanCode || (s.category_codes && s.category_codes.includes(cleanCode))
+      );
+      if (fallback) return fallback;
+
+      // Universal dynamic attribute set fallback for ANY future category
+      return {
+        code: cleanCode,
+        name: `Набір характеристик #${cleanCode}`,
+        category_codes: [cleanCode],
+        attributes: [
+          { code: 'brand', name: 'Бренд', type: 'select', isRequired: true, isFilter: true },
+          { code: 'country_of_origin', name: 'Країна-виробник', type: 'select', isRequired: true, isFilter: true },
+          { code: 'measure', name: 'Міра виміру', type: 'select', isRequired: true, isSystem: true },
+          { code: 'ratio', name: 'Мінімальна кратність товару', type: 'numeric', isRequired: true, isSystem: true },
+          { code: 'width', name: 'Ширина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+          { code: 'height', name: 'Висота', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+          { code: 'length', name: 'Глибина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+          { code: 'weight', name: 'Вага', type: 'float', isSystem: true, isRequired: true, suffix: 'г' },
+          { code: '767', name: 'Комплектація', type: 'text', isRequired: false },
+          { code: 'material', name: 'Матеріал', type: 'multiselect', isRequired: false, isFilter: true },
+          { code: 'color', name: 'Колір', type: 'select', isRequired: false, isFilter: true }
+        ]
+      };
+    })();
+
+    this.attributeSetInFlight.set(cleanCode, loaderPromise);
+    try {
+      return await loaderPromise;
+    } finally {
+      this.attributeSetInFlight.delete(cleanCode);
     }
+  }
 
-    const fallback = FALLBACK_ATTRIBUTE_SETS.find(
-      (s) => s.code === cleanCode || (s.category_codes && s.category_codes.includes(cleanCode))
-    );
-    if (fallback) return fallback;
-
-    // Universal dynamic attribute set fallback for ANY future category
-    return {
-      code: cleanCode,
-      name: `Набір характеристик #${cleanCode}`,
-      category_codes: [cleanCode],
-      attributes: [
-        { code: 'brand', name: 'Бренд', type: 'select', isRequired: true, isFilter: true },
-        { code: 'country_of_origin', name: 'Країна-виробник', type: 'select', isRequired: true, isFilter: true },
-        { code: 'measure', name: 'Міра виміру', type: 'select', isRequired: true, isSystem: true },
-        { code: 'ratio', name: 'Мінімальна кратність товару', type: 'numeric', isRequired: true, isSystem: true },
-        { code: 'width', name: 'Ширина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
-        { code: 'height', name: 'Висота', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
-        { code: 'length', name: 'Глибина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
-        { code: 'weight', name: 'Вага', type: 'float', isSystem: true, isRequired: true, suffix: 'г' },
-        { code: '767', name: 'Комплектація', type: 'text', isRequired: false },
-        { code: 'material', name: 'Матеріал', type: 'multiselect', isRequired: false, isFilter: true },
-        { code: 'color', name: 'Колір', type: 'select', isRequired: false, isFilter: true }
-      ]
-    };
+  private mapOptionItems(items: any[]): { code: string; value: string; value_ru?: string }[] {
+    return items.map((opt: any) => {
+      let uaVal = '';
+      let ruVal = '';
+      if (Array.isArray(opt.translations)) {
+        uaVal = opt.translations.find((t: any) => t.languageCode === 'ua')?.value || '';
+        ruVal = opt.translations.find((t: any) => t.languageCode === 'ru')?.value || '';
+      }
+      return {
+        code: String(opt.code),
+        value: uaVal || ruVal || String(opt.code),
+        value_ru: ruVal
+      };
+    });
   }
 
   /**
    * Fetch allowed options for a select or multiselect attribute in an attribute set
    * (/v2/pim/attribute-sets/{attributeSetCode}/attributes/{attributeCode}/options)
+   * Automatically fetches multi-page dictionaries (up to 15 pages) and caches global system attributes.
    */
   public async getAttributeOptions(
     attributeSetCode: string,
@@ -852,24 +1001,42 @@ export class EpicentrMerchantApiService {
     const attrCode = String(attributeCode).trim();
     if (!setCode || !attrCode) return [];
 
-    try {
-      const url = `/v2/pim/attribute-sets/${encodeURIComponent(setCode)}/attributes/${encodeURIComponent(attrCode)}/options`;
-      const { data } = await this.executeRequest<any>(url);
-      const items = Array.isArray(data) ? data : data?.items || [];
+    // Share global system attribute option dictionaries across categories
+    const isGlobalAttr = attrCode === 'country_of_origin' || attrCode === 'measure';
+    const cacheKey = isGlobalAttr ? `global:${attrCode}` : `${setCode}:${attrCode}`;
+    const cached = this.attributeOptionsCache.get(cacheKey);
+    if (cached) return cached;
 
-      return items.map((opt: any) => {
-        let uaVal = '';
-        let ruVal = '';
-        if (Array.isArray(opt.translations)) {
-          uaVal = opt.translations.find((t: any) => t.languageCode === 'ua')?.value || '';
-          ruVal = opt.translations.find((t: any) => t.languageCode === 'ru')?.value || '';
+    // Skip downloading 55,000+ brands bulk dictionary on every category load
+    if (attrCode === 'brand') {
+      return [];
+    }
+
+    try {
+      const basePath = `/v2/pim/attribute-sets/${encodeURIComponent(setCode)}/attributes/${encodeURIComponent(attrCode)}/options`;
+      const { data: firstPageData } = await this.executeRequest<any>(`${basePath}?page=1`);
+      const firstItems = Array.isArray(firstPageData) ? firstPageData : firstPageData?.items || [];
+      const allItems: any[] = [...firstItems];
+
+      const totalPages = typeof firstPageData?.pages === 'number' ? firstPageData.pages : 1;
+      const MAX_MULTI_PAGES = 15;
+      if (totalPages > 1 && totalPages <= MAX_MULTI_PAGES) {
+        const pagePromises: Promise<any>[] = [];
+        for (let p = 2; p <= totalPages; p++) {
+          pagePromises.push(this.executeRequest<any>(`${basePath}?page=${p}`).catch(() => null));
         }
-        return {
-          code: String(opt.code),
-          value: uaVal || ruVal || String(opt.code),
-          value_ru: ruVal
-        };
-      });
+        const pageResults = await Promise.all(pagePromises);
+        pageResults.forEach((res) => {
+          if (res?.data) {
+            const pItems = Array.isArray(res.data) ? res.data : res.data?.items || [];
+            allItems.push(...pItems);
+          }
+        });
+      }
+
+      const mapped = this.mapOptionItems(allItems);
+      this.attributeOptionsCache.set(cacheKey, mapped);
+      return mapped;
     } catch {
       return [];
     }

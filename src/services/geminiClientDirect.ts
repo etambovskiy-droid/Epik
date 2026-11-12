@@ -5,7 +5,7 @@
 
 import { getStoredApiKey, testApiKeyConnection } from './aiApiKeyService';
 
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-lite';
 
 export function getEffectiveApiKey(storeId?: string): string | null {
   return getStoredApiKey(storeId);
@@ -103,14 +103,21 @@ export async function callGeminiDirect(
       body: JSON.stringify(requestBody)
     });
 
-    if (!response.ok) {
-      let errDetail = '';
+    const rawText = await response.text().catch(() => '');
+    let parsedJson: any = null;
+    if (rawText) {
       try {
-        const errJson = await response.json();
-        errDetail = errJson?.message || errJson?.error || JSON.stringify(errJson);
+        parsedJson = JSON.parse(rawText);
       } catch {
-        errDetail = await response.text();
+        // Non-JSON response
       }
+    }
+
+    if (!response.ok) {
+      const errDetail =
+        parsedJson?.message ||
+        parsedJson?.error ||
+        (rawText && !rawText.trim().startsWith('<') ? rawText.slice(0, 200) : '');
 
       if (response.status === 401) {
         if (typeof window !== 'undefined') {
@@ -149,11 +156,10 @@ export async function callGeminiDirect(
       };
     }
 
-    const data = await response.json();
     return {
-      text: data.text || '',
-      sources: data.sources || [],
-      searchEntryPoint: data.searchEntryPoint || null
+      text: parsedJson?.text || '',
+      sources: parsedJson?.sources || [],
+      searchEntryPoint: parsedJson?.searchEntryPoint || null
     };
   } catch (err: any) {
     return {

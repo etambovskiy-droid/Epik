@@ -39,7 +39,8 @@ html.dark .border-slate-100 {
   border-color: #334155 !important;
 }
 
-html.dark .text-slate-900 {
+html.dark .text-slate-900,
+html.dark .text-slate-800 {
   color: #f8fafc !important;
 }
 

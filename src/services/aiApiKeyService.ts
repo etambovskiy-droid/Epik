@@ -180,31 +180,46 @@ export async function testApiKeyConnection(keyToTest?: string): Promise<{ succes
       },
       body: JSON.stringify({
         prompt: 'Ping test. Reply with OK.',
-        model: 'gemini-3.8-flash',
+        model: 'gemini-3.1-flash-lite',
         maxOutputTokens: 10,
         apiKey: effectiveKey
       })
     });
 
+    const rawText = await response.text().catch(() => '');
+    let parsedJson: any = null;
+    if (rawText) {
+      try {
+        parsedJson = JSON.parse(rawText);
+      } catch {
+        // Response is plain text or HTML
+      }
+    }
+
     if (response.ok) {
+      const modelUsed = parsedJson?.modelUsed || 'gemini-3.1-flash-lite';
       return {
         success: true,
-        message: "З'єднання з сервером Gemini API підтверджено! Модель gemini-3.8-flash працює коректно."
+        message: `З'єднання з сервером Gemini API підтверджено! Модель ${modelUsed} працює коректно.`
       };
     }
 
-    let errorDetail = '';
-    try {
-      const errJson = await response.json();
-      errorDetail = errJson?.message || errJson?.error || '';
-    } catch {
-      errorDetail = await response.text();
-    }
+    const errorDetail =
+      parsedJson?.message ||
+      parsedJson?.error ||
+      (rawText && !rawText.trim().startsWith('<') ? rawText.slice(0, 200) : '');
 
     if (response.status === 402) {
       return {
         success: false,
         message: 'Кредити Gemini API вичерпано. Локальний PIM-рушій та правила Епіцентру активні.'
+      };
+    }
+
+    if (response.status === 404) {
+      return {
+        success: false,
+        message: 'Серверний роут /api/gemini/direct не знайдено (404). Оновіть деплой на Vercel або перезапустіть сервер.'
       };
     }
 

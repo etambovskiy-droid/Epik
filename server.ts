@@ -22,13 +22,15 @@ function extractUserApiKey(req: express.Request): string | null {
   return null;
 }
 
-function getAiClient(userApiKey?: string): GoogleGenAI {
+function getAiClient(userApiKey?: string, forceVertex?: boolean): GoogleGenAI {
   const apiKey = (userApiKey || '').trim();
   if (!apiKey || apiKey === 'server-managed') {
     throw new Error('API_KEY_REQUIRED');
   }
+  const useVertex = forceVertex !== undefined ? forceVertex : apiKey.startsWith('AQ.');
   return new GoogleGenAI({
     apiKey,
+    ...(useVertex ? { vertexai: true } : {}),
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build'
@@ -239,43 +241,54 @@ async function startServer() {
     config?: Record<string, any>,
     userApiKey?: string
   ) {
-    const ai = getAiClient(userApiKey);
+    const cleanKey = (userApiKey || '').trim();
+    const clients = cleanKey.startsWith('AQ.')
+      ? [getAiClient(cleanKey, true), getAiClient(cleanKey, false)]
+      : [getAiClient(cleanKey, false)];
+
     const candidates = Array.from(
       new Set([
-        requestedModel || 'gemini-3.5-flash-lite',
-        'gemini-3.5-flash-lite',
-        'gemini-3.8-flash'
+        requestedModel || 'gemini-3.1-flash-lite',
+        'gemini-3.1-flash-lite',
+        'gemini-4-hydrogen'
       ])
     );
 
     let lastError: any = null;
-    for (const modelName of candidates) {
-      try {
-        const mergedConfig: Record<string, any> = {
-          ...(config || {})
-        };
-        if (mergedConfig.maxOutputTokens && !mergedConfig.thinkingConfig) {
-          mergedConfig.thinkingConfig = {
-            thinkingLevel: modelName === 'gemini-3.1-flash-lite' ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW
+    for (const ai of clients) {
+      for (const modelName of candidates) {
+        try {
+          const mergedConfig: Record<string, any> = {
+            ...(config || {})
           };
+          if (modelName === 'gemini-4-hydrogen' && 'temperature' in mergedConfig) {
+            delete mergedConfig.temperature;
+          }
+          if (mergedConfig.maxOutputTokens && !mergedConfig.thinkingConfig) {
+            mergedConfig.thinkingConfig = {
+              thinkingLevel: modelName === 'gemini-3.1-flash-lite' ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW
+            };
+          }
+          return await ai.models.generateContent({
+            model: modelName,
+            contents,
+            config: mergedConfig
+          });
+        } catch (err: any) {
+          lastError = err;
+          const msg = String(err?.message || '').toLowerCase();
+          if (
+            msg.includes('not found') ||
+            msg.includes('404') ||
+            msg.includes('not supported') ||
+            msg.includes('invalid argument') ||
+            msg.includes('api key not valid') ||
+            msg.includes('api_key_invalid')
+          ) {
+            continue;
+          }
+          throw err;
         }
-        return await ai.models.generateContent({
-          model: modelName,
-          contents,
-          config: mergedConfig
-        });
-      } catch (err: any) {
-        lastError = err;
-        const msg = String(err?.message || '').toLowerCase();
-        if (
-          msg.includes('not found') ||
-          msg.includes('404') ||
-          msg.includes('not supported') ||
-          msg.includes('invalid argument')
-        ) {
-          continue;
-        }
-        throw err;
       }
     }
     throw lastError;

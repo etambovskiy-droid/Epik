@@ -212,7 +212,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4.5 bg-gradient-to-r from-[#f8fafc] via-white to-[#f8fafc] border-b border-slate-200 flex items-center justify-between">
+        <div className="px-6 py-4.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#FF7A00] shadow-2xs">
               <KeyRound className="w-5 h-5" />

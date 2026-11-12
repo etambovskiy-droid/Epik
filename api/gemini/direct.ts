@@ -18,17 +18,60 @@ function extractUserApiKey(req: any): string | null {
   return null;
 }
 
-function createGeminiClient(apiKey: string, forceVertex?: boolean): GoogleGenAI {
-  const useVertex = forceVertex !== undefined ? forceVertex : apiKey.startsWith('AQ.');
+function createGeminiClient(apiKey: string, forceVertex = false): GoogleGenAI {
   return new GoogleGenAI({
     apiKey,
-    ...(useVertex ? { vertexai: true } : {}),
+    ...(forceVertex ? { vertexai: true } : {}),
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build'
       }
     }
   });
+}
+
+function extractRawErrorMessage(err: any): string {
+  const raw = err?.message || 'Gemini direct request failed';
+  if (typeof raw === 'string' && raw.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.error?.message || parsed?.message || raw;
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
+}
+
+function formatGeminiErrorForUser(err: any, apiKey: string): string {
+  const msg = extractRawErrorMessage(err);
+  const lower = msg.toLowerCase();
+
+  if (
+    lower.includes('aiplatform.googleapis.com') ||
+    lower.includes('service_disabled') ||
+    lower.includes('agent platform api has not been used')
+  ) {
+    const projMatch = msg.match(/project[=\s]+(\d+)/i);
+    const projectId = projMatch ? projMatch[1] : '';
+    const enableUrl = projectId
+      ? `https://console.developers.google.com/apis/api/aiplatform.googleapis.com/overview?project=${projectId}`
+      : 'https://console.developers.google.com/apis/library/aiplatform.googleapis.com';
+    return (
+      `Ключ формату AQ... прив'язано до проєкту Google Cloud${projectId ? ` (${projectId})` : ''}, де не активовано Agent Platform API (aiplatform.googleapis.com). ` +
+      `Як вирішити (оберіть один варіант): ` +
+      `1) Увімкніть API за посиланням ${enableUrl} та зачекайте 2–3 хв; або ` +
+      `2) Створіть безкоштовний стандартний ключ Gemini API (починається на AIzaSy...) у Google AI Studio (aistudio.google.com/app/apikey) — він працює одразу.`
+    );
+  }
+
+  if (lower.includes('api_key_invalid') || lower.includes('api key not valid')) {
+    return apiKey.startsWith('AQ.')
+      ? 'Ключ AQ... не прийнято Gemini API. Спробуйте стандартний ключ Google AI Studio (починається на AIzaSy...) або активуйте Vertex AI / Agent Platform API у Google Cloud Console.'
+      : 'Недійсний API-ключ Google AI Studio. Перевірте правильність копіювання або згенеруйте новий ключ на aistudio.google.com/app/apikey.';
+  }
+
+  return msg;
 }
 
 function isPrepaymentDepletedError(err: any): boolean {
@@ -86,7 +129,7 @@ export default async function handler(req: any, res: any) {
 
     const buildClientList = (): GoogleGenAI[] => {
       if (userApiKey.startsWith('AQ.')) {
-        return [createGeminiClient(userApiKey, true), createGeminiClient(userApiKey, false)];
+        return [createGeminiClient(userApiKey, false), createGeminiClient(userApiKey, true)];
       }
       return [createGeminiClient(userApiKey, false)];
     };
@@ -132,9 +175,17 @@ export default async function handler(req: any, res: any) {
         } catch (err: any) {
           lastError = err;
           const msg = String(err?.message || '').toLowerCase();
+          const status = err?.status || err?.code;
           if (
+            status === 400 ||
+            status === 401 ||
+            status === 403 ||
+            status === 404 ||
             msg.includes('not found') ||
             msg.includes('404') ||
+            msg.includes('403') ||
+            msg.includes('permission_denied') ||
+            msg.includes('service_disabled') ||
             msg.includes('not supported') ||
             msg.includes('invalid argument') ||
             msg.includes('api key not valid') ||
@@ -156,7 +207,16 @@ export default async function handler(req: any, res: any) {
       });
       return;
     }
-    const status = error?.status === 400 || error?.status === 401 || error?.status === 403 ? error.status : 500;
-    res.status(status).json({ error: error?.message || 'Gemini direct request failed' });
+    const rawStatus = error?.status || error?.code;
+    const msgLower = String(error?.message || '').toLowerCase();
+    const status =
+      rawStatus === 400 || rawStatus === 401 || rawStatus === 403
+        ? rawStatus
+        : msgLower.includes('permission_denied') || msgLower.includes('service_disabled') || msgLower.includes('403')
+        ? 403
+        : msgLower.includes('api_key_invalid') || msgLower.includes('400')
+        ? 400
+        : 500;
+    res.status(status).json({ error: formatGeminiErrorForUser(error, userApiKey) });
   }
 }

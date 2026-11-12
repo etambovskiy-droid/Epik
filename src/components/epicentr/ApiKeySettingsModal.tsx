@@ -397,7 +397,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
             <div>
               <div className="text-xs font-bold text-slate-800">Перевірка зв'язку</div>
               <div className="text-[11px] text-slate-500">
-                Надіслати тестовий запит до моделі gemini-3.5-flash-lite
+                Надіслати тестовий запит до моделі gemini-3.1-flash-lite
               </div>
             </div>
             <button
@@ -423,7 +423,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
           {/* Test Result Message */}
           {testResult && (
             <div
-              className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+              className={`p-3 rounded-xl border text-xs flex items-start gap-2 overflow-hidden ${
                 testResult.success
                   ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
                   : 'bg-rose-50 border-rose-200 text-rose-900'
@@ -434,7 +434,7 @@ export const ApiKeySettingsModal: React.FC<ApiKeySettingsModalProps> = ({
               ) : (
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               )}
-              <div className="flex-1 font-medium">{testResult.message}</div>
+              <div className="flex-1 min-w-0 font-medium break-words leading-relaxed">{testResult.message}</div>
             </div>
           )}
 

@@ -58,6 +58,25 @@ html.dark footer {
   border-color: #334155 !important;
 }
 
+html.dark .bg-blue-50,
+html.dark .bg-blue-50\/60 {
+  background-color: rgba(30, 58, 138, 0.25) !important;
+  border-color: #1e40af !important;
+}
+
+html.dark .bg-blue-100 {
+  background-color: rgba(30, 58, 138, 0.45) !important;
+  color: #93c5fd !important;
+}
+
+html.dark .text-blue-950 {
+  color: #e2e8f0 !important;
+}
+
+html.dark .text-\[\#004BB7\] {
+  color: #60a5fa !important;
+}
+
 /* Custom scrollbar for high-density monitoring tables and feeds */
 ::-webkit-scrollbar {
   width: 6px;

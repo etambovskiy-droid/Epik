@@ -204,10 +204,19 @@ export async function testApiKeyConnection(keyToTest?: string): Promise<{ succes
       };
     }
 
-    const errorDetail =
+    let errorDetail =
       parsedJson?.message ||
       parsedJson?.error ||
-      (rawText && !rawText.trim().startsWith('<') ? rawText.slice(0, 200) : '');
+      (rawText && !rawText.trim().startsWith('<') ? rawText.slice(0, 250) : '');
+
+    if (typeof errorDetail === 'string' && errorDetail.trim().startsWith('{')) {
+      try {
+        const inner = JSON.parse(errorDetail);
+        errorDetail = inner?.error?.message || inner?.message || errorDetail;
+      } catch {
+        // keep original text
+      }
+    }
 
     if (response.status === 402) {
       return {

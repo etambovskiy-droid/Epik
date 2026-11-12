@@ -22,15 +22,14 @@ function extractUserApiKey(req: express.Request): string | null {
   return null;
 }
 
-function getAiClient(userApiKey?: string, forceVertex?: boolean): GoogleGenAI {
+function getAiClient(userApiKey?: string, forceVertex = false): GoogleGenAI {
   const apiKey = (userApiKey || '').trim();
   if (!apiKey || apiKey === 'server-managed') {
     throw new Error('API_KEY_REQUIRED');
   }
-  const useVertex = forceVertex !== undefined ? forceVertex : apiKey.startsWith('AQ.');
   return new GoogleGenAI({
     apiKey,
-    ...(useVertex ? { vertexai: true } : {}),
+    ...(forceVertex ? { vertexai: true } : {}),
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build'
@@ -111,6 +110,61 @@ async function startServer() {
       str.includes('resource_exhausted') ||
       (code === 429 && (str.includes('quota') || str.includes('credits')))
     );
+  }
+
+  function formatServerGeminiError(err: any, apiKey: string): { status: number; message: string } {
+    let raw = err?.message || 'Gemini request failed';
+    if (typeof raw === 'string' && raw.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(raw);
+        raw = parsed?.error?.message || parsed?.message || raw;
+      } catch {
+        // keep raw
+      }
+    }
+    const lower = String(raw).toLowerCase();
+    const rawStatus = err?.status || err?.code;
+    let status =
+      rawStatus === 400 || rawStatus === 401 || rawStatus === 403
+        ? rawStatus
+        : lower.includes('permission_denied') || lower.includes('service_disabled') || lower.includes('403')
+        ? 403
+        : lower.includes('api_key_invalid') || lower.includes('400')
+        ? 400
+        : 500;
+
+    if (
+      lower.includes('aiplatform.googleapis.com') ||
+      lower.includes('service_disabled') ||
+      lower.includes('agent platform api has not been used')
+    ) {
+      status = 403;
+      const projMatch = String(raw).match(/project[=\s]+(\d+)/i);
+      const projectId = projMatch ? projMatch[1] : '';
+      const enableUrl = projectId
+        ? `https://console.developers.google.com/apis/api/aiplatform.googleapis.com/overview?project=${projectId}`
+        : 'https://console.developers.google.com/apis/library/aiplatform.googleapis.com';
+      return {
+        status,
+        message:
+          `Ключ формату AQ... прив'язано до проєкту Google Cloud${projectId ? ` (${projectId})` : ''}, де не активовано Agent Platform API (aiplatform.googleapis.com). ` +
+          `Як вирішити (оберіть один варіант): ` +
+          `1) Увімкніть API за посиланням ${enableUrl} та зачекайте 2–3 хв; або ` +
+          `2) Створіть безкоштовний стандартний ключ Gemini API (починається на AIzaSy...) у Google AI Studio (aistudio.google.com/app/apikey) — він працює одразу.`
+      };
+    }
+
+    if (lower.includes('api_key_invalid') || lower.includes('api key not valid')) {
+      status = 400;
+      return {
+        status,
+        message: apiKey.startsWith('AQ.')
+          ? 'Ключ AQ... не прийнято Gemini API. Спробуйте стандартний ключ Google AI Studio (починається на AIzaSy...) або активуйте Vertex AI / Agent Platform API у Google Cloud Console.'
+          : 'Недійсний API-ключ Google AI Studio. Перевірте правильність копіювання або згенеруйте новий ключ на aistudio.google.com/app/apikey.'
+      };
+    }
+
+    return { status, message: String(raw) };
   }
 
   function formatEpicentrTitleFallback(rawTitle: string, sku?: string, brand?: string): string {
@@ -243,7 +297,7 @@ async function startServer() {
   ) {
     const cleanKey = (userApiKey || '').trim();
     const clients = cleanKey.startsWith('AQ.')
-      ? [getAiClient(cleanKey, true), getAiClient(cleanKey, false)]
+      ? [getAiClient(cleanKey, false), getAiClient(cleanKey, true)]
       : [getAiClient(cleanKey, false)];
 
     const candidates = Array.from(
@@ -277,9 +331,17 @@ async function startServer() {
         } catch (err: any) {
           lastError = err;
           const msg = String(err?.message || '').toLowerCase();
+          const status = err?.status || err?.code;
           if (
+            status === 400 ||
+            status === 401 ||
+            status === 403 ||
+            status === 404 ||
             msg.includes('not found') ||
             msg.includes('404') ||
+            msg.includes('403') ||
+            msg.includes('permission_denied') ||
+            msg.includes('service_disabled') ||
             msg.includes('not supported') ||
             msg.includes('invalid argument') ||
             msg.includes('api key not valid') ||
@@ -612,8 +674,9 @@ ${attributesPromptSection}
     }
   });
 
-  // 6. Gemini: Create & Edit Product Images (gemini-nano-banana-2.1)
+  // 6. Gemini: Create & Edit Product Images (gemini-3.1-flash-lite-image / gemini-nano-banana-2.1)
   app.post('/api/gemini/image', async (req, res) => {
+    const userApiKey = String((req as any).userApiKey || '');
     try {
       const {
         prompt,
@@ -628,7 +691,6 @@ ${attributesPromptSection}
         return;
       }
 
-      const ai = getAiClient((req as any).userApiKey);
       const parts: any[] = [];
 
       if (sourceImageBase64 && typeof sourceImageBase64 === 'string') {
@@ -643,16 +705,53 @@ ${attributesPromptSection}
 
       parts.push({ text: prompt });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-nano-banana-2.1',
-        contents: { parts },
-        config: {
-          imageConfig: {
-            aspectRatio,
-            imageSize
+      const clients = userApiKey.startsWith('AQ.')
+        ? [getAiClient(userApiKey, false), getAiClient(userApiKey, true)]
+        : [getAiClient(userApiKey, false)];
+      const imageModels = ['gemini-3.1-flash-lite-image', 'gemini-nano-banana-2.1'];
+
+      let response: any = null;
+      let lastError: any = null;
+
+      outerImageLoop: for (const ai of clients) {
+        for (const imgModel of imageModels) {
+          try {
+            response = await ai.models.generateContent({
+              model: imgModel,
+              contents: { parts },
+              config: {
+                imageConfig: {
+                  aspectRatio,
+                  imageSize
+                }
+              }
+            });
+            if (response) break outerImageLoop;
+          } catch (err: any) {
+            lastError = err;
+            const msg = String(err?.message || '').toLowerCase();
+            const status = err?.status || err?.code;
+            if (
+              status === 400 ||
+              status === 401 ||
+              status === 403 ||
+              status === 404 ||
+              msg.includes('not found') ||
+              msg.includes('permission_denied') ||
+              msg.includes('service_disabled') ||
+              msg.includes('api_key_invalid') ||
+              msg.includes('api key not valid')
+            ) {
+              continue;
+            }
+            throw err;
           }
         }
-      });
+      }
+
+      if (!response) {
+        throw lastError || new Error('Image generation failed');
+      }
 
       let generatedImageUrl: string | null = null;
       let textComment = '';
@@ -687,8 +786,9 @@ ${attributesPromptSection}
           message: 'Баланс кредитів AI Studio вичерпано. Перейдіть на https://ai.studio/projects для управління рахунком.'
         });
       } else {
-        console.warn('Notice in /api/gemini/image:', error?.message || error);
-        res.status(500).json({ error: error?.message || 'Image generation failed' });
+        const formatted = formatServerGeminiError(error, userApiKey);
+        console.warn('Notice in /api/gemini/image:', formatted.message);
+        res.status(formatted.status).json({ error: formatted.message });
       }
     }
   });
@@ -784,8 +884,9 @@ ${attributesPromptSection}
 
   // 8. Gemini: Generic Direct Proxy Endpoint (Server-Side)
   app.post('/api/gemini/direct', async (req, res) => {
+    const userApiKey = String((req as any).userApiKey || '');
     try {
-      const { prompt, contents, model, systemInstruction, responseMimeType, maxOutputTokens = 350, temperature, tools } = req.body;
+      const { prompt, contents, model, systemInstruction, responseMimeType, maxOutputTokens = 350, tools } = req.body;
       const effectiveInput = prompt || contents;
       if (!effectiveInput) {
         res.status(400).json({ error: 'Prompt or contents are required' });
@@ -793,8 +894,7 @@ ${attributesPromptSection}
       }
 
       const config: any = {
-        maxOutputTokens: Number(maxOutputTokens) || 350,
-        temperature: temperature !== undefined ? Number(temperature) : 0.2
+        maxOutputTokens: Number(maxOutputTokens) || 350
       };
       if (systemInstruction) {
         config.systemInstruction = systemInstruction;
@@ -806,7 +906,7 @@ ${attributesPromptSection}
         config.tools = tools;
       }
 
-      const response = await generateTextWithFallback(model || 'gemini-3.8-flash', effectiveInput, config, (req as any).userApiKey);
+      const response = await generateTextWithFallback(model || 'gemini-3.1-flash-lite', effectiveInput, config, userApiKey);
       const candidate = response?.candidates?.[0];
       const groundingChunks = candidate?.groundingMetadata?.groundingChunks || [];
       const sources = groundingChunks
@@ -825,6 +925,7 @@ ${attributesPromptSection}
 
       res.json({
         text: response?.text || '',
+        modelUsed: model || 'gemini-3.1-flash-lite',
         sources,
         searchEntryPoint
       });
@@ -835,7 +936,8 @@ ${attributesPromptSection}
           message: 'Баланс кредитів AI Studio вичерпано. Перейдіть на https://ai.studio/projects для поповнення.'
         });
       } else {
-        res.status(500).json({ error: error?.message || 'Gemini direct request failed' });
+        const formatted = formatServerGeminiError(error, userApiKey);
+        res.status(formatted.status).json({ error: formatted.message });
       }
     }
   });

@@ -658,18 +658,25 @@ export class AuthService {
       }
 
       const accounts = this.getAccounts();
-      const account = accounts[cleanEmail];
+      let matchedAccount: StoredAccount | undefined;
+      for (const [em, acc] of Object.entries(accounts)) {
+        if (em.toLowerCase() === cleanEmail) {
+          matchedAccount = acc;
+          break;
+        }
+      }
+
       const isSuperAdmin = cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase();
 
-      if (account) {
+      if (matchedAccount) {
         const isPasswordMatch =
-          account.passwordHash === cleanPassword ||
+          matchedAccount.passwordHash === cleanPassword ||
           (isSuperAdmin && cleanPassword === SUPER_ADMIN_PASSWORD);
 
         if (!isPasswordMatch) {
           return { success: false, error: 'Невірний пароль. Спробуйте ще раз або відновіть доступ' };
         }
-        const normalized = normalizeUserProfile(account.user);
+        const normalized = normalizeUserProfile(matchedAccount.user);
         this.persistUser(normalized);
         return { success: true, user: normalized, status: normalized.status };
       }
@@ -872,12 +879,18 @@ export class AuthService {
           headers['X-Resend-Api-Key'] = fallbackEnvKey;
         }
 
+        const clientOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+        const clientUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '';
+
         const res = await fetch('/api/auth/reset-password', {
           method: 'POST',
           headers,
           body: JSON.stringify({
             action: 'request',
-            email: cleanEmail
+            email: cleanEmail,
+            clientOrigin,
+            clientUrl,
+            ttlSeconds: 900
           })
         });
 
@@ -980,11 +993,11 @@ export class AuthService {
         return {
           valid: true,
           email: data.email,
-          remainingSeconds: data.remainingSeconds || 60
+          remainingSeconds: data.remainingSeconds || 900
         };
       }
       if (resp.status === 410) {
-        return { valid: false, remainingSeconds: 0, error: 'Час дії посилання (60 сек) вичерпано. Згенеруйте нове.' };
+        return { valid: false, remainingSeconds: 0, error: 'Час дії посилання (15 хв) вичерпано. Згенеруйте нове.' };
       }
     } catch (err) {
       console.error('[verifyResetTokenAsync Error]:', err);

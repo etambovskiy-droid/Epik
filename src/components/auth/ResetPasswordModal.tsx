@@ -45,9 +45,13 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Live 60-second countdown timer
-  const [remainingSeconds, setRemainingSeconds] = useState(60);
+  // Live 15-minute countdown timer (900s)
+  const [remainingSeconds, setRemainingSeconds] = useState(900);
   const [isExpired, setIsExpired] = useState(false);
+
+  // Manual Token / URL fallback input (in case email client blocks redirects)
+  const [manualTokenInput, setManualTokenInput] = useState('');
+  const [isVerifyingManual, setIsVerifyingManual] = useState(false);
 
   // Loading & error feedback
   const [isLoading, setIsLoading] = useState(false);
@@ -66,7 +70,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
         setIsLoading(false);
         if (verification.valid) {
           setStep('reset');
-          setRemainingSeconds(verification.remainingSeconds);
+          setRemainingSeconds(verification.remainingSeconds || 900);
           setIsExpired(false);
           if (verification.email) setEmail(verification.email);
         } else {
@@ -79,7 +83,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
     } else if (isOpen && !effectiveToken) {
       setStep('request');
       setToken(null);
-      setRemainingSeconds(60);
+      setRemainingSeconds(900);
       setIsExpired(false);
     }
     return () => {
@@ -137,13 +141,53 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
     }
   };
 
+  // Step 2b: Manual Token / URL fallback handler
+  const handleApplyManualToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    const raw = manualTokenInput.trim();
+    if (!raw) {
+      setErrorMessage('Введіть посилання або токен із отриманого листа');
+      return;
+    }
+
+    let extracted = raw;
+    if (raw.includes('resetToken=')) {
+      try {
+        const url = new URL(raw);
+        extracted = url.searchParams.get('resetToken') || raw;
+      } catch {
+        const match = raw.match(/resetToken=([^&\s]+)/);
+        if (match) extracted = decodeURIComponent(match[1]);
+      }
+    }
+
+    setIsVerifyingManual(true);
+    try {
+      const verification = await authService.verifyResetTokenAsync(extracted);
+      if (verification.valid) {
+        setToken(extracted);
+        setStep('reset');
+        setRemainingSeconds(verification.remainingSeconds || 900);
+        setIsExpired(false);
+        if (verification.email) setEmail(verification.email);
+      } else {
+        setErrorMessage(verification.error || 'Токен недійсний або його термін дії вичерпано');
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Помилка перевірки токена');
+    } finally {
+      setIsVerifyingManual(false);
+    }
+  };
+
   // Step 3: Submit new password
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
     if (isExpired || remainingSeconds <= 0) {
-      setErrorMessage('Час дії посилання (60 сек) вичерпано. Згенеруйте нове посилання.');
+      setErrorMessage('Час дії посилання (15 хв) вичерпано. Згенеруйте нове посилання.');
       return;
     }
 
@@ -260,32 +304,61 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
             <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-700/50 text-xs text-emerald-200 space-y-2">
               <div className="flex items-center gap-2 font-bold text-emerald-300 text-sm">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-                <span>Запит успішно оброблено!</span>
+                <span>Лист успішно надіслано!</span>
               </div>
               <p>
-                Лист із захищеним одноразовим посиланням надіслано на вашу електронну пошту.
+                Лист із захищеним посиланням надіслано на вашу поштову скриньку <strong>{email}</strong>. Посилання дійсне протягом <strong>15 хвилин</strong>.
               </p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-blue-950/40 border border-blue-700/50 text-xs text-blue-200 space-y-2.5">
-              <div className="flex items-center gap-2 text-amber-300 font-semibold">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Захист від несанкціонованого доступу</span>
+            {/* Direct Token / Link Manual Paste Box */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 space-y-3">
+              <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span>Не спрацьовує перехід у поштовій програмі?</span>
               </div>
-              <p className="text-slate-300 leading-relaxed">
-                З міркувань безпеки зміна пароля можлива <strong>виключно через перехід за персональним захищеним посиланням із листа</strong>, надісланого до вашої поштової скриньки.
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Якщо поштовий клієнт блокує клік по кнопці, скопіюйте посилання або токен із отриманого листа та вставте сюди:
               </p>
+              <form onSubmit={handleApplyManualToken} className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Вставте посилання або токен..."
+                  value={manualTokenInput}
+                  onChange={(e) => setManualTokenInput(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-amber-500 font-mono"
+                />
+                <button
+                  type="submit"
+                  disabled={isVerifyingManual || !manualTokenInput.trim()}
+                  className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all disabled:opacity-40 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {isVerifyingManual ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isVerifyingManual ? 'Перевіряємо токен...' : 'Встановити новий пароль'}</span>
+                </button>
+              </form>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-blue-950/40 border border-blue-700/50 text-xs text-blue-200 space-y-1.5">
+              <div className="flex items-center gap-2 text-amber-300 font-semibold text-[11px]">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Захист доступу</span>
+              </div>
               <p className="text-slate-400 text-[11px] leading-relaxed">
-                Будь ласка, відкрийте вашу пошту (перевірте також папку «Спам») та перейдіть за посиланням протягом <strong>60 секунд</strong>.
+                Перевірте також папку «Спам» або «Оновлення» у Gmail.
               </p>
             </div>
 
             <button
               type="button"
               onClick={onClose}
-              className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl transition-all cursor-pointer"
             >
-              Зрозуміло, перевіряю пошту
+              Закрити вікно
             </button>
           </div>
         )}
@@ -304,21 +377,21 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
                 <span>Залишилось часу:</span>
               </span>
               <span className="font-mono font-bold text-sm text-amber-300">
-                {remainingSeconds} сек
+                {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, '0')} ({remainingSeconds} сек)
               </span>
             </div>
 
             {isExpired ? (
               <div className="space-y-3 py-2 text-center">
                 <p className="text-xs text-rose-300">
-                  Час дії захищеного посилання (60 секунд) минув.
+                  Час дії захищеного посилання (15 хвилин) минув.
                 </p>
                 <button
                   type="button"
                   onClick={() => {
                     setStep('request');
                     setIsExpired(false);
-                    setRemainingSeconds(60);
+                    setRemainingSeconds(900);
                   }}
                   className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 cursor-pointer"
                 >

@@ -60,6 +60,7 @@ import {
   EnrichmentProgress
 } from '../../services/geminiFeedEnrichmentService';
 import { getStoredApiKey } from '../../services/aiApiKeyService';
+import { saveXmlFeedToHistory } from '../../services/workspaceStorage';
 import { EpicentrTokenModal } from './EpicentrTokenModal';
 import { XmlPreviewModal } from './XmlPreviewModal';
 
@@ -485,6 +486,35 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
     setGeneratedXml(xml);
     setXsdReport(validationReport);
     setIsGenerated(true);
+
+    const categoryNamesList: string[] = [];
+    const categoryCodesList: string[] = [];
+    selectedCategoryIds.forEach((catId) => {
+      const mapping = categoryMappings[catId];
+      if (mapping) {
+        categoryCodesList.push(mapping.epicentrCategoryCode);
+        categoryNamesList.push(`[${mapping.epicentrCategoryCode}] ${mapping.epicentrCategoryName}`);
+      } else {
+        const origCat = uniqueSourceCategories.find((c) => c.id === catId);
+        categoryNamesList.push(origCat ? origCat.name : catId);
+      }
+    });
+
+    try {
+      saveXmlFeedToHistory({
+        filename: feedFileName || 'epicentr_catalog_feed.xml',
+        categoryNames: categoryNamesList,
+        categoryCodes: categoryCodesList,
+        offersCount: selectedSubset.length,
+        xsdValid: validationReport.isValid,
+        xsdErrorsCount: validationReport.errorCount,
+        complianceScore: validationReport.complianceScore,
+        xmlContent: xml
+      });
+    } catch {
+      // Ignore storage error
+    }
+
     if (openPreviewModal) {
       setIsPreviewModalOpen(true);
     }

@@ -91,6 +91,159 @@ export const FALLBACK_EPICENTR_CATEGORIES: EpicentrCategory[] = EPICENTR_LIVE_LE
 
 export const FALLBACK_ATTRIBUTE_SETS: EpicentrAttributeSet[] = [
   {
+    code: '770',
+    name: 'Настільні ігри',
+    category_codes: ['770'],
+    attributes: [
+      {
+        code: 'language',
+        name: 'Мова видання',
+        type: 'select',
+        isRequired: true,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Мова видання' },
+          { languageCode: 'ru', title: 'Язык издания' }
+        ],
+        options: [
+          { code: 'ukr', value: 'Українська', value_ru: 'Украинский' },
+          { code: 'eng', value: 'Англійська', value_ru: 'Английский' },
+          { code: 'rus', value: 'Російська', value_ru: 'Русский' },
+          { code: 'pol', value: 'Польська', value_ru: 'Польский' },
+          { code: 'language_independent', value: 'Мовонезалежна', value_ru: 'Языконезависимая' }
+        ]
+      },
+      {
+        code: 'players_count',
+        name: 'Кількість гравців',
+        type: 'select',
+        isRequired: true,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Кількість гравців' },
+          { languageCode: 'ru', title: 'Количество игроков' }
+        ],
+        options: [
+          { code: 'dlya_1', value: 'для 1', value_ru: 'для 1' },
+          { code: 'dlya_2', value: 'для 2', value_ru: 'для 2' },
+          { code: 'vid_2_do_4', value: '2-4', value_ru: '2-4' },
+          { code: 'vid_2_do_6', value: '2-6', value_ru: '2-6' },
+          { code: 'vid_2_do_8', value: '2-8', value_ru: '2-8' },
+          { code: 'dlya_kompanii', value: 'для компанії', value_ru: 'для компании' }
+        ]
+      },
+      {
+        code: 'age_group',
+        name: 'Вікова група',
+        type: 'select',
+        isRequired: true,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Вікова група' },
+          { languageCode: 'ru', title: 'Возрастная группа' }
+        ],
+        options: [
+          { code: 'vid_3_rokiv', value: 'від 3 років', value_ru: 'от 3 лет' },
+          { code: 'vid_6_rokiv', value: 'від 6 років', value_ru: 'от 6 лет' },
+          { code: 'vid_8_rokiv', value: 'від 8 років', value_ru: 'от 8 лет' },
+          { code: 'vid_10_rokiv', value: 'від 10 років', value_ru: 'от 10 лет' },
+          { code: 'vid_12_rokiv', value: 'від 12 років', value_ru: 'от 12 лет' },
+          { code: 'vid_14_rokiv', value: 'від 14 років', value_ru: 'от 14 лет' },
+          { code: 'vid_16_rokiv', value: 'від 16 років', value_ru: 'от 16 лет' },
+          { code: '18_plus', value: '18+', value_ru: '18+' }
+        ]
+      },
+      {
+        code: 'genre',
+        name: 'Жанр / Тематика',
+        type: 'multiselect',
+        isRequired: false,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Жанр / Тематика' },
+          { languageCode: 'ru', title: 'Жанр / Тематика' }
+        ],
+        options: [
+          { code: 'rozvazhalni', value: 'розважальні', value_ru: 'развлекательные' },
+          { code: 'stratehii', value: 'стратегії', value_ru: 'стратегии' },
+          { code: 'detektyvni', value: 'детективні', value_ru: 'детективные' },
+          { code: 'intelektualni', value: 'інтелектуальні', value_ru: 'интеллектуальные' },
+          { code: 'simeyni', value: 'сімейні', value_ru: 'семейные' },
+          { code: 'ekonomichni', value: 'економічні', value_ru: 'экономические' },
+          { code: 'kartkovi', value: 'карткові', value_ru: 'карточные' },
+          { code: 'dytiachi', value: 'дитячі', value_ru: 'детские' }
+        ]
+      },
+      {
+        code: 'playtime',
+        name: 'Час гри',
+        type: 'select',
+        isRequired: false,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Час гри' },
+          { languageCode: 'ru', title: 'Время игры' }
+        ],
+        options: [
+          { code: 'do_30_khv', value: 'до 30 хв', value_ru: 'до 30 мин' },
+          { code: '30_60_khv', value: '30-60 хв', value_ru: '30-60 мин' },
+          { code: '60_120_khv', value: '60-120 хв', value_ru: '60-120 мин' },
+          { code: 'vid_120_khv', value: 'від 120 хв', value_ru: 'от 120 мин' }
+        ]
+      },
+      {
+        code: 'material',
+        name: 'Матеріал',
+        type: 'multiselect',
+        isRequired: false,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Матеріал' },
+          { languageCode: 'ru', title: 'Материал' }
+        ],
+        options: [
+          { code: 'karton', value: 'картон', value_ru: 'картон' },
+          { code: 'derevo', value: 'дерево', value_ru: 'дерево' },
+          { code: 'plastyk', value: 'пластик', value_ru: 'пластик' },
+          { code: 'tekstyl', value: 'текстиль', value_ru: 'текстиль' }
+        ]
+      },
+      {
+        code: '767',
+        name: 'Комплектація',
+        type: 'text',
+        isRequired: false,
+        isFilter: false,
+        translations: [
+          { languageCode: 'ua', title: 'Комплектація' },
+          { languageCode: 'ru', title: 'Комплектация' }
+        ]
+      },
+      {
+        code: 'brand',
+        name: 'Бренд',
+        type: 'select',
+        isRequired: true,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Бренд' },
+          { languageCode: 'ru', title: 'Бренд' }
+        ]
+      },
+      {
+        code: 'country_of_origin',
+        name: 'Країна-виробник',
+        type: 'select',
+        isRequired: true,
+        isFilter: true,
+        translations: [
+          { languageCode: 'ua', title: 'Країна-виробник' },
+          { languageCode: 'ru', title: 'Страна-производитель' }
+        ]
+      }
+    ]
+  },
+  {
     code: '3343',
     name: 'Картини за номерами',
     category_codes: ['3343'],
@@ -664,7 +817,27 @@ export class EpicentrMerchantApiService {
     const fallback = FALLBACK_ATTRIBUTE_SETS.find(
       (s) => s.code === cleanCode || (s.category_codes && s.category_codes.includes(cleanCode))
     );
-    return fallback || null;
+    if (fallback) return fallback;
+
+    // Universal dynamic attribute set fallback for ANY future category
+    return {
+      code: cleanCode,
+      name: `Набір характеристик #${cleanCode}`,
+      category_codes: [cleanCode],
+      attributes: [
+        { code: 'brand', name: 'Бренд', type: 'select', isRequired: true, isFilter: true },
+        { code: 'country_of_origin', name: 'Країна-виробник', type: 'select', isRequired: true, isFilter: true },
+        { code: 'measure', name: 'Міра виміру', type: 'select', isRequired: true, isSystem: true },
+        { code: 'ratio', name: 'Мінімальна кратність товару', type: 'numeric', isRequired: true, isSystem: true },
+        { code: 'width', name: 'Ширина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+        { code: 'height', name: 'Висота', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+        { code: 'length', name: 'Глибина', type: 'float', isSystem: true, isRequired: true, suffix: 'мм' },
+        { code: 'weight', name: 'Вага', type: 'float', isSystem: true, isRequired: true, suffix: 'г' },
+        { code: '767', name: 'Комплектація', type: 'text', isRequired: false },
+        { code: 'material', name: 'Матеріал', type: 'multiselect', isRequired: false, isFilter: true },
+        { code: 'color', name: 'Колір', type: 'select', isRequired: false, isFilter: true }
+      ]
+    };
   }
 
   /**

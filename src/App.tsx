@@ -64,6 +64,7 @@ import { UserProfileDrawer } from './components/epicentr/UserProfileDrawer';
 import { ImageStudioModal } from './components/epicentr/ImageStudioModal';
 import { SearchGroundingModal } from './components/epicentr/SearchGroundingModal';
 import { GeminiChatbotDrawer } from './components/epicentr/GeminiChatbotDrawer';
+import { GmailModal } from './components/epicentr/GmailModal';
 import { DemoRestrictionModal } from './components/epicentr/DemoRestrictionModal';
 import { authService, UserProfile } from './services/authService';
 import { canAccessFeature, getDemoRestrictionMessage } from './services/permissionService';
@@ -143,6 +144,14 @@ export function App() {
 
   const [history, setHistory] = useState<SavedBatchHistoryItem[]>(() => getBatchHistory());
 
+  useEffect(() => {
+    const onHistoryUpdated = () => {
+      setHistory(getBatchHistory());
+    };
+    window.addEventListener('epicentr_history_updated', onHistoryUpdated);
+    return () => window.removeEventListener('epicentr_history_updated', onHistoryUpdated);
+  }, []);
+
   // App file state
   const [templateFileName, setTemplateFileName] = useState<string | null>(null);
   const [dictionaryFileName, setDictionaryFileName] = useState<string | null>(null);
@@ -215,6 +224,7 @@ export function App() {
   const [isImageStudioOpen, setIsImageStudioOpen] = useState(false);
   const [isSearchGroundingOpen, setIsSearchGroundingOpen] = useState(false);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+  const [isGmailOpen, setIsGmailOpen] = useState(false);
   const [isAdminUsersModalOpen, setIsAdminUsersModalOpen] = useState(false);
 
   useEffect(() => {
@@ -864,6 +874,11 @@ export function App() {
   const handleSelectBatch = (batch: SavedBatchHistoryItem) => {
     setIsHistoryOpen(false);
 
+    if (batch.type === 'xml') {
+      setActiveTab('converter');
+      return;
+    }
+
     let targetReport = batch.report;
     let targetProcessedRows = batch.processedRows;
     let targetColumns = batch.columns;
@@ -1184,6 +1199,7 @@ export function App() {
           onOpenSearchGrounding={handleOpenSearchGrounding}
           onOpenChatbot={handleOpenChatbot}
           onOpenAdminUsers={() => setIsAdminUsersModalOpen(true)}
+          onOpenGmail={() => setIsGmailOpen(true)}
           onDemoRestricted={handleDemoRestricted}
         />
 
@@ -1744,6 +1760,16 @@ export function App() {
           <span>ШІ-Консультант Gemini</span>
         </button>
       )}
+
+      {/* Gmail Google Workspace Integration Modal */}
+      <GmailModal
+        isOpen={isGmailOpen}
+        onClose={() => setIsGmailOpen(false)}
+        currentUser={currentUser}
+        currentShop={currentShop}
+        productsCount={rawRows.length}
+        categoryTitle={templateFileName ? templateFileName.replace('.xlsx', '') : currentShop.name}
+      />
 
       {/* Super Admin Users Management Modal */}
       <AdminUsersModal

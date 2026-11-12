@@ -121,6 +121,20 @@ export const INITIAL_RELEASES: ReleaseLogItem[] = [
       'Новий фільтр-пігулка "Помилки формули назви" для швидкої ізоляції проблемних карток'
     ],
     featuresActivated: ['bulk_multiselect', 'bulk_toolbar', 'title_formula_inspector', 'one_click_title_fix']
+  },
+  {
+    version: 'v1.4.0',
+    title: 'Реліз: Інтеграція Google Workspace Gmail та поштовий центр селера',
+    storyId: 'story-gmail-workspace-integration',
+    deployedAt: '2026-11-11T00:00:00Z',
+    changesSummary: [
+      'Офіційна інтеграція Google Workspace (Gmail API) для проекту useful-parity-wvr20',
+      'Клієнтський безпечний In-Memory токен без збереження в сховища браузера',
+      'Швидкі бізнес-шаблони для селерів: звіт про XML-фід, запит до техпідтримки, питання до КМ щодо характеристик',
+      'Обов\'язковий захисний екран підтвердження операції перед відправкою листів',
+      'Перегляд вхідних повідомлень та збереження чернеток у Gmail без виходу з платформи'
+    ],
+    featuresActivated: ['gmail_workspace_api', 'in_memory_auth', 'epicentr_email_templates', 'human_confirmation_gate']
   }
 ];
 

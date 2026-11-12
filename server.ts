@@ -1220,17 +1220,36 @@ ${attributesPromptSection}
   }
 
   function resolveAppOriginFromReq(req: express.Request): string {
+    const body = req.body || {};
+    // 1. Client-supplied origin or full URL from the active browser tab
+    const clientUrl = typeof body?.clientUrl === 'string' ? body.clientUrl.trim() : '';
+    if (clientUrl && clientUrl.startsWith('http')) {
+      return clientUrl.split('?')[0].replace(/\/$/, '');
+    }
+
+    const clientOrigin = typeof body?.clientOrigin === 'string' ? body.clientOrigin.trim() : '';
+    if (clientOrigin && clientOrigin.startsWith('http')) {
+      return clientOrigin.replace(/\/$/, '');
+    }
+
     const envUrl = (process.env.APP_URL || process.env.VITE_APP_URL || '').trim();
     if (envUrl && envUrl !== 'MY_APP_URL') {
       return envUrl.replace(/\/$/, '');
     }
     const originHeader = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
-    if (originHeader && originHeader.startsWith('http')) {
+    if (originHeader && originHeader.startsWith('http') && originHeader !== 'null') {
       return originHeader.replace(/\/$/, '');
+    }
+    const refererHeader = typeof req.headers.referer === 'string' ? req.headers.referer.trim() : '';
+    if (refererHeader && refererHeader.startsWith('http')) {
+      try {
+        const parsed = new URL(refererHeader);
+        return `${parsed.protocol}//${parsed.host}`.replace(/\/$/, '');
+      } catch {}
     }
     const fwdHost = req.headers['x-forwarded-host'] || req.headers.host;
     if (typeof fwdHost === 'string' && fwdHost.trim()) {
-      const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
+      const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
       return `${proto}://${fwdHost.trim()}`.replace(/\/$/, '');
     }
     return `http://localhost:${PORT}`;
@@ -1239,7 +1258,8 @@ ${attributesPromptSection}
   async function sendPasswordResetViaResend(
     toEmail: string,
     resetUrl: string,
-    ttlSeconds: number = 60,
+    token: string,
+    ttlSeconds: number = 900,
     fallbackHeaderKey?: string
   ): Promise<{ success: boolean; id?: string; statusCode?: number; errorCode?: string; error?: string; details?: any }> {
     const apiKey = (
@@ -1267,72 +1287,93 @@ ${attributesPromptSection}
       'Epicentr PIM <onboarding@resend.dev>'
     ).trim();
 
+    const ttlMinutes = Math.max(1, Math.round(ttlSeconds / 60));
     const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Відновлення пароля — Епіцентр Маркетплейс</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #0b1120; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #f8fafc;">
-  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0b1120; padding: 40px 16px;">
+<body style="margin: 0; padding: 0; background-color: #0b1120; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0b1120; padding: 32px 12px;">
     <tr>
       <td align="center">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: #1e293b; border-radius: 20px; border: 1px solid #334155; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 540px; background-color: #1e293b; border-radius: 16px; border: 1px solid #334155; overflow: hidden; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);">
           <tr>
-            <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #004BB7 0%, #002e73 100%); text-align: center;">
-              <div style="display: inline-block; padding: 6px 14px; background-color: rgba(255, 255, 255, 0.15); border-radius: 9999px; margin-bottom: 12px;">
-                <span style="color: #FF6B00; font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Епіцентр Маркетплейс PIM</span>
+            <td style="padding: 28px 24px 20px 24px; background-color: #004BB7; text-align: center;">
+              <div style="display: inline-block; padding: 4px 12px; background-color: rgba(255, 255, 255, 0.15); border-radius: 9999px; margin-bottom: 10px;">
+                <span style="color: #FF6B00; font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Епіцентр Маркетплейс PIM</span>
               </div>
-              <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: 800;">Відновлення доступу до кабінету</h1>
+              <h1 style="margin: 0; color: #ffffff; font-size: 20px; font-weight: 800;">Захищене відновлення доступу</h1>
             </td>
           </tr>
           <tr>
-            <td style="padding: 32px;">
+            <td style="padding: 28px 24px;">
               <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #cbd5e1;">
-                Вітаємо! Ми отримали запит на скидання та створення нового пароля для вашого кабінету продавця.
+                Вітаємо! Отримано запит на зміну пароля до вашого облікового запису в системі <strong>Епіцентр PIM Platform</strong>.
               </p>
 
               <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; margin-bottom: 24px;">
                 <tr>
-                  <td style="padding: 16px;">
+                  <td style="padding: 14px 16px;">
                     <div style="font-size: 13px; font-weight: 700; color: #fbbf24; margin-bottom: 4px;">
-                      ⏱️ Обмежений час дії: ${ttlSeconds} секунд
+                      ⏱️ Час дії посилання: ${ttlMinutes} хвилин (${ttlSeconds} сек)
                     </div>
                     <div style="font-size: 12px; color: #fde68a; line-height: 1.5;">
-                      З міркувань суворої безпеки це одноразове посилання діє рівно 1 хвилину (60 сек). Після переходу відкриється форма для введення нового пароля.
+                      Посилання є одноразовим та захищеним цифровим підписом HMAC.
                     </div>
                   </td>
                 </tr>
               </table>
 
-              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 28px 0;">
+              <!-- Bulletproof Email CTA Button (Gmail / Outlook / Apple Mail compliant) -->
+              <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 24px 0;">
                 <tr>
                   <td align="center">
-                    <a href="${resetUrl}" target="_blank" style="display: inline-block; padding: 14px 36px; background: linear-gradient(135deg, #FF6B00 0%, #e05d00 100%); color: #ffffff; font-size: 14px; font-weight: 700; text-decoration: none; border-radius: 12px; box-shadow: 0 4px 15px rgba(255, 107, 0, 0.35); text-transform: uppercase; letter-spacing: 0.5px;">
-                      Встановити новий пароль &rarr;
-                    </a>
+                    <table border="0" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td align="center" bgcolor="#FF6B00" style="background-color: #FF6B00; border-radius: 12px;">
+                          <a href="${resetUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 14px 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; font-weight: 800; color: #ffffff !important; text-decoration: none !important; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 12px; border: 1px solid #FF7A00;">
+                            Встановити новий пароль &rarr;
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
               </table>
 
-              <p style="margin: 0 0 8px 0; font-size: 12px; color: #94a3b8; line-height: 1.5;">
-                Якщо кнопка вище не відкривається, скопіюйте це посилання у браузер:
+              <!-- Explicit Clickable Hyperlink fallback -->
+              <p style="margin: 20px 0 6px 0; font-size: 12px; color: #94a3b8; line-height: 1.5;">
+                Якщо кнопка вище не відкривається, натисніть на пряме посилання:
               </p>
-              <p style="margin: 0 0 24px 0; font-size: 11px; color: #38bdf8; word-break: break-all; line-height: 1.4; font-family: monospace;">
-                ${resetUrl}
-              </p>
+              <div style="background-color: #0b1120; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; word-break: break-all; margin-bottom: 16px;">
+                <a href="${resetUrl}" target="_blank" rel="noopener noreferrer" style="color: #38bdf8 !important; text-decoration: underline !important; font-size: 11px; font-family: monospace; line-height: 1.5;">
+                  ${resetUrl}
+                </a>
+              </div>
 
-              <hr style="border: none; border-top: 1px solid #334155; margin: 24px 0;">
+              <!-- Manual Token Box -->
+              <div style="background-color: #0b1120; border: 1px dashed #475569; border-radius: 8px; padding: 10px 14px; margin-bottom: 20px;">
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">
+                  Або скопіюйте одноразовий токен для ручного введення у кабінеті:
+                </div>
+                <div style="font-family: monospace; font-size: 11px; color: #fbbf24; word-break: break-all; font-weight: bold;">
+                  ${token}
+                </div>
+              </div>
 
+              <hr style="border: none; border-top: 1px solid #334155; margin: 20px 0;">
               <p style="margin: 0; font-size: 11px; color: #64748b; line-height: 1.5;">
-                Якщо ви не надсилали запит на зміну пароля, просто проігноруйте цей лист. Ваш пароль та доступ залишаються в цілковитій безпеці.
+                Якщо ви не надсилали цей запит, просто проігноруйте цей лист. Ваш обліковий запис знаходиться під надійним захистом.
               </p>
             </td>
           </tr>
           <tr>
-            <td style="padding: 20px 32px; background-color: #0b1120; text-align: center; border-top: 1px solid #334155;">
+            <td style="padding: 16px 24px; background-color: #0b1120; text-align: center; border-top: 1px solid #334155;">
               <p style="margin: 0; font-size: 11px; color: #64748b;">
-                &copy; ${new Date().getFullYear()} Епіцентр Маркетплейс. Платформа автоматизації PIM-каталогу.
+                &copy; ${new Date().getFullYear()} Епіцентр Маркетплейс. Система управління PIM-каталогом.
               </p>
             </td>
           </tr>
@@ -1342,6 +1383,12 @@ ${attributesPromptSection}
   </table>
 </body>
 </html>`.trim();
+
+    const plainTextContent =
+      `Вітаємо! Отримано запит на зміну пароля до вашого облікового запису в системі Епіцентр PIM Platform.\n\n` +
+      `Для встановлення нового пароля перейдіть за посиланням:\n${resetUrl}\n\n` +
+      `Або скопіюйте одноразовий токен для ручного введення у кабінеті:\n${token}\n\n` +
+      `Час дії посилання: ${ttlMinutes} хвилин.\nЯкщо ви не надсилали цей запит, проігноруйте цей лист.`;
 
     try {
       const response = await fetch('https://api.resend.com/emails', {
@@ -1353,8 +1400,9 @@ ${attributesPromptSection}
         body: JSON.stringify({
           from: fromAddress,
           to: [toEmail],
-          subject: `Відновлення пароля — Епіцентр Маркетплейс (${ttlSeconds} сек)`,
-          html
+          subject: `Відновлення пароля — Епіцентр Маркетплейс (${ttlMinutes} хв)`,
+          html,
+          text: plainTextContent
         })
       });
 
@@ -1422,7 +1470,8 @@ ${attributesPromptSection}
       return;
     }
 
-    const { token, expiresAt } = createStatelessResetToken(cleanEmail, 60);
+    const ttlSeconds = typeof req.body?.ttlSeconds === 'number' && req.body.ttlSeconds > 0 ? req.body.ttlSeconds : 900;
+    const { token, expiresAt } = createStatelessResetToken(cleanEmail, ttlSeconds);
     inMemoryResetTokens.set(token, {
       email: cleanEmail,
       token,
@@ -1430,14 +1479,15 @@ ${attributesPromptSection}
       used: false
     });
 
-    const appUrl = resolveAppOriginFromReq(req);
+    const clientOriginHeader = typeof req.body?.clientOrigin === 'string' ? req.body.clientOrigin.trim() : '';
+    const appUrl = (clientOriginHeader && clientOriginHeader.startsWith('http') ? clientOriginHeader : resolveAppOriginFromReq(req)).replace(/\/$/, '');
     const resetUrl = `${appUrl}?resetToken=${encodeURIComponent(token)}`;
     const fallbackHeaderKey =
       typeof req.headers['x-resend-api-key'] === 'string'
         ? req.headers['x-resend-api-key'].trim()
         : undefined;
 
-    const dispatchResult = await sendPasswordResetViaResend(cleanEmail, resetUrl, 60, fallbackHeaderKey);
+    const dispatchResult = await sendPasswordResetViaResend(cleanEmail, resetUrl, token, ttlSeconds, fallbackHeaderKey);
 
     if (!dispatchResult.success) {
       res.status(dispatchResult.statusCode || 500).json({

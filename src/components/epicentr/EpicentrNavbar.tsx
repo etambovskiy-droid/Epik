@@ -30,7 +30,8 @@ import {
   MessageSquare,
   Plus,
   ShieldCheck,
-  Lock
+  Lock,
+  Mail
 } from 'lucide-react';
 import { ShopWorkspace } from '../../services/workspaceStorage';
 import { UserProfile, MerchantStore, authService } from '../../services/authService';
@@ -67,6 +68,7 @@ interface EpicentrNavbarProps {
   onOpenSearchGrounding?: () => void;
   onOpenChatbot?: () => void;
   onOpenAdminUsers?: () => void;
+  onOpenGmail?: () => void;
   onDemoRestricted?: (featureName: string) => void;
 }
 
@@ -100,6 +102,7 @@ export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
   onOpenSearchGrounding,
   onOpenChatbot,
   onOpenAdminUsers,
+  onOpenGmail,
   onDemoRestricted
 }) => {
   const [shopMenuOpen, setShopMenuOpen] = useState(false);
@@ -524,6 +527,19 @@ export const EpicentrNavbar: React.FC<EpicentrNavbarProps> = ({
             >
               {!canChatbot ? <Lock className="w-3.5 h-3.5 text-amber-500" /> : <MessageSquare className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">ШІ-Консультант</span>
+            </button>
+          )}
+
+          {/* Gmail Google Workspace Integration */}
+          {onOpenGmail && (
+            <button
+              type="button"
+              onClick={onOpenGmail}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30"
+              title="Gmail: комунікація з модерацією та підтримкою Епіцентру"
+            >
+              <Mail className="w-3.5 h-3.5 text-rose-500" />
+              <span className="hidden sm:inline">Gmail</span>
             </button>
           )}
         </div>

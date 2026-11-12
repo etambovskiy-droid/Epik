@@ -1,0 +1,1855 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<yml_catalog date="2026-11-12 16:14">
+<offers>
+<offer id="7000032" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf712505.800x800.png, https://maliarte.com.ua/files/resized/products/kf712505.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712505-2.800x800.png, https://maliarte.com.ua/files/resized/products/kf712505-1_1.800x800.png, https://maliarte.com.ua/files/resized/products/img_8953_8954.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712505-1.800x800.png, https://maliarte.com.ua/files/resized/products/cup58yi0yvw_1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712505</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712505</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte (артикул KF712505). Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Чудово підійдуть для оформлення сучасного інтер'єру вітальні, спальні чи передпокою. Шпалери стійкі до зношування та простий догляд забезпечує їх практичність у щоденному використанні.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000032]]></param>
+</offer>
+<offer id="7000038" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak760512_1.800x800.png, https://maliarte.com.ua/files/resized/products/img_0186.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak760512-2.800x800.png, https://maliarte.com.ua/files/resized/products/ak760512-1_1.800x800.png, https://maliarte.com.ua/files/resized/products/img_0188.800x800.jpg, https://maliarte.com.ua/files/resized/products/aaaa.800x800.png, https://maliarte.com.ua/files/resized/products/ak760512-1.800x800.png, https://maliarte.com.ua/files/resized/products/ak760512.800x800.png, https://maliarte.com.ua/files/resized/products/wt6awwjbdlq.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі AK760512</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі AK760512</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та практичність у догляді. Легко наносяться на стіни та надійно тримаються, ідеально підходять для оформлення сучасного інтер'єру вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000038]]></param>
+</offer>
+<offer id="7000039" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf712101.800x800.png, https://maliarte.com.ua/files/resized/products/kf712101.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712101-1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712101-3.800x800.png, https://maliarte.com.ua/files/resized/products/tekstil.800x800.png, https://maliarte.com.ua/files/resized/products/img_9060.800x800.jpg, https://maliarte.com.ua/files/resized/products/img_9062.800x800.jpg, https://maliarte.com.ua/files/resized/products/img_8964.800x800.jpg, https://maliarte.com.ua/files/resized/products/yudmvxb2vnc_1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712101</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712101</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Підходять для оформлення вітальні, спальні, передпокою чи інших житлових приміщень. Шпалери стійкі до зношування та простий догляд роблять їх практичним вибором для сучасного інтер'єру.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000039]]></param>
+</offer>
+<offer id="7000042" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf712106_1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712106.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712106-1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712106-2.800x800.png, https://maliarte.com.ua/files/resized/products/img_9054.800x800.jpg, https://maliarte.com.ua/files/resized/products/tekstil_2.800x800.png, https://maliarte.com.ua/files/resized/products/img_9062_9065.800x800.jpg, https://maliarte.com.ua/files/resized/products/img_8964_8967.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712106.800x800.png, https://maliarte.com.ua/files/resized/products/yudmvxb2vnc_4.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712106</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712106</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі стильний дизайн та довговічність. Вони стійкі до зношування, легкі в наклеюванні та догляді, а також допомагають приховати дрібні нерівності стін. Ідеальне рішення для сучасного інтер'єру вашої оселі.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000042]]></param>
+</offer>
+<offer id="7000043" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf712114.800x800.png, https://maliarte.com.ua/files/resized/products/kf712114.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712114-1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712114-2.800x800.png, https://maliarte.com.ua/files/resized/products/img_9057.800x800.jpg, https://maliarte.com.ua/files/resized/products/img_9068_9069.800x800.jpg, https://maliarte.com.ua/files/resized/products/img_8964_8972.800x800.jpg, https://maliarte.com.ua/files/resized/products/yudmvxb2vnc_8.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712114</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712114</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі стильний дизайн та довговічність. Вони стійкі до зношування, легкі в монтажі та не потребують нанесення клею безпосередньо на полотно. Чудовий вибір для сучасного інтер'єру житлових приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000043]]></param>
+</offer>
+<offer id="7000044" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf712112-1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712112.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712112.800x800.png, https://maliarte.com.ua/files/resized/products/kf712112-2.800x800.png, https://maliarte.com.ua/files/resized/products/img_9052.800x800.jpg, https://maliarte.com.ua/files/resized/products/img_9068.800x800.jpg, https://maliarte.com.ua/files/resized/products/img_8964_8970.800x800.jpg, https://maliarte.com.ua/files/resized/products/yudmvxb2vnc_7.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712112</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712112</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Підходять для оформлення вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000044]]></param>
+</offer>
+<offer id="7000045" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf712103.800x800.png, https://maliarte.com.ua/files/resized/products/kf712103.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712103-1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712103-2.800x800.png, https://maliarte.com.ua/files/resized/products/img_9059.800x800.jpg, https://maliarte.com.ua/files/resized/products/img_9062_9063.800x800.jpg, https://maliarte.com.ua/files/resized/products/img_8964_8965.800x800.jpg, https://maliarte.com.ua/files/resized/products/yudmvxb2vnc_2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712103</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712103</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Шпалери стійкі до зношування та вигорання, чудово підходять для оформлення вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000045]]></param>
+</offer>
+<offer id="7000046" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf712105_1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712105.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712105-1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712105-2.800x800.png, https://maliarte.com.ua/files/resized/products/img_9055.800x800.jpg, https://maliarte.com.ua/files/resized/products/tekstil_1.800x800.png, https://maliarte.com.ua/files/resized/products/img_9062_9064.800x800.jpg, https://maliarte.com.ua/files/resized/products/img_8964_8966.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712105.800x800.png, https://maliarte.com.ua/files/resized/products/yudmvxb2vnc_3.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712105</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712105</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Шпалери стійкі до зношування та вигорання, чудово підходять для оформлення вітальні, спальні, передпокою чи інших житлових приміщень. Клей наноситься безпосередньо на стіну, що значно спрощує процес поклейки.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000046]]></param>
+</offer>
+<offer id="7000049" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak780513.800x800.png, https://maliarte.com.ua/files/resized/products/ak780513.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak780513-2.800x800.png, https://maliarte.com.ua/files/resized/products/ak780513-1.800x800.png, https://maliarte.com.ua/files/resized/products/r8jc9dmpgdy_2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі AK780513</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі AK780513</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Ідеально підходять для оформлення сучасних інтер'єрів житлових та комерційних приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000049]]></param>
+</offer>
+<offer id="7000053" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf711804.800x800.png, https://maliarte.com.ua/files/resized/products/kf711804.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf711804-2.800x800.png, https://maliarte.com.ua/files/resized/products/kf711804-1.800x800.png, https://maliarte.com.ua/files/resized/products/img_8951_8953.800x800.jpg, https://maliarte.com.ua/files/resized/products/img_8950-2_2.800x800.jpg, https://maliarte.com.ua/files/resized/products/0osrfqtdufc_2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711804</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711804</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Чудово підійдуть для оформлення сучасного інтер'єру житлових чи комерційних приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000053]]></param>
+</offer>
+<offer id="7000059" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak781501.800x800.png, https://maliarte.com.ua/files/resized/products/ak781501.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak781501-1.800x800.png, https://maliarte.com.ua/files/resized/products/ak781501-2.800x800.png, https://maliarte.com.ua/files/resized/products/4xncnsh7so4_1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі AK781501</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі AK781501</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Чудово підійдуть для оформлення сучасного інтер'єру житлових та комерційних приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000059]]></param>
+</offer>
+<offer id="7000060" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak781502_1.800x800.png, https://maliarte.com.ua/files/resized/products/ak781502.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak781502-2.800x800.png, https://maliarte.com.ua/files/resized/products/ak781502-1_1.800x800.png, https://maliarte.com.ua/files/resized/products/ak781502-1.800x800.png, https://maliarte.com.ua/files/resized/products/ak781502.800x800.png, https://maliarte.com.ua/files/resized/products/4xncnsh7so4.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі AK781502</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі AK781502</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Чудово підійдуть для оформлення інтер'єру житлових та комерційних приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000060]]></param>
+</offer>
+<offer id="7000061" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf711501.800x800.png, https://maliarte.com.ua/files/resized/products/kf711501.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf711501-2.800x800.png, https://maliarte.com.ua/files/resized/products/kf711501-1.800x800.png, https://maliarte.com.ua/files/resized/products/shshsh.800x800.png, https://maliarte.com.ua/files/resized/products/img_8783_8789.800x800.jpg, https://maliarte.com.ua/files/resized/products/vjfnbqmglqu_1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711501</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711501</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Чудово підійдуть для оформлення інтер'єру вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000061]]></param>
+</offer>
+<offer id="7000063" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf711507.800x800.png, https://maliarte.com.ua/files/resized/products/kf711507.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf711507-2_1.800x800.png, https://maliarte.com.ua/files/resized/products/kf711507-1.800x800.png, https://maliarte.com.ua/files/resized/products/img_8783.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf711507-2.800x800.png, https://maliarte.com.ua/files/resized/products/vjfnbqmglqu_6.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711507</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711507</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte (арт. KF711507). Матеріал стійкий до зношування та простий у монтажі завдяки флізеліновій основі, яка дозволяє наносити клей безпосередньо на стіну. Чудовий вибір для сучасного інтер'єру житлових та комерційних приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000063]]></param>
+</offer>
+<offer id="7000064" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf712110-1_1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712110.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712110-2.800x800.png, https://maliarte.com.ua/files/resized/products/kf712110.800x800.png, https://maliarte.com.ua/files/resized/products/kf712110-1.800x800.png, https://maliarte.com.ua/files/resized/products/yudmvxb2vnc_6.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712110</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712110</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та практичність у догляді. Легко наносяться на стіну завдяки флізеліновій основі та надійно тримаються довгі роки, зберігаючи первинний зовнішній вигляд.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000064]]></param>
+</offer>
+<offer id="7000066" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf712107_1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712107.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712107-1_1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712107-2.800x800.png, https://maliarte.com.ua/files/resized/products/tekstil_3.800x800.png, https://maliarte.com.ua/files/resized/products/kf712107.800x800.png, https://maliarte.com.ua/files/resized/products/kf712107-1.800x800.png, https://maliarte.com.ua/files/resized/products/yudmvxb2vnc_5.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712107</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712107</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Підходять для оформлення вітальні, спальні, передпокою чи інших житлових приміщень. Завдяки флізеліновій основі клей наноситься безпосередньо на стіну, що значно спрощує процес поклейки.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000066]]></param>
+</offer>
+<offer id="7000067" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf712113-1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712113.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf712113-2.800x800.png, https://maliarte.com.ua/files/resized/products/kf712113_1.800x800.png, https://maliarte.com.ua/files/resized/products/kf712113.800x800.png, https://maliarte.com.ua/files/resized/products/yudmvxb2vnc.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712113</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF712113</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Полотна вирізняються практичністю, довговічністю та стійкістю до вигорання. Флізелінова основа значно спрощує процес монтажу, оскільки клей наноситься безпосередньо на стіну. Ідеальне рішення для стильного оформлення інтер'єру житлових приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000067]]></param>
+</offer>
+<offer id="7000068" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf711504.800x800.png, https://maliarte.com.ua/files/resized/products/kf711504.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf711504-2.800x800.png, https://maliarte.com.ua/files/resized/products/kf711504-1.800x800.png, https://maliarte.com.ua/files/resized/products/shshsh_3.800x800.png, https://maliarte.com.ua/files/resized/products/img_8783_8786.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf711504-3.800x800.png, https://maliarte.com.ua/files/resized/products/vjfnbqmglqu_3.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711504</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711504</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte (артикул KF711504). Поєднують у собі стильний дизайн, довговічність та легкість у монтажі. Підходять для оформлення вітальні, спальні, передпокою чи інших житлових приміщень. Легко наносяться завдяки флізеліновій основі та стійкі до зношування.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000068]]></param>
+</offer>
+<offer id="7000070" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf711503.800x800.png, https://maliarte.com.ua/files/resized/products/kf711503.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf711503-2.800x800.png, https://maliarte.com.ua/files/resized/products/kf711503-1.800x800.png, https://maliarte.com.ua/files/resized/products/shshsh_2.800x800.png, https://maliarte.com.ua/files/resized/products/img_8783_8787.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf711503-3.800x800.png, https://maliarte.com.ua/files/resized/products/vjfnbqmglqu.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711503</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711503</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Полотна відрізняються практичністю, довговічністю та легкістю в монтажі. Чудово підійдуть для оформлення інтер'єру вітальні, спальні або передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000070]]></param>
+</offer>
+<offer id="7000071" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf711502.800x800.png, https://maliarte.com.ua/files/resized/products/kf711502.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf711502-1.800x800.png, https://maliarte.com.ua/files/resized/products/kf711502-2.800x800.png, https://maliarte.com.ua/files/resized/products/shshsh_1.800x800.png, https://maliarte.com.ua/files/resized/products/img_8783_8788.800x800.jpg, https://maliarte.com.ua/files/resized/products/vjfnbqmglqu_2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711502</name>
+<name lang="ua">Шпалери MaliArte Шпалери вінілові на флізеліновій основі KF711502</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Поєднують у собі стильний дизайн, довговічність та практичність. Легко наносяться на стіну завдяки флізеліновій основі та стійкі до зношування.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[3000]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[7000071]]></param>
+</offer>
+<offer id="AK771108" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak771108-2.800x800.png, https://maliarte.com.ua/files/resized/products/ak771108.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak771108-1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-сірі зі сріблястими гілками, вінілові на флізеліні 1,06×10 м AK771108</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-сірі зі сріблястими гілками, вінілові на флізеліні 1,06×10 м AK771108</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні та якісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Полотна світло-сірого кольору з витонченим малюнком у вигляді сріблястих гілок гармонійно доповнять інтер'єр вітальні, спальні чи передпокою. Шпалери зручні в наклеюванні, стійкі до вигорання та легкі у догляді. Стандартний рулон розміром 1,06×10 м.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK771108]]></param>
+</offer>
+<offer id="AK67305" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak67305.800x800.png, https://maliarte.com.ua/files/resized/products/ak67305-1.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak67305-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-сірі під мармур із чорними та золотими прожилками, вініл на флізеліні 1,06×10 м AK67305</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-сірі під мармур із чорними та золотими прожилками, вініл на флізеліні 1,06×10 м AK67305</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі сучасний дизайн та європейську якість. Малюнок під біло-сірий мармур із виразними чорними та золотими прожилками додасть інтер'єру розкоші та елегантності. Розмір рулону становить 1,06×10 м, що забезпечує мінімальну кількість стиків при поклейці. Шпалери стійкі до зношування, практичні у догляді та чудово підійдуть для вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK67305]]></param>
+</offer>
+<offer id="J660613" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j660613.800x800.png, https://maliarte.com.ua/files/resized/products/j660613.800x800.jpg, https://maliarte.com.ua/files/resized/products/j660613-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-сірі під декоративну штукатурку з перламутром, вініл на флізеліні 1,06×10 м J660613</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-сірі під декоративну штукатурку з перламутром, вініл на флізеліні 1,06×10 м J660613</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Стильний дизайн у світло-сірих тонах з імітацією декоративної штукатурки та перламутровим переливом додасть інтер'єру елегантності та вишуканості. Шпалери мають зручний формат рулону 1,06×10 м, легкі у наклеюванні та стійкі до зношування.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J660613]]></param>
+</offer>
+<offer id="J90717" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90717.800x800.png, https://maliarte.com.ua/files/resized/products/j90717.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90717-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte сіро-бежеві однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90717</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte сіро-бежеві однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90717</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні однотонні шпалери MaliArte з імітацією текстильної фактури та делікатним перламутровим блиском. Високоякісне вінілове покриття на флізеліновій основі забезпечує легкість монтажу, довговічність та стійкість до зношування. Оптимальний рулонний формат 1,06×10 м дозволяє швидко та акуратно оклеїти стіни у вітальні, спальні чи передпокої.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90717]]></param>
+</offer>
+<offer id="AK771101" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak771101.800x800.png, https://maliarte.com.ua/files/resized/products/ak771101.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak771101-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte білі під мармур зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK771101</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte білі під мармур зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK771101</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та європейську якість. Вишуканий мармуровий малюнок у білому кольорі, доповнений витонченими сріблястими прожилками, додасть інтер'єру розкоші та візуально розширить простір. Шпалери мають зручний формат рулону 1,06×10 м, легко наносяться на стіну та відзначаються довговічністю й стійкістю до вигорання.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK771101]]></param>
+</offer>
+<offer id="J660606" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j660606.800x800.png, https://maliarte.com.ua/files/resized/products/j660606.800x800.jpg, https://maliarte.com.ua/files/resized/products/j660606-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte білі однотонні під декоративну штукатурку, вініл на флізеліні 1,06×10 м J660606</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte білі однотонні під декоративну штукатурку, вініл на флізеліні 1,06×10 м J660606</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte з фактурою під декоративну штукатурку. Висока якість матеріалів забезпечує легкість монтажу та довговічність покриття. Стандартний розмір рулону 1,06×10 м ідеально підходить для сучасного оформлення житлових та комерційних приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J660606]]></param>
+</offer>
+<offer id="KF750103" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750103.800x800.png, https://maliarte.com.ua/files/resized/products/kf750103.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750103-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-сірі під декоративну штукатурку, вініл на флізеліні 1,06×10 м KF750103</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-сірі під декоративну штукатурку, вініл на флізеліні 1,06×10 м KF750103</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі стильний дизайн та довговічність. Фактура під декоративну штукатурку в біло-сірих тонах ідеально підійде для сучасного інтер'єру вітальні, спальні чи коридору. Завдяки флізеліновій основі шпалери легко наносяться на стіну та не деформуються при висиханні.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750103]]></param>
+</offer>
+<offer id="J90712" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90712.800x800.png, https://maliarte.com.ua/files/resized/products/j90712.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90712-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-сірі однотонні під штукатурку з перламутром, вініл на флізеліні 1,06×10 м J90712</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-сірі однотонні під штукатурку з перламутром, вініл на флізеліні 1,06×10 м J90712</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Світло-сірі однотонні шпалери MaliArte з ефектом штукатурки та перламутровим відливом гармонійно доповнять сучасний інтер'єр. Високоякісне вінілове покриття на флізеліновій основі відзначається практичністю, стійкістю до вигорання та легкістю в монтажі. Розмір рулону: 1,06×10 м.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90712]]></param>
+</offer>
+<offer id="J90705" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90705.800x800.png, https://maliarte.com.ua/files/resized/products/j90705.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90705-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte молочні однотонні під штукатурку з перламутром, вініл на флізеліні 1,06×10 м J90705</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte молочні однотонні під штукатурку з перламутром, вініл на флізеліні 1,06×10 м J90705</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі MaliArte J90705 розміром 1,06×10 м виконані в ніжному молочному відтінку з ефектом штукатурки та делікатним перламутровим блиском. Вони чудово підійдуть для оформлення сучасних віталень, спалень чи коридорів, додаючи інтер'єру вишуканості та візуально розширюючи простір. Завдяки флізеліновій основі шпалери легко наносяться та довго служать.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90705]]></param>
+</offer>
+<offer id="AK67303" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak67303.800x800.png, https://maliarte.com.ua/files/resized/products/ak67303-1.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak67303-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-бежеві під мармур із золотими прожилками, вініл на флізеліні 1,06×10 м AK67303</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-бежеві під мармур із золотими прожилками, вініл на флізеліні 1,06×10 м AK67303</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та європейську якість. Сучасний мармуровий макет у біло-бежевих тонах, доповнений вишуканими золотими прожилками, додасть інтер'єру розкоші та затишку. Полотна шириною 1,06 м зручні в монтажі, стійкі до стирання та легкі у догляді. Ідеальне рішення для вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK67303]]></param>
+</offer>
+<offer id="AK771105" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak771105-2.800x800.png, https://maliarte.com.ua/files/resized/products/ak771105.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak771105-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte білі під мармур із бежево-золотими прожилками, вініл на флізеліні 1,06×10 м AK771105</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte білі під мармур із бежево-золотими прожилками, вініл на флізеліні 1,06×10 м AK771105</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та практичність. Шпалери з імітацією білого мармуру, доповнені витонченими бежево-золотими прожилками, додадуть інтер'єру розкоші та сучасного стилю. Вони ідеально підходять для вітальні, спальні чи передпокою. Флізелінова основа значно спрощує процес монтажу: клей наноситься безпосередньо на стіну, що заощаджує час і зусилля. Розмір рулону становить 1,06×10 м, що забезпечує мінімальну кількість стиків.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK771105]]></param>
+</offer>
+<offer id="J660615" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j660615.800x800.png, https://maliarte.com.ua/files/resized/products/j660615.800x800.jpg, https://maliarte.com.ua/files/resized/products/j660615-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte сіро-блакитні однотонні під штукатурку з перламутром, вініл на флізеліні 1,06×10 м J660615</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte сіро-блакитні однотонні під штукатурку з перламутром, вініл на флізеліні 1,06×10 м J660615</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі сучасний дизайн та високу якість. Фактура під штукатурку з делікатним перламутровим сяйвом додає стінам глибини та вишуканості, візуально розширюючи простір. Шпалери мають зручний формат рулону 1,06×10 м, легко наносяться завдяки флізеліновій основі та вирізняються довговічністю й практичністю в догляді.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J660615]]></param>
+</offer>
+<offer id="J660609" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j660609.800x800.png, https://maliarte.com.ua/files/resized/products/j660609-2.800x800.jpg, https://maliarte.com.ua/files/resized/products/j660609.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-сірі однотонні під декоративну штукатурку, вініл на флізеліні 1,06×10 м J660609</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-сірі однотонні під декоративну штукатурку, вініл на флізеліні 1,06×10 м J660609</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні однотонні шпалери MaliArte з фактурою під декоративну штукатурку гармонійно доповнять сучасний інтер'єр. Високоякісне вінілове покриття на флізеліновій основі забезпечує легкість монтажу, довговічність та стійкість до зношування. Стандартний рулон розміром 1,06×10 м ідеально підходить для оздоблення житлових та комерційних приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J660609]]></param>
+</offer>
+<offer id="KF750109" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750109.800x800.png, https://maliarte.com.ua/files/resized/products/kf750109.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750109-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte кремові під декоративну штукатурку з перламутром, вініл на флізеліні 1,06×10 м KF750109</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte кремові під декоративну штукатурку з перламутром, вініл на флізеліні 1,06×10 м KF750109</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Вишуканні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та європейську якість. Покриття з імітацією декоративної штукатурки та ніжним перламутровим блиском додасть інтер'єру розкоші та затишку. Стандартний рулон розміром 1,06×10 м забезпечує зручність та швидкість монтажу завдяки флізеліновій основі, яка дозволяє наносити клей безпосередньо на стіну.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750109]]></param>
+</offer>
+<offer id="J90714" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90714.800x800.png, https://maliarte.com.ua/files/resized/products/j90714.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90714-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte блакитні однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90714</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte блакитні однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90714</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte розміром 1,06×10 м. Полотна з фактурою під текстиль та делікатним перламутровим блиском додадуть інтер'єру витонченості та затишку. Висока якість матеріалів забезпечує легкість монтажу та довговічність покриття.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90714]]></param>
+</offer>
+<offer id="J90701" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90701.800x800.png, https://maliarte.com.ua/files/resized/products/j90701.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90701-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-бежеві однотонні під текстиль, вініл на флізеліні 1,06×10 м J90701</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-бежеві однотонні під текстиль, вініл на флізеліні 1,06×10 м J90701</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі MaliArte з фактурою під текстиль у світло-бежевому кольорі. Висока якість матеріалів забезпечує легкість монтажу та довговічність покриття. Розмір рулону: 1,06×10 м.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90701]]></param>
+</offer>
+<offer id="J90709" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90709.800x800.png, https://maliarte.com.ua/files/resized/products/j90709.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90709-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-сірі однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90709</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-сірі однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90709</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та європейську якість. Світло-сірий колір із делікатним текстильним фактурним малюнком та перламутровим відблиском додає інтер'єру вишуканості та візуально розширює простір. Шпалери мають зручний формат рулону 1,06×10 м, що забезпечує мінімальну кількість стиків під час монтажу. Вініловий шар стійкий до зношування та вигорання, що робить їх чудовим вибором для вітальні, спальні чи коридору.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90709]]></param>
+</offer>
+<offer id="AK66410" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak66410-2.800x800.png, https://maliarte.com.ua/files/resized/products/ak66410.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak66410-1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-бежеві під мармур із коричневими прожилками, вініл на флізеліні 1,06×10 м AK66410</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-бежеві під мармур із коричневими прожилками, вініл на флізеліні 1,06×10 м AK66410</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Вишукані вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі сучасний стиль та високу європейську якість. Дизайн виконаний у благородній біло-бежевій гамі з імітацією мармурової текстури та виразними коричневими прожилками, що додає інтер'єру розкоші та затишку. Завдяки флізеліновій основі шпалери легко наносяться на стіну та не деформуються при висиханні, а вінілове покриття стійке до зношування та вигорання. Оптимальний розмір рулону 1,06×10 м дозволяє мінімізувати кількість стиків.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK66410]]></param>
+</offer>
+<offer id="AK67304" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak67304.800x800.png, https://maliarte.com.ua/files/resized/products/ak67304-1.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak67304-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-бежеві під мармур із золотими прожилками, вініл на флізеліні 1,06×10 м AK67304</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-бежеві під мармур із золотими прожилками, вініл на флізеліні 1,06×10 м AK67304</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний мармуровий малюнок у біло-бежевих тонах із витонченими золотими прожилками. Високоякісні матеріали забезпечують легкість монтажу, довговічність та стійкість до вигорання. Стандартний розмір рулону 1,06х10 м ідеально підходить для оформлення сучасних житлових інтер'єрів.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK67304]]></param>
+</offer>
+<offer id="AK771103" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak771103-2.800x800.png, https://maliarte.com.ua/files/resized/products/ak771103.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak771103-1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-сірі під мармур зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK771103</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-сірі під мармур зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK771103</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та європейську якість. Світло-сіре мармурове полотно, доповнене вишуканими сріблястими прожилками, додасть інтер'єру розкоші та сучасного вигляду. Завдяки флізеліновій основі шпалери легко наносяться на стіну, не деформуються при висиханні та є зручними в догляді.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK771103]]></param>
+</offer>
+<offer id="AK771104" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak771104.800x800.png, https://maliarte.com.ua/files/resized/products/ak771104.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak771104-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte молочно-бежеві під мармур із сірими прожилками, вініл на флізеліні 1,06×10 м AK771104</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte молочно-бежеві під мармур із сірими прожилками, вініл на флізеліні 1,06×10 м AK771104</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та європейську якість. Фактура під мармур у витончених молочно-бежевих відтінках із сірими прожилками візуально розширює простір і додає інтер'єру розкоші. Шпалери зручні в монтажі, оскільки клей наноситься безпосередньо на стіну, вони стійкі до вигорання та легкі в догляді.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK771104]]></param>
+</offer>
+<offer id="AK771107" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak771107-2.800x800.png, https://maliarte.com.ua/files/resized/products/ak771107.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak771107-1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-бежеві зі сріблястими гілками, вінілові на флізеліні 1,06×10 м AK771107</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-бежеві зі сріблястими гілками, вінілові на флізеліні 1,06×10 м AK771107</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі стильний дизайн та практичність. Полотно виконане в елегантній біло-бежевій гамі з витонченими сріблястими гілками, що додасть інтер'єру вишуканості та затишку. Шпалери зручні у монтажі, стійкі до зношування та легкі у догляді. Стандартний розмір рулону 1,06×10 м ідеально підходить для оформлення сучасних житлових приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK771107]]></param>
+</offer>
+<offer id="KF750214" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750214.800x800.png, https://maliarte.com.ua/files/resized/products/kf750214.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750214-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte пудрово-бежеві однотонні з перламутром, вініл на флізеліні 1,06×10 м KF750214</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte пудрово-бежеві однотонні з перламутром, вініл на флізеліні 1,06×10 м KF750214</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та високу європейську якість. Ніжний пудрово-бежевий відтінок з витонченим перламутровим сяйвом візуально розширює простір і додає інтер'єру затишку та розкоші. Ширина рулону 1,06 метра забезпечує швидкий та зручний монтаж із мінімальною кількістю стиків. Покриття стійке до вигорання та легке у догляді.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750214]]></param>
+</offer>
+<offer id="KF750208" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750208.800x800.png, https://maliarte.com.ua/files/resized/products/kf750208.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750208-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-блакитні однотонні з перламутром, вініл на флізеліні 1,06×10 м KF750208</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-блакитні однотонні з перламутром, вініл на флізеліні 1,06×10 м KF750208</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери MaliArte світло-блакитного кольору з перламутровим відливом на міцній флізеліновій основі. Високоякісне покриття розміром 1,06×10 м поєднує естетичну привабливість та практичність, гармонійно доповнюючи сучасний інтер'єр житлових приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750208]]></param>
+</offer>
+<offer id="J660602" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j660602-3.800x800.png, https://maliarte.com.ua/files/resized/products/j660602.800x800.jpg, https://maliarte.com.ua/files/resized/products/j660602-1_1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-сірі однотонні під штукатурку, вініл на флізеліні 1,06×10 м J660602</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-сірі однотонні під штукатурку, вініл на флізеліні 1,06×10 м J660602</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Світло-сірі однотонні шпалери MaliArte з фактурою під штукатурку стануть чудовим вибором для сучасного інтер'єру. Виготовлені з якісного вінілу на флізеліновій основі, вони легкі в наклеюванні, стійкі до зношування та практичні в догляді. Стандартний рулон розміром 1,06×10 м дозволяє швидко та акуратно заповнити простір стін.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J660602]]></param>
+</offer>
+<offer id="J660604" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j660604.800x800.png, https://maliarte.com.ua/files/resized/products/j660604.800x800.jpg, https://maliarte.com.ua/files/resized/products/j660604-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-блакитні однотонні під штукатурку, вініл на флізеліні 1,06×10 м J660604</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-блакитні однотонні під штукатурку, вініл на флізеліні 1,06×10 м J660604</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte. Полотна з фактурою під штукатурку в біло-блакитній гамі ідеально підійдуть для сучасного інтер'єру вітальні, спальні чи передпокою. Розмір рулону: 1,06×10 м. Шпалери вирізняються стійкістю до вигорання та легкістю у монтажі.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J660604]]></param>
+</offer>
+<offer id="J660607" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j660607.800x800.png, https://maliarte.com.ua/files/resized/products/j660607-1.800x800.jpg, https://maliarte.com.ua/files/resized/products/j660607-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte молочні однотонні під декоративну штукатурку, вініл на флізеліні 1,06×10 м J660607</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte молочні однотонні під декоративну штукатурку, вініл на флізеліні 1,06×10 м J660607</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte у молочному відтінку. Фактура імітує декоративну штукатурку, що додає стінам стильного та сучасного вигляду. Розмір рулону: 1,06×10 м. Шпалери вирізняються практичністю, стійкістю до вигорання та легкістю у монтажі.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J660607]]></param>
+</offer>
+<offer id="J660610" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j660610-3.800x800.png, https://maliarte.com.ua/files/resized/products/j660610.800x800.jpg, https://maliarte.com.ua/files/resized/products/j660610-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-бежеві однотонні під штукатурку, вініл на флізеліні 1,06×10 м J660610</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-бежеві однотонні під штукатурку, вініл на флізеліні 1,06×10 м J660610</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні однотонні шпалери MaliArte з фактурою під штукатурку в світло-бежевому відтінку. Виготовлені з міцного вінілу на флізеліновій основі, що забезпечує легкість монтажу та довговічність. Стандартний рулон розміром 1,06×10 м ідеально підходить для сучасного оформлення житлових та комерційних приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J660610]]></param>
+</offer>
+<offer id="J660614" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j660614-2.800x800.png, https://maliarte.com.ua/files/resized/products/j660614.800x800.jpg, https://maliarte.com.ua/files/resized/products/j660614-1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-блакитні однотонні під штукатурку, вініл на флізеліні 1,06×10 м J660614</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-блакитні однотонні під штукатурку, вініл на флізеліні 1,06×10 м J660614</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte у світло-блакитному кольорі з фактурою під штукатурку. Розмір рулону: 1,06×10 м. Ідеальне рішення для сучасного інтер'єру житлових та комерційних приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J660614]]></param>
+</offer>
+<offer id="KF750104" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750104.800x800.png, https://maliarte.com.ua/files/resized/products/kf750104.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750104-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-блакитні під декоративну штукатурку, вініл на флізеліні 1,06×10 м KF750104</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-блакитні під декоративну штукатурку, вініл на флізеліні 1,06×10 м KF750104</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte у світло-блакитному кольорі з фактурою під декоративну штукатурку. Висока якості матеріалів забезпечує легкість монтажу та довговічність покриття. Оптимальний розмір рулону 1,06×10 м ідеально підходить для сучасного оформлення житлових інтер'єрів.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750104]]></param>
+</offer>
+<offer id="KF750101" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750101-3.800x800.png, https://maliarte.com.ua/files/resized/products/kf750101.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750101-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte молочно-бежеві під декоративну штукатурку, вініл на флізеліні 1,06×10 м KF750101</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte молочно-бежеві під декоративну штукатурку, вініл на флізеліні 1,06×10 м KF750101</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte виконані в елегантному молочно-бежевому кольорі з фактурою під декоративну штукатурку. Ширина рулону 1,06 м забезпечує мінімальну кількість стиків при поклейці та створює ефект монолітного стінового покриття. Високоякісні матеріали стійкі до вигорання та легкі в догляді, що робить їх ідеальним вибором для сучасного інтер'єру вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750101]]></param>
+</offer>
+<offer id="J90713" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90713.800x800.png, https://maliarte.com.ua/files/resized/products/j90713.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90713-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-блакитні однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90713</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-блакитні однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90713</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Світло-блакитні однотонні шпалери MaliArte з витонченою текстурою під текстиль та делікатним перламутровим блиском. Виготовлені з якісного вінілу на флізелінній основі, що забезпечує легкість монтажу та довговічність. Стандартний розмір рулону 1,06×10 м ідеально підходить для сучасного оформлення житлових інтер'єрів.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90713]]></param>
+</offer>
+<offer id="J90716" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90716.800x800.png, https://maliarte.com.ua/files/resized/products/j90716.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90716-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte темно-сині однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90716</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte темно-сині однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90716</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі європейську якість та вишуканий дизайн. Темно-синій відтінок із фактурою під текстиль та ніжним перламутровим блиском додасть інтер'єру глибини, елегантності та затишку. Широкий формат рулону (1,06х10 м) забезпечує мінімальну кількість стиків під час монтажу. Шпалери вирізняються стійкістю до вигорання та зносостійкістю, що робить їх ідеальним вибором для вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90716]]></param>
+</offer>
+<offer id="J90707" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90707.800x800.png, https://maliarte.com.ua/files/resized/products/j90707.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90707-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte кремові однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90707</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte кремові однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90707</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та високу європейську якість. Фактура під текстиль із ніжним перламутровим відблиском додає стін вишуканості та візуально розширює простір. Шпалери мають зручний формат рулону 1,06×10 м, легкі у наклеюванні та стійкі до зношування. Ідеальне рішення для сучасного інтер'єру вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90707]]></param>
+</offer>
+<offer id="J90708" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90708.800x800.png, https://maliarte.com.ua/files/resized/products/j90708.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90708-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte пудрово-бежеві однотонні під текстиль, вініл на флізеліні 1,06×10 м J90708</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte пудрово-бежеві однотонні під текстиль, вініл на флізеліні 1,06×10 м J90708</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі вишуканий дизайн та європейську якість. Фактура під текстиль додає стінам затишку та елегантності, а ніжний пудрово-бежевий відтінок гармонійно пасує до будь-якого інтер'єру спальні, вітальні чи передпокою. Шпалери мають зручний формат рулону 1,06×10 м, легко наносяться за допомогою клею для флізеліну, який наноситься безпосередньо на стіну, та вирізняються довговічністю й стійкістю до вигорання.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90708]]></param>
+</offer>
+<offer id="J90710" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90710.800x800.png, https://maliarte.com.ua/files/resized/products/j90710.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90710-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte сірі однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90710</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte сірі однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90710</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte. Однотонний дизайн з фактурою під текстиль та делікатним перламутровим блиском додасть інтер'єру елегантності та затишку. Розмір рулону: 1,06×10 м. Шпалери вирізняються високою зносостійкістю, простотою у монтажі та довговічністю.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90710]]></param>
+</offer>
+<offer id="J90703" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j90703.800x800.png, https://maliarte.com.ua/files/resized/products/j90703.800x800.jpg, https://maliarte.com.ua/files/resized/products/j90703-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte білі однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90703</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte білі однотонні під текстиль із перламутром, вініл на флізеліні 1,06×10 м J90703</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та високу європейську якість. Фактура під текстиль із делікатним перламутровим блиском додає інтер'єру вишуканості та візуально розширює простір. Завдяки флізеліновій основі шпалери легко наносяться на стіну та не деформуються під час висихання. Ширумість рулону 1,06 метра забезпечує мінімальну кількість стиків для ідеально рівного покриття.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J90703]]></param>
+</offer>
+<offer id="AK67311" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak67311-2.800x800.png, https://maliarte.com.ua/files/resized/products/ak67311-1.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak67311.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-сірі під мармур із графітовими та золотими прожилками, вініл на флізеліні 1,06×10 м AK67311</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-сірі під мармур із графітовими та золотими прожилками, вініл на флізеліні 1,06×10 м AK67311</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Вишуканні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі сучасний стиль та високу європейську якість. Дизайн виконаний у вигляді мармурової текстури в біло-сірій гамі, доповненій виразними графітовими та елегантними золотими прожилками, що додають інтер'єру розкоші та глибини. Завдяки рулону збільшеного формату (1,06×10 м) шпалери легко клеяться, мінімізують кількість стиків та забезпечують бездоганний зовнішній вигляд стін. Вінілове покриття стійке до стирання та легке у догляді, що робить їх ідеальним вибором для вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK67311]]></param>
+</offer>
+<offer id="AK67307" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak67307.800x800.png, https://maliarte.com.ua/files/resized/products/ak67307.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak67307-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-сірі під мармур із чорними та золотими прожилками, вініл на флізеліні 1,06×10 м AK67307</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-сірі під мармур із чорними та золотими прожилками, вініл на флізеліні 1,06×10 м AK67307</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі сучасний дизайн та європейську якість. Вишуканий мармуровий макет у біло-сірій гамі, доповнений виразними чорними та золотими прожилками, додасть інтер'єру розкоші та елегантності. Шпалери мають зручний формат рулону 1,06×10 м, легко наносяться завдяки флізеліновій основі та вирізняються довговічністю й практичністю в догляді.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK67307]]></param>
+</offer>
+<offer id="AK67306" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak67306.800x800.png, https://maliarte.com.ua/files/resized/products/ak67306-2.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak67306-3.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-сірі під мармур із графітовими прожилками, вініл на флізеліні 1,06×10 м AK67306</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-сірі під мармур із графітовими прожилками, вініл на флізеліні 1,06×10 м AK67306</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та європейську якість. Малюнок під біло-сірий мармур із виразними графітовими прожилками додасть інтер'єру розкоші та сучасного вигляду. Шпалери зручні у монтажі, стійкі до вигорання та легкі у догляді. Широкий рулон (1,06 м) дозволяє мінімізувати кількість стиків на стіні.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK67306]]></param>
+</offer>
+<offer id="AK772201" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak772201-2.800x800.png, https://maliarte.com.ua/files/resized/products/ak772201-1.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak772201-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-сірі під штукатурку зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK772201</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-сірі під штукатурку зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK772201</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують стильний дизайн та практичність. Фактура під штукатурку світло-сірого кольору зі сріблястими прожилками додає стінам вишуканого блиску та візуального об'єму. Шпалери стійкі до зношування, легкі в наклеюванні завдяки флізеліновій основі та чудово підходять для оформлення вітальні, спальні або коридору.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK772201]]></param>
+</offer>
+<offer id="AK772204" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak772204-3.800x800.png, https://maliarte.com.ua/files/resized/products/ak772204.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak772204-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte молочно-бежеві під штукатурку зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK772204</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte молочно-бежеві під штукатурку зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK772204</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Високоякісні вінілові шпалери на флізеліновій основі від бренду MaliArte. Полотна виконані в елегантному молочно-бежевому кольорі з фактурою під штукатурку та витонченими сріблястими прожилками. Стандартний розмір рулону 1,06×10 м забезпечує зручний та швидкий монтаж з мінімальною кількістю стиків. Шпалери вирізняються стійкістю до зношування та простотою в догляді, ідеально підходять для оформлення сучасних житлових інтер'єрів.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK772204]]></param>
+</offer>
+<offer id="AK772205" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak772205-3.800x800.png, https://maliarte.com.ua/files/resized/products/ak772205.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak772205-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-бежеві під штукатурку зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK772205</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-бежеві під штукатурку зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK772205</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte. Полотна виконані у світло-бежевому відтінку з імітацією фактурної штукатурки та елегантними сріблястими прожилками, які додають інтер'єру вишуканого блиску. Розмір рулону становить 1,06х10 м. Шпалери вирізняються високою стійкістю до зношування, практичністю у догляді та легкістю монтажу.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK772205]]></param>
+</offer>
+<offer id="AK772207" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak772207-3.800x800.png, https://maliarte.com.ua/files/resized/products/ak772207.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak772207-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte біло-сірі під штукатурку зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK772207</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte біло-сірі під штукатурку зі сріблястими прожилками, вініл на флізеліні 1,06×10 м AK772207</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі від бренду MaliArte. Мають фактурний дизайн під штукатурку в біло-сірій гамі з витонченими сріблястими прожилками, які додають інтер'єру елегантності та сучасного блиску. Розмір рулону: 1,06×10 м. Шпалери вирізняються високою зносостійкістю, практичністю у догляді та легкістю монтажу.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK772207]]></param>
+</offer>
+<offer id="AK772208" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/ak772208-3.800x800.png, https://maliarte.com.ua/files/resized/products/ak772208.800x800.jpg, https://maliarte.com.ua/files/resized/products/ak772208-1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-сірі під штукатурку зі сріблястими лініями, вініл на флізеліні 1,06×10 м AK772208</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-сірі під штукатурку зі сріблястими лініями, вініл на флізеліні 1,06×10 м AK772208</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Якісні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі стильний дизайн та практичність. Полотно виконане в світло-сірому кольорі з фактурою під штукатурку, доповнене елегантними сріблястими лініями, що додають інтер'єру вишуканості. Шпалери зручні в монтажі, стійкі до зношування та ідеально підходять для оформлення вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[AK772208]]></param>
+</offer>
+<offer id="KF750204" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750204.800x800.png, https://maliarte.com.ua/files/resized/products/kf750204.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750204-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-сірі однотонні зі сріблястим перламутром, вініл на флізеліні 1,06×10 м KF750204</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-сірі однотонні зі сріблястим перламутром, вініл на флізеліні 1,06×10 м KF750204</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Світло-сірі однотонні шпалери MaliArte зі сріблястим перламутром поєднують у собі вишуканий дизайн та високу німецьку якість. Виготовлені з міцного вінілу на флізеліновій основі, вони легкі у наклеюванні, стійкі до вигорання та зносу. Стандартний рулон розміром 1,06×10 м ідеально підходить для оформлення сучасних житлових інтер'єрів — вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750204]]></param>
+</offer>
+<offer id="KF750212" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750212.800x800.png, https://maliarte.com.ua/files/resized/products/kf750212.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750212-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-бузкові однотонні з перламутром, вініл на флізеліні 1,06×10 м KF750212</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-бузкові однотонні з перламутром, вініл на флізеліні 1,06×10 м KF750212</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери MaliArte на флізеліновій основі розміром 1,06×10 м. Ніжний світло-бузковий відтінок із перламутровим переливом додасть інтер'єру витонченості та візуально розширить простір. Високоякісні матеріали забезпечують легкість монтажу та довговічність покриття.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750212]]></param>
+</offer>
+<offer id="J660612" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j60612.800x800.png, https://maliarte.com.ua/files/resized/products/j60612.800x800.jpg, https://maliarte.com.ua/files/resized/products/j60612-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte світло-бежеві однотонні під штукатурку, вініл на флізеліні 1,06×10 м J660612</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte світло-бежеві однотонні під штукатурку, вініл на флізеліні 1,06×10 м J660612</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Світло-бежеві однотонні шпалери MaliArte з фактурою під штукатурку поєднують естетику та практичність. Виготовлені з високоякісного вінілу на флізеліновій основі, вони легкі в наклеюванні, стійкі до стирання та довговічні. Полотна розміром 1,06×10 м ідеально підходять для сучасного оформлення вітальні, спальні чи передпокою, створюючи затишну та стильну атмосферу.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J660612]]></param>
+</offer>
+<offer id="J660603" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/j660603-2.800x800.png, https://maliarte.com.ua/files/resized/products/j660603-1.800x800.jpg, https://maliarte.com.ua/files/resized/products/j660603.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte сірі однотонні під декоративну штукатурку, вініл на флізеліні 1,06×10 м J660603</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte сірі однотонні під декоративну штукатурку, вініл на флізеліні 1,06×10 м J660603</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні однотонні шпалери MaliArte з фактурою під декоративну штукатурку стануть чудовим вибором для сучасного інтер'єру. Виготовлені з якісного вінілу на флізеліновій основі, що забезпечує легкість монтажу та довговічність покриття. Стандартний розмір рулону 1,06×10 м дозволяє швидко та акуратно оклеїти стіни житлових чи комерційних приміщень.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[J660603]]></param>
+</offer>
+<offer id="KF750203" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750203.800x800.png, https://maliarte.com.ua/files/resized/products/kf750203.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750203-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte молочно-білі однотонні з перламутром, вініл на флізеліні 1,06×10 м KF750203</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte молочно-білі однотонні з перламутром, вініл на флізеліні 1,06×10 м KF750203</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі елегантний дизайн та високу німецьку якість. Ніжний молочно-білий відтінок із делікатним перламутровим сяйвом візуально розширює простір, наповнюючи його світлом і затишком. Шпалери мають зручний формат рулону 1,06×10 м, що забезпечує мінімальну кількість стиків при монтажі. Вінілове покриття стійке до зношування та вигорання, що робить їх ідеальним вибором для оформлення вітальні, спальні чи коридору.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nakladennya_malyunka" name="Накладення малюнка" valuecode="pryame">Пряме</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750203]]></param>
+</offer>
+<offer id="KF750207" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750207.800x800.png, https://maliarte.com.ua/files/resized/products/kf750207.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750207-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte блакитні однотонні фонові з перламутром, вініл на флізеліні 1,06×10 м KF750207</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte блакитні однотонні фонові з перламутром, вініл на флізеліні 1,06×10 м KF750207</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte поєднують у собі європейську якість та вишуканий дизайн. Ніжний блакитний відтінок із делікатним перламутровим переливом візуально розширює простір і додає інтер'єру легкості та елегантності. Завдяки ширині рулону 1,06 м процес поклейки стає швидшим і зручнішим, а мінімальна кількість стиків забезпечує бездоганний зовнішній вигляд стін. Вінілове покриття вирізняється практичністю: воно стійке до вигорання та легке у догляді. Ідеальний вибір для оформлення вітальні, спальні чи передпокою.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750207]]></param>
+</offer>
+<offer id="KF750201" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750201.800x800.png, https://maliarte.com.ua/files/resized/products/kf750201.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750201-2.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte білі однотонні фонові з перламутром, вініл на флізеліні 1,06×10 м KF750201</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte білі однотонні фонові з перламутром, вініл на флізеліні 1,06×10 м KF750201</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Однотонні вінілові шпалери на флізеліновій основі від бренду MaliArte. Полотно виконане в білому кольорі з вишуканим перламутровим відблиском, що додає інтер'єру легкості та візуально розширює простір. Стандартний розмір рулону 1,06×10 м забезпечує зручність та швидкість монтажу з мінімальною кількістю стиків. Висока якість матеріалів гарантує довговічність, стійкість до вигорання та легкість у догляді.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750201]]></param>
+</offer>
+<offer id="KF750202" available="true">
+<price>1200.00</price>
+<availability>in_stock</availability>
+<category code="3211">Шпалери</category>
+<picture>https://maliarte.com.ua/files/resized/products/kf750202.800x800.png, https://maliarte.com.ua/files/resized/products/kf750202.800x800.jpg, https://maliarte.com.ua/files/resized/products/kf750202-1.800x800.jpg</picture>
+<name lang="ru">Шпалери MaliArte Шпалери MaliArte білі однотонні під штукатурку з перламутром, вініл на флізеліні 1,06×10 м KF750202</name>
+<name lang="ua">Шпалери MaliArte Шпалери MaliArte білі однотонні під штукатурку з перламутром, вініл на флізеліні 1,06×10 м KF750202</name>
+<description lang="ru"><![CDATA[]]></description>
+<description lang="ua"><![CDATA[Стильні вінілові шпалери на флізеліновій основі MaliArte з фактурою під штукатурку та витонченим перламутровим блиском. Ширина рулону 1,06 м і довжина 10 м забезпечують зручність монтажу та мінімальну кількість стиків. Високоякісні матеріали гарантують довговічність, стійкість до вигорання та легкість у догляді. Ідеальне рішення для сучасного інтер'єру вітальні, спальні чи коридору.]]></description>
+<attribute_set code="3211">Шпалери</attribute_set>
+<param paramcode="7181" name="Ширина рулону" valuecode="106_m">1.06 м</param>
+<param paramcode="material_poverkhni" name="Матеріал поверхні" valuecode="vinil">Вініл</param>
+<param paramcode="2990" name="Довжина рулону"><![CDATA[10]]></param>
+<param paramcode="material_osnovy" name="Матеріал основи" valuecode="flizelin">Флізелін</param>
+<param paramcode="nanesennya_kleyu" name="Нанесення клею" valuecode="kley_nanosytsya_na_stinu">Клей наноситься на стіну</param>
+<param paramcode="measure" name="Міра виміру" valuecode="measure_pcs">шт.</param>
+<param paramcode="ratio" name="Мінімальна кратність товару"><![CDATA[1]]></param>
+<param paramcode="country_of_origin" name="Країна-виробник" valuecode="ukr">Україна</param>
+<param paramcode="brand" name="Бренд" valuecode="maliarte">MaliArte</param>
+<param paramcode="width" name="Ширина"><![CDATA[10]]></param>
+<param paramcode="height" name="Висота"><![CDATA[20]]></param>
+<param paramcode="length" name="Глибина"><![CDATA[30]]></param>
+<param paramcode="weight" name="Вага"><![CDATA[0]]></param>
+<param paramcode="barcodes" name="Штрих код"><![CDATA[KF750202]]></param>
+</offer>
+</offers>
+</yml_catalog>

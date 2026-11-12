@@ -52,14 +52,46 @@ function wrapCdata(content: string): string {
   return cleanXmlText(content).replace(/]]>/g, ']]]]><![CDATA[>');
 }
 
-function slugify(text: string): string {
+const CYRILLIC_TO_LATIN_MAP: Record<string, string> = {
+  // Ukrainian & Russian Cyrillic
+  'а': 'a', 'б': 'b', 'в': 'v', 'г': 'h', 'ґ': 'g', 'д': 'd', 'е': 'e', 'є': 'ye',
+  'ж': 'zh', 'з': 'z', 'и': 'y', 'і': 'i', 'ї': 'yi', 'й': 'y', 'к': 'k', 'л': 'l',
+  'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+  'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch', 'ь': '',
+  'ю': 'yu', 'я': 'ya', 'ы': 'y', 'э': 'e', 'ё': 'yo', 'ъ': ''
+};
+
+export function transliterateCyrillic(text: string): string {
   if (!text) return '';
   return text
     .toLowerCase()
+    .split('')
+    .map((char) => CYRILLIC_TO_LATIN_MAP[char] !== undefined ? CYRILLIC_TO_LATIN_MAP[char] : char)
+    .join('');
+}
+
+function stringSimpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+export function slugify(text: string, fallbackPrefix = 'param'): string {
+  if (!text) return `${fallbackPrefix}_${Math.random().toString(36).substring(2, 7)}`;
+  const transliterated = transliterateCyrillic(text);
+  const slug = transliterated
     .trim()
-    .replace(/[^\w\s-]/g, '')
+    .replace(/[^a-z0-9\s_-]/g, '')
     .replace(/[\s_-]+/g, '_')
-    .replace(/^-+|-+$/g, '');
+    .replace(/^_+|_+$/g, '');
+
+  if (!slug) {
+    return `${fallbackPrefix}_${stringSimpleHash(text) || 'val'}`;
+  }
+  return slug;
 }
 
 function extractNumericFloat(val: string, suffix?: string): string {
@@ -246,14 +278,20 @@ export class EpicentrXmlGeneratorService {
         }
 
         const matchedDef = attrDefsMap.get(pCodeLower) || attrDefsMap.get(pNameLower);
-        const effectiveCode = param.code || matchedDef?.code || slugify(param.name);
+        const effectiveCode = param.code || matchedDef?.code || slugify(param.name, 'param');
+        const effectiveName = matchedDef?.name || param.name || effectiveCode;
 
         if (emittedParamCodes.has(effectiveCode)) return;
         emittedParamCodes.add(effectiveCode);
 
         // 1. Text parameter with bilingual support (e.g. 767 Комплектація)
-        if (matchedDef?.type === 'text' || effectiveCode === '767') {
-          const uaTitle = matchedDef?.translations?.find((t) => t.languageCode === 'ua')?.title || matchedDef?.name || param.name;
+        if (
+          matchedDef?.type === 'text' ||
+          effectiveCode === '767' ||
+          effectiveCode === 'equipment' ||
+          pNameLower.includes('комплектац')
+        ) {
+          const uaTitle = matchedDef?.translations?.find((t) => t.languageCode === 'ua')?.title || matchedDef?.name || effectiveName;
           const ruTitle = matchedDef?.translations?.find((t) => t.languageCode === 'ru')?.title || uaTitle;
 
           lines.push(
@@ -265,7 +303,7 @@ export class EpicentrXmlGeneratorService {
           return;
         }
 
-        // 2. Multiselect parameter (e.g. 3176 Тематика: "тварини, коти")
+        // 2. Multiselect parameter (e.g. 3176 Тематика, genre, etc.)
         if (matchedDef?.type === 'multiselect') {
           const rawItems = param.value.split(/[,;/]+/).map((s) => s.trim()).filter(Boolean);
           const valCodes: string[] = [];
@@ -283,20 +321,20 @@ export class EpicentrXmlGeneratorService {
               valCodes.push(matchedOpt.code);
               valTexts.push(matchedOpt.value);
             } else {
-              valCodes.push(slugify(item));
+              valCodes.push(slugify(item, 'val'));
               valTexts.push(item);
             }
           });
 
-          const codeStr = param.valuecode || valCodes.join(',');
-          const textStr = valTexts.join(', ');
+          const codeStr = param.valuecode || (valCodes.length > 0 ? valCodes.join(',') : slugify(param.value, 'val'));
+          const textStr = valTexts.length > 0 ? valTexts.join(', ') : param.value;
           lines.push(
-            `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(matchedDef.name || param.name)}" valuecode="${escapeXml(codeStr)}">${escapeXml(textStr)}</param>`
+            `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(effectiveName)}" valuecode="${escapeXml(codeStr)}">${escapeXml(textStr)}</param>`
           );
           return;
         }
 
-        // 3. Select parameter (e.g. 13183 Розмір, 11887 Полотно, 9875 Рівень складності)
+        // 3. Select parameter (e.g. language, age_group, size, material, difficulty)
         if (matchedDef?.type === 'select') {
           const valLower = param.value.toLowerCase().trim();
           const matchedOpt = matchedDef.options?.find(
@@ -305,28 +343,56 @@ export class EpicentrXmlGeneratorService {
               o.value_ru?.toLowerCase() === valLower ||
               o.code.toLowerCase() === valLower
           );
-          const effectiveValCode = param.valuecode || matchedOpt?.code || slugify(param.value);
+          const effectiveValCode = param.valuecode || matchedOpt?.code || slugify(param.value, 'val');
           const effectiveValText = matchedOpt?.value || param.value;
 
           lines.push(
-            `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(matchedDef.name || param.name)}" valuecode="${escapeXml(effectiveValCode)}">${escapeXml(effectiveValText)}</param>`
+            `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(effectiveName)}" valuecode="${escapeXml(effectiveValCode)}">${escapeXml(effectiveValText)}</param>`
           );
           return;
         }
 
-        // 4. Float / Numeric parameter (e.g. 113 Гарантія)
+        // 4. Float / Numeric parameter (e.g. warranty, power, frequency) - strictly numbers without letters
         if (matchedDef?.type === 'float' || matchedDef?.type === 'numeric') {
           const cleanNum = extractNumericFloat(param.value, matchedDef.suffix);
           lines.push(
-            `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(matchedDef.name || param.name)}"><![CDATA[${cleanNum}]]></param>`
+            `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(effectiveName)}"><![CDATA[${cleanNum}]]></param>`
           );
           return;
         }
 
-        // 5. General fallback parameter
-        const valCodeAttr = param.valuecode ? ` valuecode="${escapeXml(param.valuecode)}"` : '';
+        // 5. Array parameter (e.g. barcodes) - letters and numbers separated by comma or semicolon
+        if (matchedDef?.type === 'array') {
+          const cleanArr = param.value.replace(/[^\w\d,;\-\s]/g, '').trim();
+          lines.push(
+            `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(effectiveName)}"><![CDATA[${cleanArr}]]></param>`
+          );
+          return;
+        }
+
+        // 6. String parameter (e.g. model reference code) - alphanumeric without separators/punctuation
+        if (matchedDef?.type === 'string') {
+          const cleanStr = param.value.replace(/[\s,;./\\-]+/g, '').trim();
+          lines.push(
+            `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(effectiveName)}"><![CDATA[${cleanStr || param.value}]]></param>`
+          );
+          return;
+        }
+
+        // 7. General fallback parameter (Universal across all categories)
+        // Ensure every discrete parameter receives a valid, non-empty valuecode
+        let effectiveValCode = param.valuecode;
+        if (!effectiveValCode) {
+          if ((param.value.includes(',') || param.value.includes(';')) && !param.value.match(/^[0-9]+,[0-9]+$/)) {
+            const rawParts = param.value.split(/[,;]+/).map((s) => s.trim()).filter(Boolean);
+            effectiveValCode = rawParts.length > 0 ? rawParts.map((p) => slugify(p, 'val')).join(',') : slugify(param.value, 'val');
+          } else {
+            effectiveValCode = slugify(param.value, 'val');
+          }
+        }
+
         lines.push(
-          `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(param.name)}"${valCodeAttr}>${escapeXml(param.value)}</param>`
+          `<param paramcode="${escapeXml(effectiveCode)}" name="${escapeXml(effectiveName)}" valuecode="${escapeXml(effectiveValCode)}">${escapeXml(param.value)}</param>`
         );
       });
 

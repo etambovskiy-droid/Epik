@@ -78,22 +78,86 @@ if (typeof window !== 'undefined') {
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 function initDb(): Firestore {
+  const dbId = (firebaseConfig as { firestoreDatabaseId?: string }).firestoreDatabaseId;
   try {
     return initializeFirestore(
       app,
       {
         experimentalForceLongPolling: true,
       },
-      firebaseConfig.firestoreDatabaseId
+      dbId
     );
   } catch {
-    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    return dbId ? getFirestore(app, dbId) : getFirestore(app);
   }
 }
 
 export const db = initDb();
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+
+// Scopes provisioned for Gmail integration in Google Cloud Project useful-parity-wvr20
+export const GMAIL_SCOPES = [
+  'https://mail.google.com/',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/gmail.compose',
+  'https://www.googleapis.com/auth/gmail.labels'
+];
+
+GMAIL_SCOPES.forEach((scope) => {
+  googleProvider.addScope(scope);
+});
+// Request offline access prompt to ensure fresh token exchange
+googleProvider.setCustomParameters({
+  prompt: 'consent'
+});
+
+// Workspace Integration Rule: Cache OAuth access tokens strictly IN-MEMORY only (NEVER localStorage or sessionStorage)
+let inMemoryGmailAccessToken: string | null = null;
+let inMemoryTokenExpiresAt: number = 0;
+
+export function getGmailAccessToken(): string | null {
+  if (inMemoryGmailAccessToken && Date.now() < inMemoryTokenExpiresAt) {
+    return inMemoryGmailAccessToken;
+  }
+  return null;
+}
+
+export function setGmailAccessToken(token: string | null, expiresInSeconds = 3500) {
+  inMemoryGmailAccessToken = token;
+  inMemoryTokenExpiresAt = token ? Date.now() + expiresInSeconds * 1000 : 0;
+}
+
+export function clearGmailAccessToken() {
+  inMemoryGmailAccessToken = null;
+  inMemoryTokenExpiresAt = 0;
+}
+
+export async function signInWithGoogleForGmail(): Promise<{
+  user: FirebaseUser;
+  accessToken: string;
+}> {
+  const result = await signInWithPopup(auth, googleProvider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  const accessToken = credential?.accessToken;
+
+  if (!accessToken) {
+    throw new Error(
+      'Не вдалося отримати OAuth Access Token для Gmail. Перевірте дозволи у вікні авторизації Google.'
+    );
+  }
+
+  setGmailAccessToken(accessToken);
+  await syncFirebaseUserProfile(result.user);
+
+  return {
+    user: result.user,
+    accessToken
+  };
+}
+
 export { sendPasswordResetEmail, confirmPasswordReset, verifyPasswordResetCode };
 
 export enum OperationType {
@@ -137,9 +201,12 @@ export function handleFirestoreError(
     errName === 'AbortError' ||
     msgLower.includes('signal is aborted') ||
     msgLower.includes('user aborted') ||
-    msgLower.includes('the user aborted a request')
+    msgLower.includes('the user aborted a request') ||
+    msgLower.includes('client is offline') ||
+    msgLower.includes('failed to get document because the client is offline')
   ) {
-    // Harmless stream abort, do not log or throw
+    // Harmless stream abort or offline network transition, do not crash the app
+    console.warn(`Firestore warning (${operationType} at ${path}): client is offline or request aborted.`);
     return undefined as never;
   }
 
@@ -257,18 +324,62 @@ export async function syncFirebaseUserProfile(fbUser: FirebaseUser) {
     const userRef = doc(db, 'users', fbUser.uid);
     const path = `users/${fbUser.uid}`;
 
-    let snap;
+    let snap: any = null;
+    let isOffline = false;
     try {
       snap = await getDoc(userRef);
     } catch (error) {
-      handleFirestoreError(error, OperationType.GET, path);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const isOfflineError = errMsg.toLowerCase().includes('client is offline') || errMsg.toLowerCase().includes('offline');
+      if (isOfflineError) {
+        isOffline = true;
+        console.warn('Firestore offline during syncFirebaseUserProfile, using resilient local session.');
+      } else {
+        handleFirestoreError(error, OperationType.GET, path);
+      }
+    }
+
+    const isBootstrapAdmin = fbUser.email === 'e.tambovskiy@gmail.com' && fbUser.emailVerified;
+    const cacheKey = `epicentr_user_profile_${fbUser.uid}`;
+
+    // If client is offline or document couldn't be fetched, recover from cache or derive profile
+    if (isOffline || !snap) {
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.id === fbUser.uid) {
+            return parsed;
+          }
+        }
+      } catch {
+        // Ignore localStorage error
+      }
+
+      const sellerSuffix = Math.floor(10000 + Math.random() * 90000);
+      const localProfile = {
+        id: fbUser.uid,
+        email: fbUser.email || 'user@epicentr.ua',
+        name: (fbUser.displayName || 'Селер Епіцентр').trim().slice(0, 120) || 'Селер Епіцентр',
+        shopName: 'Кабінет Епіцентр Маркетплейс',
+        sellerCode: `EP-${sellerSuffix}`,
+        role: (isBootstrapAdmin ? 'admin' : 'seller') as 'seller' | 'admin' | 'manager',
+        avatarUrl: fbUser.photoURL || undefined,
+        createdAt: new Date().toISOString()
+      };
+
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(localProfile));
+      } catch {
+        // Ignore localStorage error
+      }
+      return localProfile;
     }
 
     const now = Timestamp.now();
 
     if (!snap.exists()) {
       const sellerSuffix = Math.floor(10000 + Math.random() * 90000);
-      const isBootstrapAdmin = fbUser.email === 'e.tambovskiy@gmail.com' && fbUser.emailVerified;
       const newProfile: Record<string, unknown> = {
         uid: fbUser.uid,
         email: (fbUser.email || 'user@epicentr.ua').trim(),
@@ -289,7 +400,7 @@ export async function syncFirebaseUserProfile(fbUser: FirebaseUser) {
         handleFirestoreError(error, OperationType.CREATE, path);
       }
 
-      return {
+      const created = {
         id: fbUser.uid,
         email: newProfile.email as string,
         name: newProfile.name as string,
@@ -299,9 +410,15 @@ export async function syncFirebaseUserProfile(fbUser: FirebaseUser) {
         avatarUrl: fbUser.photoURL || undefined,
         createdAt: now.toDate().toISOString()
       };
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(created));
+      } catch {
+        // Ignore storage errors
+      }
+      return created;
     } else {
       const data = snap.data();
-      return {
+      const existing = {
         id: fbUser.uid,
         email: data.email || fbUser.email || 'user@epicentr.ua',
         name: data.name || fbUser.displayName || 'Селер Епіцентр',
@@ -311,6 +428,12 @@ export async function syncFirebaseUserProfile(fbUser: FirebaseUser) {
         avatarUrl: data.avatarUrl || fbUser.photoURL || undefined,
         createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : new Date().toISOString()
       };
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(existing));
+      } catch {
+        // Ignore storage errors
+      }
+      return existing;
     }
   })().finally(() => {
     inFlightUserSync.delete(fbUser.uid);

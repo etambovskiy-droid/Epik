@@ -19,8 +19,22 @@ export interface ShopWorkspace {
   createdAt: string;
 }
 
+export type BatchHistoryType = 'excel' | 'xml';
+
+export interface SavedXmlFeedDetails {
+  offersCount: number;
+  selectedCategoryCodes: string[];
+  selectedCategoryNames: string[];
+  xsdValid: boolean;
+  xsdErrorsCount: number;
+  complianceScore: number;
+  fileSizeBytes: number;
+  xmlPreviewSnippet?: string;
+}
+
 export interface SavedBatchHistoryItem {
   id: string;
+  type?: BatchHistoryType; // 'excel' (default) or 'xml'
   workspaceId: string;
   filename: string;
   categoryTitle: string;
@@ -38,6 +52,7 @@ export interface SavedBatchHistoryItem {
   dictionaryFileName?: string | null;
   xmlFileName?: string | null;
   settings?: ProcessSettings;
+  xmlDetails?: SavedXmlFeedDetails;
 }
 
 const SHOPS_STORAGE_KEY = 'epicentr_saas_workspaces';
@@ -46,11 +61,80 @@ const BATCH_HISTORY_KEY = 'epicentr_saas_batch_history';
 const ONBOARDING_SEEN_KEY = 'epicentr_saas_onboarding_seen';
 const AUTOSAVE_STORAGE_KEY = 'epicentr_saas_autosave_session';
 
-// In-memory cache to preserve full-fidelity batch snapshots & per-store auto-save sessions
-// even when browser localStorage (5MB limit) is full
+// In-memory cache to preserve full-fidelity batch snapshots, full XML feeds & auto-save sessions
 const inMemoryBatchSnapshots = new Map<string, SavedBatchHistoryItem>();
+const inMemoryXmlFeeds = new Map<string, string>();
 let inMemoryHistoryList: SavedBatchHistoryItem[] | null = null;
 const inMemoryStoreAutoSaveSessions = new Map<string, AutoSaveSession>();
+
+export function getCachedXmlFeed(batchId: string): string | null {
+  return inMemoryXmlFeeds.get(batchId) || null;
+}
+
+export function saveXmlFeedToHistory(params: {
+  filename: string;
+  categoryNames: string[];
+  categoryCodes: string[];
+  offersCount: number;
+  xsdValid: boolean;
+  xsdErrorsCount: number;
+  complianceScore: number;
+  xmlContent: string;
+  workspaceId?: string;
+}): SavedBatchHistoryItem {
+  const currentWsId = params.workspaceId || getCurrentWorkspaceId();
+  const fileSizeBytes = new Blob([params.xmlContent]).size;
+  const id = `xml-batch-${Date.now()}`;
+
+  // Store full XML string in memory for direct re-download or preview
+  inMemoryXmlFeeds.set(id, params.xmlContent);
+
+  const previewSnippet = params.xmlContent.slice(0, 1000);
+
+  const xmlItem: SavedBatchHistoryItem = {
+    id,
+    type: 'xml',
+    workspaceId: currentWsId,
+    filename: params.filename || 'epicentr_catalog_feed.xml',
+    categoryTitle: params.categoryNames.length > 0 ? params.categoryNames.join(', ') : 'Обрані категорії XML',
+    productsCount: params.offersCount,
+    mandatoryColumnsCount: 5,
+    newlyFilledCount: params.offersCount,
+    fillRatePercentage: params.complianceScore,
+    unfilledMandatoryCount: params.xsdErrorsCount,
+    timestamp: new Date().toISOString(),
+    xmlDetails: {
+      offersCount: params.offersCount,
+      selectedCategoryCodes: params.categoryCodes,
+      selectedCategoryNames: params.categoryNames,
+      xsdValid: params.xsdValid,
+      xsdErrorsCount: params.xsdErrorsCount,
+      complianceScore: params.complianceScore,
+      fileSizeBytes,
+      xmlPreviewSnippet: previewSnippet
+    }
+  };
+
+  const history = getBatchHistory();
+  inMemoryBatchSnapshots.set(id, xmlItem);
+  const fullUpdated = [xmlItem, ...history].slice(0, 25);
+  inMemoryHistoryList = fullUpdated;
+
+  try {
+    const compactList = fullUpdated.slice(0, 15).map((item, idx) =>
+      createLightweightBatchItem(item, idx === 0)
+    );
+    localStorage.setItem(BATCH_HISTORY_KEY, JSON.stringify(compactList));
+  } catch {
+    // In-memory fallback is active
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('epicentr_history_updated', { detail: { batch: xmlItem } }));
+  }
+
+  return xmlItem;
+}
 
 function getStoreAutoSaveStorageKey(storeId?: string): string {
   const resolved = (storeId || getCurrentWorkspaceId() || 'shop-electronics').trim();
@@ -85,6 +169,7 @@ function createLightweightBatchItem(
   if (!keepLatestRows) {
     return {
       id: item.id,
+      type: item.type || 'excel',
       workspaceId: item.workspaceId,
       filename: item.filename,
       categoryTitle: item.categoryTitle,
@@ -99,7 +184,8 @@ function createLightweightBatchItem(
       settings: item.settings,
       columns: item.columns,
       report: compactReport,
-      engineErrors: (item.engineErrors || []).slice(0, MAX_PERSISTED_ERRORS)
+      engineErrors: (item.engineErrors || []).slice(0, MAX_PERSISTED_ERRORS),
+      xmlDetails: item.xmlDetails
     };
   }
 

@@ -6,6 +6,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI, ThinkingLevel, Modality, LiveServerMessage } from '@google/genai';
 import { WebSocketServer, WebSocket } from 'ws';
+import { fetchExternalXmlFeed, XmlProxyError } from './api/_xmlProxyUtils';
 
 dotenv.config();
 
@@ -96,6 +97,36 @@ async function startServer() {
         error: 'Epicentr proxy error',
         message: error?.message || 'Failed to reach Epicentr Merchant API'
       });
+    }
+  });
+
+  // 1.1 Secure External XML/YML Feed Proxy (with SSRF protection)
+  app.all('/api/fetch-xml', async (req, res) => {
+    if (req.method !== 'GET' && req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    const targetUrl = req.method === 'POST' ? req.body?.url : req.query?.url;
+    if (!targetUrl || typeof targetUrl !== 'string') {
+      res.status(400).json({ error: 'Вкажіть URL-посилання на XML-фід.' });
+      return;
+    }
+
+    try {
+      const result = await fetchExternalXmlFeed(targetUrl);
+      res.json({
+        xml: result.xml,
+        finalUrl: result.finalUrl,
+        contentType: result.contentType,
+        sizeBytes: result.sizeBytes
+      });
+    } catch (err: any) {
+      if (err instanceof XmlProxyError) {
+        res.status(err.status).json({ error: err.message });
+        return;
+      }
+      res.status(502).json({ error: err?.message || 'Не вдалося завантажити фід з віддаленого сервера.' });
     }
   });
 

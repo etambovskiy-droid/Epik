@@ -152,8 +152,9 @@ export class XmlFeedParserService {
    * Parse XML/YML text string into structured objects
    */
   public static parseXmlString(xmlContent: string): ParsedFeedResult {
+    const cleanedXml = (xmlContent || '').replace(/^\uFEFF/, '').trim();
     const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
+    const xmlDoc = parser.parseFromString(cleanedXml, 'text/xml');
 
     const parserError = xmlDoc.querySelector('parsererror');
     if (parserError) {
@@ -190,19 +191,32 @@ export class XmlFeedParserService {
       const price = offerNode.querySelector('price')?.textContent?.trim() || '0';
       const price_old = offerNode.querySelector('price_old, oldprice')?.textContent?.trim() || undefined;
 
+      const inlineCategoryNode = offerNode.querySelector('category');
       const categoryId = offerNode.querySelector('categoryId, category_id')?.textContent?.trim() ||
-        offerNode.querySelector('category')?.getAttribute('code') ||
-        offerNode.querySelector('category')?.textContent?.trim() || '';
+        inlineCategoryNode?.getAttribute('code')?.trim() ||
+        inlineCategoryNode?.textContent?.trim() || '';
 
+      const inlineCategoryName = inlineCategoryNode?.textContent?.trim() || '';
       const categoryName = categoryMap.get(categoryId) ||
-        offerNode.querySelector('category')?.textContent?.trim() ||
+        inlineCategoryName ||
         'Загальна категорія';
 
-      // Pictures
+      if (categoryId && !categoryMap.has(categoryId)) {
+        const resolvedCatName = inlineCategoryName || `Категорія ${categoryId}`;
+        categoryMap.set(categoryId, resolvedCatName);
+        categories.push({ id: categoryId, name: resolvedCatName });
+      }
+
+      // Pictures (also handles comma-separated URLs inside a single <picture> tag)
       const pictures: string[] = [];
       offerNode.querySelectorAll('picture').forEach((p) => {
-        const url = p.textContent?.trim();
-        if (url) pictures.push(url);
+        const raw = p.textContent?.trim();
+        if (!raw) return;
+        const splitUrls = raw.split(/,\s*(?=https?:\/\/)/i);
+        for (const u of splitUrls) {
+          const clean = u.trim();
+          if (clean) pictures.push(clean);
+        }
       });
       const picture = pictures[0] || 'https://via.placeholder.com/600x600?text=Product+Image';
 
@@ -264,17 +278,17 @@ export class XmlFeedParserService {
 
       // Brand / Vendor
       const brand = offerNode.querySelector('vendor, brand')?.textContent?.trim() ||
-        offerNode.querySelector('param[name="Бренд"], param[name="Производитель"], param[name="Виробник"]')?.textContent?.trim() ||
+        offerNode.querySelector('param[paramcode="brand"], param[name="Бренд"], param[name="Бренд:"], param[name="Производитель"], param[name="Виробник"]')?.textContent?.trim() ||
         undefined;
 
       // Country of origin
       const country_of_origin = offerNode.querySelector('country_of_origin, country')?.textContent?.trim() ||
-        offerNode.querySelector('param[name="Країна-виробник"], param[name="Страна-производитель"]')?.textContent?.trim() ||
+        offerNode.querySelector('param[paramcode="country_of_origin"], param[name="Країна-виробник"], param[name="Страна-производитель"]')?.textContent?.trim() ||
         undefined;
 
       // Barcode
       const barcode = offerNode.querySelector('barcode, barcodes')?.textContent?.trim() ||
-        offerNode.querySelector('param[name="Штрих код"], param[name="Штрих-код"]')?.textContent?.trim() ||
+        offerNode.querySelector('param[paramcode="barcodes"], param[paramcode="barcode"], param[name="Штрих код"], param[name="Штрих-код"]')?.textContent?.trim() ||
         undefined;
 
       // Ratio & Measure
@@ -288,10 +302,11 @@ export class XmlFeedParserService {
       const length = offerNode.querySelector('length, depth, param[paramcode="length"], param[name="Глибина"], param[name="Глубина"], param[name="Довжина"]')?.textContent?.trim() || undefined;
       const producer_code = offerNode.querySelector('producer_code, vendorCode, article, param[paramcode="producer_code"], param[name="Артикул"], param[name="Модель"]')?.textContent?.trim() || undefined;
 
-      // Extract all other parameters
+      // Extract all other parameters (stripping trailing colons like "Тип плитки:")
       const params: SourceProductParam[] = [];
       offerNode.querySelectorAll('param').forEach((paramNode) => {
-        const paramName = paramNode.getAttribute('name') || '';
+        const rawParamName = (paramNode.getAttribute('name') || '').trim();
+        const paramName = rawParamName.replace(/:+$/, '').trim();
         const paramValue = paramNode.textContent?.trim() || '';
         const code = paramNode.getAttribute('paramcode') || undefined;
         const valuecode = paramNode.getAttribute('valuecode') || undefined;
@@ -339,7 +354,7 @@ export class XmlFeedParserService {
   }
 
   /**
-   * Load feed from remote URL via client/proxy
+   * Load feed from remote URL via secure server-side proxy (/api/fetch-xml)
    */
   public static async fetchFeedFromUrl(url: string): Promise<string> {
     const trimmedUrl = url.trim();
@@ -347,26 +362,62 @@ export class XmlFeedParserService {
       throw new Error('Вкажіть коректне URL-посилання (наприклад, https://example.com/feed.xml)');
     }
 
-    // Try direct fetch first
+    // Primary path: dedicated server-side XML proxy (Express & Vercel Serverless)
+    try {
+      const proxyRes = await fetch('/api/fetch-xml', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ url: trimmedUrl })
+      });
+
+      const rawText = await proxyRes.text().catch(() => '');
+      let parsedBody: any = null;
+      if (rawText) {
+        try {
+          parsedBody = JSON.parse(rawText);
+        } catch {
+          // Response may be raw XML text
+        }
+      }
+
+      if (proxyRes.ok) {
+        if (parsedBody && typeof parsedBody.xml === 'string') {
+          return parsedBody.xml;
+        }
+        if (rawText && rawText.trim().startsWith('<')) {
+          return rawText;
+        }
+      }
+
+      if (proxyRes.status !== 404) {
+        const msg =
+          parsedBody?.error ||
+          parsedBody?.message ||
+          `Сервер повернув помилку HTTP ${proxyRes.status} при завантаженні фіду.`;
+        throw new Error(msg);
+      }
+    } catch (err: any) {
+      // Re-throw explicit backend validation/upstream errors without falling back blindly
+      if (err instanceof Error && !err.message.toLowerCase().includes('failed to fetch')) {
+        throw err;
+      }
+    }
+
+    // Fallback: direct CORS fetch if backend proxy route is unavailable (e.g. static host)
     try {
       const res = await fetch(trimmedUrl, { mode: 'cors' });
       if (res.ok) {
         return await res.text();
       }
-    } catch {
-      // CORS blocked or failed; attempt public CORS proxy
+      throw new Error(`Віддалений сервер повернув HTTP ${res.status}.`);
+    } catch (directErr: any) {
+      throw new Error(
+        directErr?.message && !directErr.message.toLowerCase().includes('failed to fetch')
+          ? directErr.message
+          : 'Не вдалося завантажити фід з віддаленого сервера (перевірте URL або доступність проксі /api/fetch-xml).'
+      );
     }
-
-    try {
-      const corsProxyUrl = `https://corsproxy.io/?${encodeURIComponent(trimmedUrl)}`;
-      const proxyRes = await fetch(corsProxyUrl);
-      if (proxyRes.ok) {
-        return await proxyRes.text();
-      }
-    } catch (corsErr: any) {
-      throw new Error(`Не вдалося завантажити фід за URL: ${corsErr.message || 'перевірте посилання або обмеження CORS'}`);
-    }
-
-    throw new Error('Не вдалося завантажити фід з віддаленого сервера.');
   }
 }

@@ -798,27 +798,43 @@ export const EpicentrXmlConverterView: React.FC<EpicentrXmlConverterViewProps> =
                 <label className="block text-xs font-medium text-slate-400">
                   URL-посилання на фід стороннього сайту:
                 </label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative flex-1 min-w-0">
                     <input
                       type="url"
                       value={feedUrl}
                       onChange={(e) => setFeedUrl(e.target.value)}
-                      placeholder="https://myshop.com/feed/export.xml"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && feedUrl.trim() && !isParsing) {
+                          e.preventDefault();
+                          handleFetchUrl();
+                        }
+                      }}
+                      placeholder="https://maliarte.com.ua/epicentrk.xml"
                       className="w-full pl-3 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500"
                     />
                   </div>
                   <button
+                    type="button"
                     onClick={handleFetchUrl}
                     disabled={isParsing || !feedUrl.trim()}
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-medium disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                    className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-medium disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
                   >
-                    <Download className="w-3.5 h-3.5" />
-                    Завантажити
+                    {isParsing ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                        <span>Завантаження...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Завантажити</span>
+                      </>
+                    )}
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Запити виконуються через захищений CORS-проксі шар для доступу до сторонніх доменів.
+                  Запити виконуються через власний серверний XML-проксі (/api/fetch-xml) із захистом від CORS та SSRF.
                 </p>
               </div>
             )}
